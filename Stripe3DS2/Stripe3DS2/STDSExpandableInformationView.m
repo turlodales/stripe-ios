@@ -6,7 +6,7 @@
 //  Copyright © 2019 Stripe. All rights reserved.
 //
 
-#import "STDSLocalizedString.h"
+@import StripeCore;
 #import "STDSBundleLocator.h"
 #import "STDSExpandableInformationView.h"
 #import "STDSStackView.h"
@@ -59,6 +59,7 @@ static const CGFloat kTitleImageViewRotationAnimationDuration = (CGFloat)0.2;
     self.textLabel.numberOfLines = 0;
     
     UIImage *chevronImage = [[UIImage imageNamed:@"Chevron" inBundle:[STDSBundleLocator stdsResourcesBundle] compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    chevronImage = [chevronImage imageFlippedForRightToLeftLayoutDirection];
     self.titleImageView = [[UIImageView alloc] initWithImage:chevronImage];
     self.titleImageView.contentMode = UIViewContentModeScaleAspectFit;
 
@@ -107,9 +108,9 @@ static const CGFloat kTitleImageViewRotationAnimationDuration = (CGFloat)0.2;
 
 - (void)_updateTappableViewAccessibilityValue {
     if (self.textContainerView.isHidden) {
-        self.tappableView.accessibilityValue = STDSLocalizedString(@"Collapsed", @"Accessibility label for expandandable text control to indicate text is hidden.");
+        self.tappableView.accessibilityValue = STPThreeDS2Localization.collapsed;
     } else {
-        self.tappableView.accessibilityValue = STDSLocalizedString(@"Expanded", @"Accessibility label for expandandable text control to indicate that the UI has been expanded and additional text is available.");
+        self.tappableView.accessibilityValue = STPThreeDS2Localization.expanded;
     }
 }
 
@@ -120,6 +121,10 @@ static const CGFloat kTitleImageViewRotationAnimationDuration = (CGFloat)0.2;
     self.textContainerView.hidden = !self.textContainerView.hidden;
     
     CGFloat rotationValue = (CGFloat)M_PI_2;
+    // The mirrored chevron needs to rotate the other way to point down in RTL.
+    if (self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft) {
+        rotationValue = -rotationValue;
+    }
     if (self.textContainerView.isHidden) {
         rotationValue = (CGFloat)0;
         [self.imageViewStackView removeArrangedSubview:self.imageViewSpacerView];

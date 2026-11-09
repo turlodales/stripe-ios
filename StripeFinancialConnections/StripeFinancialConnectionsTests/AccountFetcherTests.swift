@@ -5,8 +5,8 @@
 //  Created by Vardges Avetisyan on 12/30/21.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCoreTestUtils
 @testable import StripeFinancialConnections
 import XCTest
 
@@ -39,7 +39,8 @@ class PaginatedAPIClient: EmptyFinancialConnectionsAPIClient {
             permissions: nil,
             status: .active,
             subcategory: .checking,
-            supportedPaymentMethodTypes: [.usBankAccount]
+            supportedPaymentMethodTypes: [.usBankAccount],
+            object: "financial_connections.account"
         )
     }
 

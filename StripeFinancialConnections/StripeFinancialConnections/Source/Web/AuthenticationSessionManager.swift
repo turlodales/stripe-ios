@@ -6,7 +6,7 @@
 //
 
 import AuthenticationServices
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
 final class AuthenticationSessionManager: NSObject {
@@ -14,7 +14,7 @@ final class AuthenticationSessionManager: NSObject {
     // MARK: - Types
 
     enum Result {
-        case success
+        case success(returnUrl: URL)
         case webCancelled
         case nativeCancelled
         case redirect(url: URL)
@@ -35,20 +35,8 @@ final class AuthenticationSessionManager: NSObject {
 
     // MARK: - Public
 
-    func start(additionalQueryParameters: String? = nil) -> Promise<AuthenticationSessionManager.Result> {
+    func start(hostedAuthUrl: URL) -> Promise<AuthenticationSessionManager.Result> {
         let promise = Promise<AuthenticationSessionManager.Result>()
-
-        guard let hostedAuthUrl = manifest.hostedAuthUrl else {
-            promise.reject(with: FinancialConnectionsSheetError.unknown(debugDescription: "NULL `hostedAuthUrl`"))
-            return promise
-        }
-
-        let urlString = hostedAuthUrl + (additionalQueryParameters ?? "")
-
-        guard let url = URL(string: urlString) else {
-            promise.reject(with: FinancialConnectionsSheetError.unknown(debugDescription: "Malformed hosted auth URL"))
-            return promise
-        }
 
         guard let successUrl = manifest.successUrl else {
             promise.reject(with: FinancialConnectionsSheetError.unknown(debugDescription: "NULL `successUrl`"))
@@ -56,7 +44,7 @@ final class AuthenticationSessionManager: NSObject {
         }
 
         let authSession = ASWebAuthenticationSession(
-            url: url,
+            url: hostedAuthUrl,
             callbackURLScheme: URL(string: successUrl)?.scheme,
             completionHandler: { [weak self] returnUrl, error in
                 guard let self = self else { return }
@@ -73,15 +61,17 @@ final class AuthenticationSessionManager: NSObject {
                     }
                     return
                 }
-
-                guard let returnUrlString = returnUrl?.absoluteString else {
+                guard let returnUrl = returnUrl else {
                     promise.reject(with: FinancialConnectionsSheetError.unknown(debugDescription: "Missing return URL"))
                     return
                 }
+                let returnUrlString = returnUrl.absoluteString
 
-                if returnUrlString == self.manifest.successUrl {
-                    promise.resolve(with: .success)
-                } else if returnUrlString == self.manifest.cancelUrl {
+                // `matchesSchemeHostAndPath` is necessary for instant debits which
+                // contains additional query parameters at the end of the `successUrl`
+                if returnUrl.matchesSchemeHostAndPath(of: URL(string: self.manifest.successUrl ?? ""))  {
+                    promise.resolve(with: .success(returnUrl: returnUrl))
+                } else if  returnUrl.matchesSchemeHostAndPath(of: URL(string: self.manifest.cancelUrl ?? ""))  {
                     promise.resolve(with: .webCancelled)
                 } else if returnUrlString.hasNativeRedirectPrefix,
                     let targetURL = URL(string: returnUrlString.droppingNativeRedirectPrefix())
@@ -96,13 +86,11 @@ final class AuthenticationSessionManager: NSObject {
         authSession.prefersEphemeralWebBrowserSession = true
 
         self.authSession = authSession
-        if #available(iOS 13.4, *) {
-            if !authSession.canStart {
-                promise.reject(
-                    with: FinancialConnectionsSheetError.unknown(debugDescription: "Failed to start session")
-                )
-                return promise
-            }
+        if !authSession.canStart {
+            promise.reject(
+                with: FinancialConnectionsSheetError.unknown(debugDescription: "Failed to start session")
+            )
+            return promise
         }
         /**
          This terribly hacky animation disabling is needed to control the presentation of ASWebAuthenticationSession underlying view controller.
@@ -137,5 +125,18 @@ extension AuthenticationSessionManager: ASWebAuthenticationPresentationContextPr
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return self.window ?? ASPresentationAnchor()
+    }
+}
+
+extension URL {
+    fileprivate func matchesSchemeHostAndPath(of otherURL: URL?) -> Bool {
+        guard let otherURL = otherURL else {
+            return false
+        }
+        return (
+            self.scheme == otherURL.scheme &&
+            self.host == otherURL.host &&
+            self.path == otherURL.path
+        )
     }
 }

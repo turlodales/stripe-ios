@@ -7,20 +7,14 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
-@_spi(STP) public class STPPromise<T>: NSObject {
-    @_spi(STP) public typealias STPPromiseErrorBlock = (Error) -> Void
+@_spi(InternalOnlyAPI) public class STPPromise<T>: NSObject {
+    @_spi(InternalOnlyAPI) public typealias STPPromiseErrorBlock = (Error) -> Void
 
-    @_spi(STP) public typealias STPPromiseValueBlock = (T) -> Void
+    @_spi(InternalOnlyAPI) public typealias STPPromiseValueBlock = (T) -> Void
 
-    @_spi(STP) public typealias STPPromiseCompletionBlock = (T?, Error?) -> Void
-
-    @_spi(STP) public typealias STPPromiseMapBlock = (T) -> Any?
-
-    @_spi(STP) public typealias STPPromiseFlatMapBlock = (T) -> STPPromise
-
-    @_spi(STP) public var completed: Bool {
+    @_spi(InternalOnlyAPI) public var completed: Bool {
         return error != nil || value != nil
     }
     private(set) var value: T?
@@ -42,7 +36,7 @@ import Foundation
         self.init()
         self.succeed(value)
     }
-    @_spi(STP) public func succeed(_ value: T) {
+    @_spi(InternalOnlyAPI) public func succeed(_ value: T) {
         if completed {
             return
         }
@@ -56,7 +50,7 @@ import Foundation
         })
     }
 
-    @_spi(STP) public func fail(_ error: Error) {
+    @_spi(InternalOnlyAPI) public func fail(_ error: Error) {
         if completed {
             return
         }
@@ -70,18 +64,7 @@ import Foundation
         })
     }
 
-    @_spi(STP) public func complete(with promise: STPPromise) {
-        weak var weakSelf = self
-        promise.onSuccess({ value in
-            let strongSelf = weakSelf
-            strongSelf?.succeed(value)
-        }).onFailure({ error in
-            let strongSelf = weakSelf
-            strongSelf?.fail(error)
-        })
-    }
-
-    @discardableResult @_spi(STP) public func onSuccess(_ callback: @escaping STPPromiseValueBlock) -> Self {
+    @discardableResult @_spi(InternalOnlyAPI) public func onSuccess(_ callback: @escaping STPPromiseValueBlock) -> Self {
         if let value = value {
             stpDispatchToMainThreadIfNecessary({
                 callback(value)
@@ -92,7 +75,7 @@ import Foundation
         return self
     }
 
-    @discardableResult @_spi(STP) public func onFailure(_ callback: @escaping STPPromiseErrorBlock) -> Self {
+    @discardableResult @_spi(InternalOnlyAPI) public func onFailure(_ callback: @escaping STPPromiseErrorBlock) -> Self {
         if let error = error {
             stpDispatchToMainThreadIfNecessary({
                 callback(error)
@@ -101,38 +84,5 @@ import Foundation
             errorCallbacks = errorCallbacks + [callback]
         }
         return self
-    }
-
-    @discardableResult func onCompletion(_ callback: @escaping STPPromiseCompletionBlock) -> Self {
-        return onSuccess({ value in
-            callback(value, nil)
-        }).onFailure({ error in
-            callback(nil, error)
-        })
-    }
-
-    @discardableResult @_spi(STP) public func map(_ callback: @escaping STPPromiseMapBlock) -> STPPromise {
-        let wrapper = STPPromise.init()
-        onSuccess({ value in
-            wrapper.succeed(callback(value) as! T)
-        }).onFailure({ error in
-            wrapper.fail(error)
-        })
-        return wrapper
-    }
-
-    @discardableResult func flatMap(_ callback: @escaping STPPromiseFlatMapBlock) -> STPPromise {
-        let wrapper = STPPromise.init()
-        onSuccess({ value in
-            let `internal` = callback(value)
-            `internal`.onSuccess({ internalValue in
-                wrapper.succeed(internalValue)
-            }).onFailure({ internalError in
-                wrapper.fail(internalError)
-            })
-        }).onFailure({ error in
-            wrapper.fail(error)
-        })
-        return wrapper
     }
 }

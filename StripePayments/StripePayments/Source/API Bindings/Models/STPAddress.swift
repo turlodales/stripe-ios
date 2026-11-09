@@ -9,7 +9,7 @@
 import Contacts
 import Foundation
 import PassKit
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 /// STPAddress Contains an address as represented by the Stripe API.
 public class STPAddress: NSObject {
@@ -221,14 +221,6 @@ public class STPAddress: NSObject {
             street = [street ?? "", line2].joined(separator: " ")
         }
         return street
-    }
-
-    /// Does this STPAddress contain any data in the postal address fields?
-    /// If they are all empty or nil, returns NO. Even a single character in a
-    /// single field will return YES.
-    @_spi(STP) public func hasPartialPostalAddress() -> Bool {
-        return (line1?.count ?? 0) > 0 || (line2?.count ?? 0) > 0 || (city?.count ?? 0) > 0
-            || (country?.count ?? 0) > 0 || (state?.count ?? 0) > 0 || (postalCode?.count ?? 0) > 0
     }
 }
 

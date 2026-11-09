@@ -6,15 +6,16 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripePayments
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeApplePay
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeApplePay
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPApplePayTestDelegateiOS11: NSObject, STPApplePayContextDelegate {
+    var didChangeCouponCodeCalled: Bool = false
     func applePayContext(
         _ context: STPApplePayContext,
         didSelectShippingContact contact: PKContact,
@@ -29,6 +30,25 @@ class STPApplePayTestDelegateiOS11: NSObject, STPApplePayContextDelegate {
         handler completion: @escaping (PKPaymentRequestShippingMethodUpdate) -> Void
     ) {
         completion(PKPaymentRequestShippingMethodUpdate())
+    }
+
+    func applePayContext(
+        _ context: STPApplePayContext,
+        didChangeCouponCode couponCode: String,
+        handler completion: @escaping (PKPaymentRequestCouponCodeUpdate) -> Void
+    ) {
+        didChangeCouponCodeCalled = true
+        completion(.init(errors: nil, paymentSummaryItems: [], shippingMethods: []))
+    }
+
+    var didSelectPaymentMethodCalled: Bool = false
+    func applePayContext(
+        _ context: STPApplePayContext,
+        didSelectPaymentMethod paymentMethod: PKPaymentMethod,
+        handler completion: @escaping (PKPaymentRequestPaymentMethodUpdate) -> Void
+    ) {
+        didSelectPaymentMethodCalled = true
+        completion(PKPaymentRequestPaymentMethodUpdate(paymentSummaryItems: []))
     }
 
     func applePayContext(
@@ -98,6 +118,7 @@ class STPApplePayContextTest: XCTestCase {
 
         // ...and forward the PassKit delegate method to its delegate
         let vc: PKPaymentAuthorizationController = PKPaymentAuthorizationController()
+        // 1) ..didSelectShippingContact.. delegate method
         let contact = PKContact()
         let shippingContactExpectation = expectation(
             description: "didSelectShippingContact forwarded"
@@ -110,6 +131,7 @@ class STPApplePayContextTest: XCTestCase {
             }
         )
 
+        // 2) ..didSelectShippingMethod.. delegate method
         let method = PKShippingMethod()
         let shippingMethodExpectation = expectation(
             description: "didSelectShippingMethod forwarded"
@@ -121,6 +143,35 @@ class STPApplePayContextTest: XCTestCase {
                 shippingMethodExpectation.fulfill()
             }
         )
+
+        // 3) ..didChangeCouponCode.. delegate method
+        XCTAssertFalse(delegate.didChangeCouponCodeCalled)
+        let couponCodeExpectation = expectation(description: "didChangeCouponCode forwarded")
+        context.paymentAuthorizationController(vc, didChangeCouponCode: "coupon_123") { _ in
+            couponCodeExpectation.fulfill()
+        }
+        wait(for: [couponCodeExpectation], timeout: 1)
+        XCTAssertTrue(delegate.didChangeCouponCodeCalled)
+
+        // 4) ..didSelectPaymentMethod.. delegate method
+        XCTAssertTrue(
+            context.responds(
+                to: #selector(
+                    PKPaymentAuthorizationControllerDelegate.paymentAuthorizationController(
+                        _:
+                        didSelectPaymentMethod:
+                        handler:
+                    ))
+            )
+        )
+        XCTAssertFalse(delegate.didSelectPaymentMethodCalled)
+        let paymentMethodExpectation = expectation(description: "didSelectPaymentMethod forwarded")
+        context.paymentAuthorizationController(vc, didSelectPaymentMethod: PKPaymentMethod()) { _ in
+            paymentMethodExpectation.fulfill()
+        }
+        wait(for: [paymentMethodExpectation], timeout: 1)
+        XCTAssertTrue(delegate.didSelectPaymentMethodCalled)
+
         waitForExpectations(timeout: 2, handler: nil)
     }
 

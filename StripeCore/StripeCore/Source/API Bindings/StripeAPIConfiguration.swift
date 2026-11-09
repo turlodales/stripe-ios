@@ -9,8 +9,13 @@
 import Foundation
 
 /// Shared configurations across all Stripe frameworks.
-@_spi(STP) public struct StripeAPIConfiguration {
+@_spi(InternalOnlyAPI) @_spi(ReactNativeSDK) public struct StripeAPIConfiguration {
 
     public static let sharedUrlSessionConfiguration = URLSessionConfiguration.default
+
+    #if DEBUG
+    /// If true, embed the params in an X-Stripe-Mock-Request header for network mocking.
+    @_spi(InternalOnlyAPI) public static var includeDebugParamsHeader = false
+    #endif
 
 }

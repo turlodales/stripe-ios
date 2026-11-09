@@ -8,13 +8,13 @@
 
 import UIKit
 
-@_spi(STP) public class STPPaymentMethodOptions: NSObject, STPAPIResponseDecodable {
+@_spi(InternalOnlyAPI) public class STPPaymentMethodOptions: NSObject, STPAPIResponseDecodable {
 
-    @_spi(STP) public let usBankAccount: USBankAccount?
-    @_spi(STP) public let card: Card?
-    @_spi(STP) public let allResponseFields: [AnyHashable: Any]
+    @_spi(InternalOnlyAPI) public let usBankAccount: USBankAccount?
+    @_spi(InternalOnlyAPI) public let card: Card?
+    @_spi(InternalOnlyAPI) public let allResponseFields: [AnyHashable: Any]
 
-    @_spi(STP) public init(
+    @_spi(InternalOnlyAPI) public init(
         usBankAccount: USBankAccount?,
         card: Card?,
         allResponseFields: [AnyHashable: Any]
@@ -24,7 +24,7 @@ import UIKit
         self.allResponseFields = allResponseFields
     }
 
-    @_spi(STP) public static func decodedObject(
+    @_spi(InternalOnlyAPI) public static func decodedObject(
         fromAPIResponse response: [AnyHashable: Any]?
     ) -> Self? {
         guard let response = response else {
@@ -42,34 +42,48 @@ import UIKit
         ) as? Self
     }
 
+    @_spi(InternalOnlyAPI) public var isSetupFutureUsageSet: Bool {
+        return allResponseFields.values.contains { value in
+            if let dictionary = value as? [String: Any] {
+                return dictionary.keys.contains("setup_future_usage")
+            }
+            return false
+        }
+    }
+
+    @_spi(InternalOnlyAPI) public func setupFutureUsage(for paymentMethodType: STPPaymentMethodType) -> String? {
+        let paymentMethodOptionsForPaymentMethodType: [String: Any]? = allResponseFields[paymentMethodType.identifier] as? [String: Any]
+        return paymentMethodOptionsForPaymentMethodType?["setup_future_usage"] as? String
+    }
+
 }
 // MARK: - card
 
 extension STPPaymentMethodOptions {
-    @_spi(STP) public class Card: NSObject, STPAPIResponseDecodable {
+    @_spi(InternalOnlyAPI) public class Card: NSObject, STPAPIResponseDecodable {
 
-        @_spi(STP) public let requireCvcRecollection: Bool?
-        @_spi(STP) public let allResponseFields: [AnyHashable: Any]
+        @_spi(InternalOnlyAPI) public let requireCvcRecollection: Bool?
+        @_spi(InternalOnlyAPI) public let cvcToken: String?
+        @_spi(InternalOnlyAPI) public let allResponseFields: [AnyHashable: Any]
 
-        @_spi(STP) public init(
+        @_spi(InternalOnlyAPI) public init(
             requireCvcRecollection: Bool?,
+            cvcToken: String?,
             allResponseFields: [AnyHashable: Any]
         ) {
             self.requireCvcRecollection = requireCvcRecollection
+            self.cvcToken = cvcToken
             self.allResponseFields = allResponseFields
         }
 
-        @_spi(STP) public static func decodedObject(
+        @_spi(InternalOnlyAPI) public static func decodedObject(
             fromAPIResponse response: [AnyHashable: Any]?
         ) -> Self? {
-            guard let response = response,
-                let requireCvcRecollection = response["require_cvc_recollection"] as? Bool
-            else {
-                return nil
-            }
+            guard let response else { return nil }
 
             return Card(
-                requireCvcRecollection: requireCvcRecollection,
+                requireCvcRecollection: response["require_cvc_recollection"] as? Bool,
+                cvcToken: response["cvc_token"] as? String,
                 allResponseFields: response
             ) as? Self
         }
@@ -78,10 +92,10 @@ extension STPPaymentMethodOptions {
 // MARK: - us_bank_account
 
 extension STPPaymentMethodOptions {
-    @_spi(STP) public class USBankAccount: NSObject, STPAPIResponseDecodable {
+    @_spi(InternalOnlyAPI) public class USBankAccount: NSObject, STPAPIResponseDecodable {
 
         /// Bank account verification method.
-        @_spi(STP) @frozen public enum VerificationMethod: String, CaseIterable {
+        @_spi(InternalOnlyAPI) @frozen public enum VerificationMethod: String, CaseIterable {
             /// Allows skipping the bank account verification step.
             case skip
             /// Instant verification with fallback to microdeposits.
@@ -95,11 +109,11 @@ extension STPPaymentMethodOptions {
             case unknown
         }
 
-        @_spi(STP) public let setupFutureUsage: STPPaymentIntentSetupFutureUsage?
-        @_spi(STP) public let verificationMethod: VerificationMethod
-        @_spi(STP) public let allResponseFields: [AnyHashable: Any]
+        @_spi(InternalOnlyAPI) public let setupFutureUsage: STPPaymentIntentSetupFutureUsage?
+        @_spi(InternalOnlyAPI) public let verificationMethod: VerificationMethod
+        @_spi(InternalOnlyAPI) public let allResponseFields: [AnyHashable: Any]
 
-        @_spi(STP) public init(
+        @_spi(InternalOnlyAPI) public init(
             setupFutureUsage: STPPaymentIntentSetupFutureUsage?,
             verificationMethod: VerificationMethod,
             allResponseFields: [AnyHashable: Any]
@@ -109,7 +123,7 @@ extension STPPaymentMethodOptions {
             self.allResponseFields = allResponseFields
         }
 
-        @_spi(STP) public static func decodedObject(
+        @_spi(InternalOnlyAPI) public static func decodedObject(
             fromAPIResponse response: [AnyHashable: Any]?
         ) -> Self? {
             guard let response = response,

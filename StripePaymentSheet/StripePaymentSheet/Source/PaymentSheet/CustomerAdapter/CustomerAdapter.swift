@@ -8,9 +8,9 @@
 import Foundation
 import UIKit
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 /// A "bridge" from wallet mode to your backend to fetch Customer-related information.
 /// Typically, you will not need to implement this protocol yourself. You
@@ -131,7 +131,6 @@ open class StripeCustomerAdapter: CustomerAdapter {
         let customerEphemeralKey: CustomerEphemeralKey
         let cacheDate = Date()
     }
-
     private var _cachedEphemeralKey: CachedCustomerEphemeralKey?
     var customerEphemeralKey: CustomerEphemeralKey {
         get async throws {
@@ -153,9 +152,6 @@ open class StripeCustomerAdapter: CustomerAdapter {
         let customerEphemeralKey = try await customerEphemeralKey
         return try await withCheckedThrowingContinuation({ continuation in
 
-            // Note: Querying for specific types of payment methods is an optimization
-            // Eventually, when we query a single endpoint for all payment methods,
-            // paymentMethodTypes will be used as a client side filter
             var savedPaymentMethodTypes = CustomerSheet.supportedPaymentMethods
             if let paymentMethodTypes = self.paymentMethodTypes {
                 switch CustomerSheet.customerSheetSupportedPaymentMethodTypes(paymentMethodTypes) {
@@ -172,7 +168,8 @@ open class StripeCustomerAdapter: CustomerAdapter {
             apiClient.listPaymentMethods(
                 forCustomer: customerEphemeralKey.id,
                 using: customerEphemeralKey.ephemeralKeySecret,
-                types: savedPaymentMethodTypes
+                types: savedPaymentMethodTypes,
+                limit: 100
             ) { paymentMethods, error in
                 guard var paymentMethods, error == nil else {
                     let error = error ?? PaymentSheetError.unexpectedResponseFromStripeAPI // TODO: make a better default error
@@ -191,8 +188,11 @@ open class StripeCustomerAdapter: CustomerAdapter {
 
     open func attachPaymentMethod(_ paymentMethodId: String) async throws {
         let customerEphemeralKey = try await customerEphemeralKey
+
         return try await withCheckedThrowingContinuation({ continuation in
-            apiClient.attachPaymentMethod(paymentMethodId, customerID: customerEphemeralKey.id, ephemeralKeySecret: customerEphemeralKey.ephemeralKeySecret) { error in
+            apiClient.attachPaymentMethod(paymentMethodId,
+                                          customerID: customerEphemeralKey.id,
+                                          ephemeralKeySecret: customerEphemeralKey.ephemeralKeySecret) { error in
                 if let error = error {
                     continuation.resume(throwing: error)
                     return
@@ -204,6 +204,7 @@ open class StripeCustomerAdapter: CustomerAdapter {
 
     open func detachPaymentMethod(paymentMethodId: String) async throws {
         let customerEphemeralKey = try await customerEphemeralKey
+
         return try await withCheckedThrowingContinuation({ continuation in
             apiClient.detachPaymentMethod(paymentMethodId, fromCustomerUsing: customerEphemeralKey.ephemeralKeySecret) { error in
                 if let error = error {
@@ -224,7 +225,7 @@ open class StripeCustomerAdapter: CustomerAdapter {
     open func fetchSelectedPaymentOption() async throws -> CustomerPaymentOption? {
         let customerEphemeralKey = try await customerEphemeralKey
 
-        return CustomerPaymentOption.defaultPaymentMethod(for: customerEphemeralKey.id)
+        return CustomerPaymentOption.localDefaultPaymentMethod(for: customerEphemeralKey.id)
     }
 
     open func setupIntentClientSecretForCustomerAttach() async throws -> String {
@@ -237,14 +238,15 @@ open class StripeCustomerAdapter: CustomerAdapter {
     open func updatePaymentMethod(paymentMethodId: String,
                                   paymentMethodUpdateParams: STPPaymentMethodUpdateParams) async throws -> STPPaymentMethod {
         let customerEphemeralKey = try await customerEphemeralKey
+
         return try await apiClient.updatePaymentMethod(with: paymentMethodId,
                                                        paymentMethodUpdateParams: paymentMethodUpdateParams,
                                                        ephemeralKeySecret: customerEphemeralKey.ephemeralKeySecret)
     }
 }
 
-@_spi(STP) extension StripeCustomerAdapter: STPAnalyticsProtocol {
-    @_spi(STP) public static var stp_analyticsIdentifier = "StripeCustomerAdapter"
+@_spi(InternalOnlyAPI) extension StripeCustomerAdapter: STPAnalyticsProtocol {
+    @_spi(InternalOnlyAPI) public static var stp_analyticsIdentifier = "StripeCustomerAdapter"
 }
 
 /// Stores the key we use in NSUserDefaults to save a dictionary of Customer id to their last selected payment method ID

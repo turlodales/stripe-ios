@@ -7,9 +7,11 @@ DEVELOPMENT_LANGUAGE = 'en'
 
 # Languages that we localize to.
 LANGUAGES = %w[
+  ar-SA
   bg-BG
   ca-ES
   cs-CZ
+  cy-GB
   da
   de
   el-GR
@@ -33,7 +35,6 @@ LANGUAGES = %w[
   mt
   nb
   nl
-  nn-NO
   pl-PL
   pt-BR
   pt-PT
@@ -42,6 +43,7 @@ LANGUAGES = %w[
   sk-SK
   sl-SI
   sv
+  th
   tr
   vi
   zh-Hans
@@ -51,4 +53,8 @@ LANGUAGES = %w[
 
 LOCALIZATION_DIRECTORIES = YAML.load_file('modules.yaml')['modules'].map do |m|
   m['localization_dir']
+end.compact.freeze
+
+LOKALISE_FILENAMES = LOCALIZATION_DIRECTORIES.map do |d|
+  "#{d}/Resources/Localizations/%LANG_ISO%.lproj/Localizable.strings"
 end.compact.freeze

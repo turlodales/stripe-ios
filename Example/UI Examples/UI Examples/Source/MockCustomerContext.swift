@@ -9,9 +9,9 @@
 import Foundation
 
 @testable import Stripe
-@_spi(STP) import StripeCore
-@testable @_spi(STP) import StripePayments
-@testable @_spi(STP) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeCore
+@testable @_spi(InternalOnlyAPI) import StripePayments
+@testable @_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class MockCustomer: STPCustomer {
     var mockPaymentMethods: [STPPaymentMethod] = []
@@ -108,76 +108,5 @@ class MockKeyProvider: NSObject, STPCustomerEphemeralKeyProvider {
         withAPIVersion apiVersion: String, completion: @escaping STPJSONResponseCompletionBlock
     ) {
         completion(nil, NSError.stp_ephemeralKeyDecodingError())
-    }
-}
-
-class MockCustomerContext: STPCustomerContext {
-
-    let customer = MockCustomer()
-
-    override func retrieveCustomer(_ completion: STPCustomerCompletionBlock? = nil) {
-        if let completion = completion {
-            completion(customer, nil)
-        }
-    }
-
-    override func attachPaymentMethod(
-        toCustomer paymentMethod: STPPaymentMethod, completion: STPErrorBlock? = nil
-    ) {
-        customer.paymentMethods.append(paymentMethod)
-        if let completion = completion {
-            completion(nil)
-        }
-    }
-
-    override func detachPaymentMethod(
-        fromCustomer paymentMethod: STPPaymentMethod, completion: STPErrorBlock? = nil
-    ) {
-        if let index = customer.paymentMethods.firstIndex(where: {
-            $0.stripeId == paymentMethod.stripeId
-        }) {
-            customer.paymentMethods.remove(at: index)
-        }
-        if let completion = completion {
-            completion(nil)
-        }
-    }
-
-    override func listPaymentMethodsForCustomer(completion: STPPaymentMethodsCompletionBlock? = nil)
-    {
-        if let completion = completion {
-            completion(customer.paymentMethods, nil)
-        }
-    }
-
-    func selectDefaultCustomerPaymentMethod(
-        _ paymentMethod: STPPaymentMethod, completion: @escaping STPErrorBlock
-    ) {
-        if customer.paymentMethods.contains(where: { $0.stripeId == paymentMethod.stripeId }) {
-            customer.defaultPaymentMethod = paymentMethod
-        }
-        completion(nil)
-    }
-
-    override func updateCustomer(
-        withShippingAddress shipping: STPAddress, completion: STPErrorBlock?
-    ) {
-        customer.shippingAddress = shipping
-        if let completion = completion {
-            completion(nil)
-        }
-    }
-
-    override func retrieveLastSelectedPaymentMethodIDForCustomer(
-        completion: @escaping (String?, Error?) -> Void
-    ) {
-        completion(nil, nil)
-    }
-    override func saveLastSelectedPaymentMethodID(
-        forCustomer paymentMethodID: String?, completion: STPErrorBlock?
-    ) {
-        if let completion = completion {
-            completion(nil)
-        }
     }
 }

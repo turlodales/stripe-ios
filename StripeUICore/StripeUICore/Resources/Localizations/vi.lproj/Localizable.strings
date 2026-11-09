@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (tùy chọn)";
+
+"(not accepted)" = "(không được chấp nhận)";
 
 "Account number" = "Số tài khoản";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Số BSB";
 
-"Billing address is same as shipping" = "Địa chỉ xuất hóa đơn giống địa chỉ chuyển hàng";
+"Bank account •••• %@" = "Tài khoản ngân hàng •••• %@";
 
-"Cancel" = "Hủy";
+"Billing address is same as shipping" = "Địa chỉ xuất hóa đơn giống địa chỉ chuyển hàng";
 
 "Card brand" = "Thương hiệu thẻ";
 
@@ -34,7 +38,7 @@
 
 "County" = "Quận";
 
-"Date is empty." = "Ngày trống.";
+"Date of Birth" = "Ngày sinh";
 
 "Department" = "Sở ngành";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Số điện thoại chưa đầy đủ";
 
-"Invalid UPI ID" = "Số ID UPI không hợp lệ";
-
 "Island" = "Đảo";
 
 "Last" = "Họ";
@@ -82,21 +84,19 @@
 
 "Parish" = "Giáo xứ";
 
-"Phone" = "Điện thoại";
-
 "Phone number" = "Số điện thoại";
 
 "Postal code" = "Mã bưu điện";
 
 "Prefecture" = "Tỉnh";
 
+"Processing..." = "Đang xử lý...";
+
 "Province" = "Tỉnh";
 
 "Remove" = "Xóa";
 
-"Remove bank account" = "Bỏ tài khoản ngân hàng";
-
-"Remove bank account ending in %@" = "Bỏ tài khoản ngân hàng có các số cuối là %@";
+"Remove bank account?" = "Bỏ tài khoản ngân hàng?";
 
 "Remove card" = "Xóa thẻ";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Chọn thương hiệu thẻ (tùy chọn)";
 
+"Selection is empty." = "Lựa chọn đang để trống.";
+
+"Something went wrong" = "Đã xảy ra lỗi";
+
 "Sort code" = "Mã sắp xếp";
 
 "State" = "Tiểu bang";
+
+"Submit" = "Gửi";
 
 "Suburb" = "Ngoại ô";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Thị trấn hoặc thành phố";
 
-"UPI ID" = "Số ID UPI";
-
 "Unable to parse phone number" = "Không thể phân tích cú pháp số điện thoại";
 
 "Use rotor to access links" = "Sử dụng rô-to để truy cập liên kết";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Mã BLIK của quý vị không hợp lệ.";
 
-"Your ZIP is incomplete." = "Mã ZIP chưa đầy đủ.";
+"Your ZIP code is incomplete." = "Mã ZIP của bạn không đầy đủ.";
+
+"Your ZIP code is invalid." = "Mã bưu điện của bạn không hợp lệ.";
 
 "Your email is invalid." = "Email của quý vị không hợp lệ.";
 
 "Your payment information will not be saved." = "Thông tin thanh toán của bạn sẽ không lưu lại.";
 
 "Your postal code is incomplete." = "Mã bưu điện chưa đầy đủ.";
+
+"Your postal code is invalid." = "Mã bưu điện không hợp lệ.";
 
 "ZIP" = "ZIP";

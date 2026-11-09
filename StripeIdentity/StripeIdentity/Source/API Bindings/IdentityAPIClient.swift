@@ -7,12 +7,11 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
 protocol IdentityAPIClient: AnyObject {
     var verificationSessionId: String { get }
-    var apiVersion: Int { get set }
 
     func getIdentityVerificationPage() -> Promise<StripeAPI.VerificationPage>
 
@@ -47,7 +46,7 @@ final class IdentityAPIClientImpl: IdentityAPIClient {
     /// SDK is capable of using.
     ///
     /// - Note: Update this value when a new API version is ready for use in production.
-    static let productionApiVersion: Int = 5
+    static let productionApiVersion: Int = 8
 
     var betas: Set<String> {
         return ["identity_client_api=v\(apiVersion)"]
@@ -55,6 +54,7 @@ final class IdentityAPIClientImpl: IdentityAPIClient {
 
     let apiClient: STPAPIClient
     let verificationSessionId: String
+    private let mediaPipeAvailable = FaceGeometryDetectorFactory.isAvailable
 
     /// The VerificationPages API version used to make all API requests.
     ///
@@ -88,13 +88,18 @@ final class IdentityAPIClientImpl: IdentityAPIClient {
     func getIdentityVerificationPage() -> Promise<StripeAPI.VerificationPage> {
         return apiClient.get(
             resource: APIEndpointVerificationPage(id: verificationSessionId),
-            parameters: [:]
+            parameters: [
+                "app_identifier": Bundle.main.bundleIdentifier ?? "",
+                "media_pipe_available": mediaPipeAvailable,
+            ]
         )
     }
 
     func updateIdentityVerificationPageData(
         updating verificationData: StripeAPI.VerificationPageDataUpdate
     ) -> Promise<StripeAPI.VerificationPageData> {
+        var verificationData = verificationData
+        verificationData.mediaPipeAvailable = verificationData.collectedData?.face == nil ? nil : mediaPipeAvailable
         return apiClient.post(
             resource: APIEndpointVerificationPageData(id: verificationSessionId),
             object: verificationData

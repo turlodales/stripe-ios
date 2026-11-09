@@ -6,28 +6,48 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// For internal SDK use only
 @objc(STP_Internal_SimpleMandateTextView)
 class SimpleMandateTextView: UIView {
-    private let theme: ElementsUITheme
+    private let theme: ElementsAppearance
+    private let textAlignment: NSTextAlignment
     var viewDidAppear: Bool = false
-    lazy var label: UILabel = {
-        let label = UILabel()
-        label.font = theme.fonts.caption
-        label.textColor = theme.colors.secondaryText
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        return label
-    }()
+    let textView: UITextView = UITextView()
+    var attributedText: NSAttributedString? {
+        get {
+            textView.attributedText.string.isEmpty ? nil : textView.attributedText
+        }
+        set {
+            textView.attributedText = newValue
+            // Re-apply textView styling; otherwise certain things like insets get reset
+            applyTextViewStyle()
+        }
+    }
 
-    init(mandateText: String, theme: ElementsUITheme = .default) {
+    convenience init(
+        mandateText: NSAttributedString,
+        textAlignment: NSTextAlignment = .natural,
+        theme: ElementsAppearance
+    ) {
+        self.init(theme: theme, textAlignment: textAlignment)
+        textView.attributedText = mandateText
+        applyTextViewStyle()
+    }
+
+    convenience init(mandateText: String, theme: ElementsAppearance) {
+        self.init(theme: theme, textAlignment: .natural)
+        textView.text = mandateText
+    }
+
+    required init(theme: ElementsAppearance, textAlignment: NSTextAlignment = .natural) {
         self.theme = theme
+        self.textAlignment = textAlignment
         super.init(frame: .zero)
-        label.text = mandateText
         installConstraints()
+        applyTextViewStyle()
         self.accessibilityIdentifier = "mandatetextview"
     }
 
@@ -36,7 +56,21 @@ class SimpleMandateTextView: UIView {
     }
 
     fileprivate func installConstraints() {
-        addAndPinSubview(label)
+        addAndPinSubview(textView, directionalLayoutMargins: .zero)
+    }
+
+    fileprivate func applyTextViewStyle() {
+        textView.isScrollEnabled = false
+        textView.isEditable = false
+        textView.font = theme.fonts.caption
+        textView.backgroundColor = .clear
+        textView.textColor = theme.colors.secondaryText
+        textView.adjustsFontForContentSizeCategory = true
+        textView.linkTextAttributes = [.foregroundColor: theme.colors.primary]
+        // These two lines remove insets that are on UITextViews by default
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.textAlignment = textAlignment
     }
 }
 

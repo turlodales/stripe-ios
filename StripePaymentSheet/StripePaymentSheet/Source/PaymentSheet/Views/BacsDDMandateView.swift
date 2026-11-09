@@ -5,15 +5,28 @@
 //  Created by David Estes on 9/6/23.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import SwiftUI
 import UIKit
 
-// Reusing these colors from Link:
-private let headerColor = Color(UIColor.linkPrimaryText)
-private let secondaryTextColor = Color(UIColor.linkSecondaryText)
-private let borderColor = Color(UIColor.linkSeparator)
-private let backgroundColor = Color(UIColor.linkSecondaryButtonBackground)
+private let headerColor = Color(.dynamic(
+    light: UIColor(red: 0.188, green: 0.192, blue: 0.239, alpha: 1.0),
+    dark: .white
+))
+private let secondaryTextColor = Color(.dynamic(
+    light: UIColor(red: 0.416, green: 0.451, blue: 0.514, alpha: 1.0),
+    dark: UIColor(red: 0.922, green: 0.922, blue: 0.961, alpha: 0.6)
+))
+
+private let borderColor = Color(.dynamic(
+    light: UIColor(red: 0.878, green: 0.902, blue: 0.922, alpha: 1),
+    dark: UIColor(red: 0.471, green: 0.471, blue: 0.502, alpha: 0.36)
+))
+
+private let backgroundColor = Color(.dynamic(
+    light: UIColor(red: 0.965, green: 0.973, blue: 0.980, alpha: 1.0),
+    dark: UIColor(red: 0.455, green: 0.455, blue: 0.502, alpha: 0.18)
+))
 
 private let shadow1Color = Color(red: 18/255, green: 42/255, blue: 66/255, opacity: 0.04)
 private let shadow2Color = Color(red: 0/255, green: 0/255, blue: 0/255, opacity: 0.04)

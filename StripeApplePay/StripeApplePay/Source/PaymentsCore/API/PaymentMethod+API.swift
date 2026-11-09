@@ -8,14 +8,14 @@
 
 import Foundation
 import PassKit
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI.PaymentMethod {
     /// A callback to be run with a PaymentMethod response from the Stripe API.
     /// - Parameters:
     ///   - paymentMethod: The Stripe PaymentMethod from the response. Will be nil if an error occurs. - seealso: PaymentMethod
     ///   - error: The error returned from the response, or nil if none occurs. - seealso: StripeError.h for possible values.
-    @_spi(STP) public typealias PaymentMethodCompletionBlock = (
+    @_spi(InternalOnlyAPI) public typealias PaymentMethodCompletionBlock = (
         Result<StripeAPI.PaymentMethod, Error>
     ) -> Void
 
@@ -34,9 +34,11 @@ extension StripeAPI.PaymentMethod {
     /// - Parameters:
     ///   - payment:     The user's encrypted payment information as returned from a PKPaymentAuthorizationController. Cannot be nil.
     ///   - completion:  The callback to run with the returned Stripe source (and any errors that may have occurred).
-    @_spi(STP) public static func create(
+    @_spi(InternalOnlyAPI) public static func create(
         apiClient: STPAPIClient = .shared,
         payment: PKPayment,
+        fallbackBillingDetails: StripeAPI.BillingDetails? = nil,
+        clientAttributionMetadata: STPClientAttributionMetadata?,
         completion: @escaping PaymentMethodCompletionBlock
     ) {
         StripeAPI.Token.create(apiClient: apiClient, payment: payment) { (result) in
@@ -50,9 +52,13 @@ extension StripeAPI.PaymentMethod {
             }
             var cardParams = StripeAPI.PaymentMethodParams.Card()
             cardParams.token = token.id
-            let billingDetails = StripeAPI.BillingDetails(from: payment)
+            let billingDetails = StripeAPI.BillingDetails(
+                from: payment,
+                fallbackBillingDetails: fallbackBillingDetails
+            )
             var paymentMethodParams = StripeAPI.PaymentMethodParams(type: .card, card: cardParams)
             paymentMethodParams.billingDetails = billingDetails
+            paymentMethodParams.clientAttributionMetadata = clientAttributionMetadata
             Self.create(apiClient: apiClient, params: paymentMethodParams, completion: completion)
         }
     }

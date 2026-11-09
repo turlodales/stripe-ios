@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol PhoneCountryCodeSelectorViewDelegate: AnyObject {
@@ -21,14 +21,14 @@ final class PhoneCountryCodeSelectorView: UIView {
     private lazy var flagLabel: AttributedLabel = {
         let flagLabel = AttributedLabel(
             font: .label(.large),
-            textColor: .textDefault
+            textColor: FinancialConnectionsAppearance.Colors.textDefault
         )
         return flagLabel
     }()
     private lazy var countryCodeLabel: AttributedLabel = {
         let flagLabel = AttributedLabel(
             font: .label(.large),
-            textColor: .textDefault
+            textColor: FinancialConnectionsAppearance.Colors.textDefault
         )
         return flagLabel
     }()
@@ -45,11 +45,11 @@ final class PhoneCountryCodeSelectorView: UIView {
         return textField
     }()
     private lazy var keyboardToolbar: DoneButtonToolbar = {
-        var theme: ElementsUITheme = .default
+        var theme: ElementsAppearance = .default
         theme.colors = {
-            var colors = ElementsUITheme.Color()
-            colors.primary = .brand500
-            colors.secondaryText = .textSubdued
+            var colors = ElementsAppearance.Color()
+            colors.primary = appearance.colors.primary
+            colors.secondaryText = FinancialConnectionsAppearance.Colors.textSubdued
             return colors
         }()
         let keyboardToolbar = DoneButtonToolbar(
@@ -60,20 +60,23 @@ final class PhoneCountryCodeSelectorView: UIView {
         return keyboardToolbar
     }()
     private let pickerView: PhoneCountryCodePickerView
+    private let appearance: FinancialConnectionsAppearance
     var selectedCountryCode: String {
         return pickerView.selectedCountryCode
     }
 
     weak var delegate: PhoneCountryCodeSelectorViewDelegate?
 
-    init(defaultCountryCode: String?) {
+    init(defaultCountryCode: String?, appearance: FinancialConnectionsAppearance) {
         self.pickerView = PhoneCountryCodePickerView(defaultCountryCode: defaultCountryCode)
+        self.appearance = appearance
         super.init(frame: .zero)
         pickerView.delegate = self
 
-        backgroundColor = .backgroundOffset
+        backgroundColor = FinancialConnectionsAppearance.Colors.backgroundSecondary
         layer.cornerRadius = 8
         clipsToBounds = true
+        accessibilityIdentifier = "phone_country_code_selector"
 
         let horizontalStackView = UIStackView(
             arrangedSubviews: [
@@ -167,7 +170,7 @@ private struct PhoneCountryCodeSelectorViewUIViewRepresentable: UIViewRepresenta
     let defaultCountryCode: String?
 
     func makeUIView(context: Context) -> PhoneCountryCodeSelectorView {
-        PhoneCountryCodeSelectorView(defaultCountryCode: defaultCountryCode)
+        PhoneCountryCodeSelectorView(defaultCountryCode: defaultCountryCode, appearance: .stripe)
     }
 
     func updateUIView(
@@ -178,28 +181,26 @@ private struct PhoneCountryCodeSelectorViewUIViewRepresentable: UIViewRepresenta
 
 struct PhoneCountryCodeSelectorView_Previews: PreviewProvider {
     static var previews: some View {
-        if #available(iOS 14.0, *) {
-            VStack(spacing: 16) {
-                PhoneCountryCodeSelectorViewUIViewRepresentable(
-                    defaultCountryCode: ""
-                )
-                .frame(width: 85, height: 48)
+        VStack(spacing: 16) {
+            PhoneCountryCodeSelectorViewUIViewRepresentable(
+                defaultCountryCode: ""
+            )
+            .frame(width: 85, height: 48)
 
-                PhoneCountryCodeSelectorViewUIViewRepresentable(
-                    defaultCountryCode: "US"
-                )
-                .frame(width: 72, height: 48)
+            PhoneCountryCodeSelectorViewUIViewRepresentable(
+                defaultCountryCode: "US"
+            )
+            .frame(width: 72, height: 48)
 
-                PhoneCountryCodeSelectorViewUIViewRepresentable(
-                    defaultCountryCode: "GB"
-                )
-                .frame(width: 85, height: 48)
+            PhoneCountryCodeSelectorViewUIViewRepresentable(
+                defaultCountryCode: "GB"
+            )
+            .frame(width: 85, height: 48)
 
-                Spacer()
-            }
-            .padding()
-            .background(Color(UIColor.customBackgroundColor))
+            Spacer()
         }
+        .padding()
+        .background(Color(FinancialConnectionsAppearance.Colors.background))
     }
 }
 

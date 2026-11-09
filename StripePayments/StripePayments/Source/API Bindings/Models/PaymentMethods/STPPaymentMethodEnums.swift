@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 /// The type of the PaymentMethod.
 @objc public enum STPPaymentMethodType: Int {
@@ -29,8 +29,6 @@ import Foundation
     @objc(STPPaymentMethodTypeAUBECSDebit) case AUBECSDebit
     /// A Bacs Debit payment method.
     case bacsDebit
-    /// A giropay payment method.
-    case giropay
     /// A Przelewy24 Debit payment method.
     case przelewy24
     /// An EPS payment method.
@@ -41,10 +39,6 @@ import Foundation
     case netBanking
     /// An OXXO payment method.
     @objc(STPPaymentMethodTypeOXXO) case OXXO
-    /// A Sofort payment method.
-    case sofort
-    /// A UPI payment method.
-    case UPI
     /// A PayPal payment method. :nodoc:
     case payPal
     /// An AfterpayClearpay payment method
@@ -60,8 +54,6 @@ import Foundation
     case link
     /// A Klarna payment method.
     case klarna
-    /// A Link Instant Debit payment method
-    case linkInstantDebit
     /// An Affirm payment method
     case affirm
     /// A US Bank Account payment method (ACH)
@@ -78,8 +70,18 @@ import Foundation
     case amazonPay
     /// An Alma payment method
     case alma
+    /// A Sunbit payment method
+    case sunbit
+    /// A Billie payment method
+    case billie
+    /// A Satispay payment method
+    case satispay
+    /// A Crypto payment method
+    case crypto
     /// A MobilePay payment method
     case mobilePay
+    /// A Vipps payment method
+    case vipps
     /// A Konbini payment method
     case konbini
     /// A PromptPay payment method
@@ -88,18 +90,68 @@ import Foundation
     case swish
     /// A TWINT payment method
     case twint
+    /// A Multibanco payment method
+    case multibanco
+    /// A PayPay payment method
+    case payPay
+    /// A Wero payment method
+    case wero
+    /// A Pay by Bank payment method
+    case payByBank
+    /// An MB WAY payment method
+    case mbWay
+    /// A Bizum payment method
+    case bizum
+    /// A Kakao Pay payment method
+    case kakaoPay
+    /// A Korean cards payment method
+    case krCard
+    /// A Naver Pay payment method
+    case naverPay
+    /// A PAYCO payment method
+    case payco
+    /// A SeQura payment method
+    case sequra
+    /// A Scalapay payment method
+    case scalapay
+    /// A Pix payment method
+    case pix
+    /// A GoPay payment method
+    case goPay
+    /// A MoMo payment method
+    case momo
+    /// A ShopeePay payment method
+    case shopeePay
+    /// A QRIS payment method
+    case qris
+    /// A GCash payment method
+    case gcash
+    /// A Naira card payment method
+    case ngCard
+    /// A Naira bank transfer payment method
+    case ngBankTransfer
+    /// A Touch 'n Go payment method
+    case touchNGo
+    /// A TrueMoney payment method
+    case trueMoney
+    /// A Naira USSD payment method
+    case ngUSSD
+    /// A Naira Wallet payment method
+    case ngWallet
+    /// A Mondu payment method
+    case mondu
     /// An unknown type.
     case unknown
 
     /// Localized display name for this payment method type
-    @_spi(STP) public var displayName: String {
+    @_spi(InternalOnlyAPI) @_spi(ReactNativeSDK) public var displayName: String {
         switch self {
         case .alipay:
             return STPLocalizedString("Alipay", "Payment Method type brand name")
         case .card:
             return STPLocalizedString("Card", "Payment Method for credit card")
         case .iDEAL:
-            return STPLocalizedString("iDEAL", "Source type brand name")
+            return STPLocalizedString("iDEAL | Wero", "Source type brand name")
         case .FPX:
             return STPLocalizedString("FPX", "Payment Method type brand name")
         case .SEPADebit:
@@ -108,8 +160,6 @@ import Foundation
             return STPLocalizedString("AU Direct Debit", "Payment Method type brand name.")
         case .grabPay:
             return STPLocalizedString("GrabPay", "Payment Method type brand name.")
-        case .giropay:
-            return STPLocalizedString("giropay", "Payment Method type brand name.")
         case .EPS:
             return STPLocalizedString("EPS", "Payment Method type brand name.")
         case .przelewy24:
@@ -120,10 +170,6 @@ import Foundation
             return STPLocalizedString("NetBanking", "Payment Method type brand name")
         case .OXXO:
             return STPLocalizedString("OXXO", "Payment Method type brand name")
-        case .sofort:
-            return STPLocalizedString("Sofort", "Payment Method type brand name")
-        case .UPI:
-            return STPLocalizedString("UPI", "Payment Method type brand name")
         case .payPal:
             return STPLocalizedString("PayPal", "Payment Method type brand name")
         case .afterpayClearpay:
@@ -141,14 +187,12 @@ import Foundation
             return STPLocalizedString("Link", "Link Payment Method type brand name")
         case .klarna:
             return STPLocalizedString("Klarna", "Payment Method type brand name")
-        case .linkInstantDebit:
-            return STPLocalizedString("Bank", "Link Instant Debit payment method display name")
         case .affirm:
             return STPLocalizedString("Affirm", "Payment Method type brand name")
         case .USBankAccount:
             return STPLocalizedString(
-                "US Bank Account",
-                "Payment Method type name for US Bank Account payments."
+                "US bank account",
+                "Payment Method type name for US bank account payments."
             )
         case .cashApp:
             return STPLocalizedString("Cash App Pay", "Payment Method type brand name")
@@ -164,8 +208,18 @@ import Foundation
             return "Amazon Pay"
         case .alma:
             return "Alma"
+        case .sunbit:
+            return "Sunbit"
+        case .billie:
+            return "Billie"
+        case .satispay:
+            return "Satispay"
+        case .crypto:
+            return "Crypto"
         case .mobilePay:
             return "MobilePay"
+        case .vipps:
+            return "Vipps"
         case .konbini:
             return STPLocalizedString("Konbini", "Payment Method type brand name")
         case .promptPay:
@@ -174,6 +228,56 @@ import Foundation
             return STPLocalizedString("Swish", "Payment Method type brand name")
         case .twint:
             return "TWINT"
+        case .multibanco:
+            return "Multibanco"
+        case .payPay:
+            return "PayPay"
+        case .wero:
+            return "Wero"
+        case .payByBank:
+            return "Pay by Bank"
+        case .mbWay:
+            return "MB WAY"
+        case .bizum:
+            return "Bizum"
+        case .kakaoPay:
+            return "Kakao Pay"
+        case .krCard:
+            return "Korean cards"
+        case .naverPay:
+            return "Naver Pay"
+        case .payco:
+            return "PAYCO"
+        case .sequra:
+            return "SeQura"
+        case .scalapay:
+            return "Scalapay"
+        case .pix:
+            return "Pix"
+        case .momo:
+            return "MoMo"
+        case .shopeePay:
+            return "ShopeePay"
+        case .qris:
+            return "QRIS"
+        case .gcash:
+            return "GCash"
+        case .ngCard:
+            return "Naira card"
+        case .ngBankTransfer:
+            return "Naira bank transfer"
+        case .touchNGo:
+            return "Touch 'n Go"
+        case .trueMoney:
+            return "TrueMoney"
+        case .ngUSSD:
+            return "Naira USSD"
+        case .ngWallet:
+            return "Naira Wallet"
+        case .mondu:
+            return "Mondu"
+        case .goPay:
+            return "GoPay"
         case .cardPresent,
             .unknown:
             return STPLocalizedString("Unknown", "Default missing source type label")
@@ -183,7 +287,7 @@ import Foundation
     }
 
     /// The identifier for the payment method type as it is represented on an intent, e.g. "afterpay_clearpay" for Afterpay
-    @_spi(STP) public var identifier: String {
+    @_spi(InternalOnlyAPI) public var identifier: String {
         switch self {
         case .card:
             return "card"
@@ -203,8 +307,6 @@ import Foundation
             return "au_becs_debit"
         case .bacsDebit:
             return "bacs_debit"
-        case .giropay:
-            return "giropay"
         case .przelewy24:
             return "p24"
         case .EPS:
@@ -215,10 +317,6 @@ import Foundation
             return "netbanking"
         case .OXXO:
             return "oxxo"
-        case .sofort:
-            return "sofort"
-        case .UPI:
-            return "upi"
         case .payPal:
             return "paypal"
         case .afterpayClearpay:
@@ -233,8 +331,6 @@ import Foundation
             return "link"
         case .klarna:
             return "klarna"
-        case .linkInstantDebit:
-            return "link_instant_debits"
         case .affirm:
             return "affirm"
         case .USBankAccount:
@@ -253,8 +349,18 @@ import Foundation
             return "amazon_pay"
         case .alma:
             return "alma"
+        case .sunbit:
+            return "sunbit"
+        case .billie:
+            return "billie"
+        case .satispay:
+            return "satispay"
+        case .crypto:
+            return "crypto"
         case .mobilePay:
             return "mobilepay"
+        case .vipps:
+            return "vipps"
         case .konbini:
             return "konbini"
         case .promptPay:
@@ -263,18 +369,75 @@ import Foundation
             return "swish"
         case .twint:
             return "twint"
+        case .multibanco:
+            return "multibanco"
+        case .payPay:
+            return "paypay"
+        case .wero:
+            return "wero"
+        case .payByBank:
+            return "pay_by_bank"
+        case .mbWay:
+            return "mb_way"
+        case .bizum:
+            return "bizum"
+        case .kakaoPay:
+            return "kakao_pay"
+        case .krCard:
+            return "kr_card"
+        case .naverPay:
+            return "naver_pay"
+        case .payco:
+            return "payco"
+        case .sequra:
+            return "sequra"
+        case .scalapay:
+            return "scalapay"
+        case .pix:
+            return "pix"
+        case .momo:
+            return "momo"
+        case .shopeePay:
+            return "shopeepay"
+        case .qris:
+            return "qris"
+        case .gcash:
+            return "gcash"
+        case .ngCard:
+            return "ng_card"
+        case .ngBankTransfer:
+            return "ng_bank_transfer"
+        case .touchNGo:
+            return "touch_n_go"
+        case .trueMoney:
+            return "truemoney"
+        case .ngUSSD:
+            return "ng_ussd"
+        case .ngWallet:
+            return "ng_wallet"
+        case .mondu:
+            return "mondu"
+        case .goPay:
+            return "gopay"
         }
     }
+
+    @_spi(InternalOnlyAPI) @_spi(ReactNativeSDK) public static func fromIdentifier(_ identifier: String) -> STPPaymentMethodType {
+        return allCases.first(where: { $0.identifier == identifier }) ?? .unknown
+    }
+
 }
 
 extension STPPaymentMethodType: CaseIterable { }
 
 extension STPPaymentMethodType {
-    var requiresPolling: Bool {
+
+    var supportsRefreshing: Bool {
         switch self {
-        // Payment methods such as AmazonPay and CashApp implement app-to-app redirects that bypass the "redirect trampoline" too give a more seamless user experience for app-to-app.
-        // However, when returning to the merchant app in this scenario, the intent often isn't updated instantaneously, requiring polling for intent status updates.
-        case .amazonPay, .cashApp:
+        // Payment methods such as CashApp implement app-to-app redirects that bypass the "redirect trampoline" too give a more seamless user experience for app-to-app.
+        // However, when returning to the merchant app in this scenario, the intent often isn't updated instantaneously, requiring us to hit the refresh endpoint.
+        // Only a small subset of LPMs support refreshing
+        case .cashApp, .klarna:
             return true
         default:
             return false

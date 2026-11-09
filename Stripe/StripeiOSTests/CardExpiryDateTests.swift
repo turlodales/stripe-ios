@@ -8,11 +8,11 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class CardExpiryDateTests: XCTestCase {
 
@@ -68,6 +68,14 @@ class CardExpiryDateTests: XCTestCase {
         XCTAssertFalse(sut.expired(now: aMonthBefore))
         XCTAssertTrue(sut.expired(now: aDayAfter))
         XCTAssertTrue(sut.expired(now: aMonthAfter))
+    }
+
+    func test_90s_not_allowed() throws {
+        let sutPast = CardExpiryDate(month: 2, year: 1995)
+        let sutFuture = CardExpiryDate(month: 2, year: 2095)
+
+        XCTAssertTrue(sutPast.expired())
+        XCTAssertTrue(sutFuture.expired())
     }
 
 }

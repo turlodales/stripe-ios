@@ -6,11 +6,13 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /**
  A class that wraps an Element and adds a `paramsUpdater` closure, provided at initialization, used to implement `PaymentMethodElement.updateParams`
+ 
+ This exists because `IntentConfirmParams` is a type specific to `StripePaymentSheet`, whereas `Element` is shared
  */
 class PaymentMethodElementWrapper<WrappedElementType: Element> {
     typealias DefaultsApplier = (WrappedElementType, IntentConfirmParams) -> IntentConfirmParams
@@ -45,6 +47,20 @@ class PaymentMethodElementWrapper<WrappedElementType: Element> {
         self.init(privateElement: element, defaultsApplier: defaultsApplier, paramsUpdater: paramsUpdater)
     }
 
+    /// Creates a wrapper that applies `paramsUpdater`, then lets the wrapped element contribute its own params.
+    convenience init(
+        updatingParamsFrom element: WrappedElementType,
+        defaultsApplier: DefaultsApplier? = nil,
+        paramsUpdater: @escaping ParamsUpdater
+    ) where WrappedElementType: PaymentMethodElement {
+        self.init(privateElement: element, defaultsApplier: defaultsApplier) { element, params in
+            guard let params = paramsUpdater(element, params) else {
+                return nil
+            }
+            return element.updateParams(params: params)
+        }
+    }
+
     convenience init(
         _ element: TextFieldElement,
         defaultsApplier: DefaultsApplier? = nil,
@@ -57,9 +73,23 @@ class PaymentMethodElementWrapper<WrappedElementType: Element> {
             return paramsUpdater(textField, params)
         }
     }
+
+    /// Creates a validated text field wrapper that also collects params from the text field's children.
+    convenience init(
+        updatingParamsFrom element: TextFieldElement,
+        defaultsApplier: DefaultsApplier? = nil,
+        paramsUpdater: @escaping ParamsUpdater
+    ) where WrappedElementType == TextFieldElement {
+        self.init(element, defaultsApplier: defaultsApplier) { textField, params in
+            guard let params = paramsUpdater(textField, params) else {
+                return nil
+            }
+            return textField.updateParams(params: params)
+        }
+    }
     convenience init(
         _ textFieldElementConfiguration: TextFieldElementConfiguration,
-        theme: ElementsUITheme,
+        theme: ElementsAppearance,
         defaultsApplier: DefaultsApplier? = nil,
         paramsUpdater: @escaping ParamsUpdater
     ) where WrappedElementType == TextFieldElement {
@@ -67,6 +97,9 @@ class PaymentMethodElementWrapper<WrappedElementType: Element> {
         self.init(textFieldElement, defaultsApplier: defaultsApplier, paramsUpdater: paramsUpdater)
     }
 
+    public var debugDescription: String {
+        return String(describing: element)
+    }
 }
 
 // MARK: - PaymentMethodElement
@@ -81,6 +114,10 @@ extension PaymentMethodElementWrapper: PaymentMethodElement {
 
 // MARK: - Element
 extension PaymentMethodElementWrapper: Element {
+    var collectsUserInput: Bool {
+        return element.collectsUserInput
+    }
+
     var view: UIView {
         return element.view
     }
@@ -96,6 +133,10 @@ extension PaymentMethodElementWrapper: Element {
     var subLabelText: String? {
         return element.subLabelText
     }
+
+    var warningLabelText: String? {
+        return element.warningLabelText
+    }
 }
 
 // MARK: - ElementDelegate
@@ -110,14 +151,25 @@ extension PaymentMethodElementWrapper: ElementDelegate {
 }
 
 extension Element {
+    /// A convenience method that returns this element plus any children elements if this is a `ContainerElement`.
+    /// Automatically unwraps any Elements wrapped in `PaymentMethodElementWrapper`.
     public func getAllUnwrappedSubElements() -> [Element] {
         switch self {
-        case let container as ContainerElement:
-            return [container] + container.elements.flatMap { $0.getAllUnwrappedSubElements() }
         case let wrapper as AnyPaymentMethodElementWrapper:
             return wrapper.anyElement.getAllUnwrappedSubElements()
+        case let container as ContainerElement:
+            return [container] + container.elements.flatMap { $0.getAllUnwrappedSubElements() }
         default:
             return [self]
+        }
+    }
+
+    /// Forces validation errors to be displayed on all TextFieldElements in this element's hierarchy
+    public func showAllValidationErrors() {
+        for element in getAllUnwrappedSubElements() {
+            if let textFieldElement = element as? TextFieldElement, !textFieldElement.view.isHidden {
+                textFieldElement.showValidationErrors()
+            }
         }
     }
 }

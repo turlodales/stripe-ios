@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (isteğe bağlı)";
+
+"(not accepted)" = "(kabul edilmedi)";
 
 "Account number" = "Hesap numarası";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB numarası";
 
-"Billing address is same as shipping" = "Faturalama adresi, gönderim adresiyle aynı";
+"Bank account •••• %@" = "Banka hesabı •••• %@";
 
-"Cancel" = "İptal";
+"Billing address is same as shipping" = "Faturalama adresi, gönderim adresiyle aynı";
 
 "Card brand" = "Kartın markası";
 
@@ -34,7 +38,7 @@
 
 "County" = "Ülke";
 
-"Date is empty." = "Tarih boş.";
+"Date of Birth" = "Doğum Tarihi";
 
 "Department" = "İdari Bölüm";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Eksik telefon numarası";
 
-"Invalid UPI ID" = "Geçersiz UPI Numarası";
-
 "Island" = "Ada";
 
 "Last" = "Soyadı";
@@ -82,21 +84,19 @@
 
 "Parish" = "Dini bölge";
 
-"Phone" = "Telefon";
-
 "Phone number" = "Telefon numarası";
 
 "Postal code" = "Posta kodu";
 
 "Prefecture" = "İdari bölge";
 
+"Processing..." = "İşleniyor...";
+
 "Province" = "İlçe";
 
 "Remove" = "Kaldır";
 
-"Remove bank account" = "Banka hesabını kaldır";
-
-"Remove bank account ending in %@" = "%@ ile biten banka hesabını kaldır";
+"Remove bank account?" = "Banka hesabı kaldırılsın mı?";
 
 "Remove card" = "Kartı kaldır";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Kart markasını seçin (isteğe bağlı)";
 
+"Selection is empty." = "Seçim boş.";
+
+"Something went wrong" = "Bir sorun oluştu";
+
 "Sort code" = "Şube kodu";
 
 "State" = "Eyalet";
+
+"Submit" = "Gönder";
 
 "Suburb" = "Banliyö";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Kasaba veya şehir";
 
-"UPI ID" = "UPI Numarası";
-
 "Unable to parse phone number" = "Telefon numaranızı ayrıştırılamadı";
 
 "Use rotor to access links" = "Linklere erişmek için rotoru kullanın.";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "BLIK kodunuz geçersiz.";
 
-"Your ZIP is incomplete." = "Posta kodunuz eksik.";
+"Your ZIP code is incomplete." = "Posta kodunuz eksik.";
+
+"Your ZIP code is invalid." = "Posta kodunuz geçersiz.";
 
 "Your email is invalid." = "E-postanız geçersiz.";
 
 "Your payment information will not be saved." = "Ödeme bilgileriniz kaydedilmeyecek.";
 
 "Your postal code is incomplete." = "Posta kodunuz eksik.";
+
+"Your postal code is invalid." = "Posta kodunuz geçersiz.";
 
 "ZIP" = "Posta Kodu";

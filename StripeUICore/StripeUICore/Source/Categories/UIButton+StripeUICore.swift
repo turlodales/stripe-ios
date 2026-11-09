@@ -6,9 +6,10 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
-@_spi(STP) public extension UIButton {
+@_spi(InternalOnlyAPI) public extension UIButton {
     static let minimumTapSize: CGSize = CGSize(width: 44, height: 44)
 
     class var doneButtonTitle: String {
@@ -16,7 +17,7 @@ import UIKit
     }
 
     class var editButtonTitle: String {
-        return STPLocalizedString("Edit", "Button title to enter editing mode")
+        return .Localized.edit
     }
 
     /// A helper method that returns a UIButton that:

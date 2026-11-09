@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (opsyenal)";
+
+"(not accepted)" = "(tidak diterima)";
 
 "Account number" = "Nombor akaun";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Nombor BSB";
 
-"Billing address is same as shipping" = "Alamat pengebilan sama dengan alamat penghantaran";
+"Bank account •••• %@" = "Akaun bank •••• %@";
 
-"Cancel" = "Batalkan";
+"Billing address is same as shipping" = "Alamat pengebilan sama dengan alamat penghantaran";
 
 "Card brand" = "Jenama kad";
 
@@ -34,7 +38,7 @@
 
 "County" = "Kaunti";
 
-"Date is empty." = "Tarikh kosong.";
+"Date of Birth" = "Tarikh Lahir";
 
 "Department" = "Jabatan";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Nombor telefon tidak lengkap";
 
-"Invalid UPI ID" = "ID UPI tidak sah";
-
 "Island" = "Pulau";
 
 "Last" = "Akhir";
@@ -82,21 +84,19 @@
 
 "Parish" = "Kariah";
 
-"Phone" = "Telefon";
-
 "Phone number" = "Nombor telefon";
 
 "Postal code" = "Poskod";
 
 "Prefecture" = "Wilayah";
 
+"Processing..." = "Pemprosesan...";
+
 "Province" = "Wilayah";
 
 "Remove" = "Alih Keluar";
 
-"Remove bank account" = "Alih keluar akaun bank";
-
-"Remove bank account ending in %@" = "Alih keluar akaun bank yang berakhir dengan %@";
+"Remove bank account?" = "Alih keluar akaun bank?";
 
 "Remove card" = "Alih keluar kad";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Pilih jenama kad (opsyenal)";
 
+"Selection is empty." = "Tiada pilihan dibuat.";
+
+"Something went wrong" = "Ada masalah berlaku";
+
 "Sort code" = "Kod isihan";
 
 "State" = "Negeri";
+
+"Submit" = "Hantar";
 
 "Suburb" = "Pinggir Bandar";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Pekan atau bandar";
 
-"UPI ID" = "ID UPI";
-
 "Unable to parse phone number" = "Nombor telefon tidak dapat dihuraikan";
 
 "Use rotor to access links" = "Gunakan rotor untuk mengakses pautan";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Kod BLIK anda tidak sah.";
 
-"Your ZIP is incomplete." = "Kod ZIP anda tidak lengkap.";
+"Your ZIP code is incomplete." = "Poskod ZIP tidak lengkap.";
+
+"Your ZIP code is invalid." = "Poskod anda tidak sah.";
 
 "Your email is invalid." = "E-mel anda tidak sah.";
 
 "Your payment information will not be saved." = "Maklumat pembayaran anda tidak akan disimpan.";
 
 "Your postal code is incomplete." = "Poskod anda tidak lengkap.";
+
+"Your postal code is invalid." = "Poskod anda tidak sah.";
 
 "ZIP" = "ZIP";

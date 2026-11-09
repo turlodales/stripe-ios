@@ -8,9 +8,10 @@
 //
 
 import StripeCoreTestUtils
+import StripePaymentsTestUtils
 import XCTest
 
-class STPPIIFunctionalTest: XCTestCase {
+class STPPIIFunctionalTest: STPNetworkStubbingTestCase {
     func testCreatePersonallyIdentifiableInformationToken() {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
 
@@ -18,7 +19,7 @@ class STPPIIFunctionalTest: XCTestCase {
 
         client.createToken(withPersonalIDNumber: "0123456789") { token, error in
             expectation.fulfill()
-            XCTAssertNil(error, "error should be nil \(error?.localizedDescription)")
+            XCTAssertNil(error, "error should be nil \(String(describing: error?.localizedDescription))")
             XCTAssertNotNil(token, "token should not be nil")
             XCTAssertNotNil(token?.tokenId)
             XCTAssertEqual(token?.type, .PII)
@@ -34,12 +35,20 @@ class STPPIIFunctionalTest: XCTestCase {
 
         client.createToken(withSSNLast4: "1234") { token, error in
             expectation.fulfill()
-            XCTAssertNil(error, "error should be nil \(error?.localizedDescription)")
+            XCTAssertNil(error, "error should be nil \(String(describing: error?.localizedDescription))")
             XCTAssertNotNil(token, "token should not be nil")
             XCTAssertNotNil(token?.tokenId)
             XCTAssertEqual(token?.type, .PII)
         }
 
         waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    func testSSNLast4TokenAsync() async throws {
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+
+        let token = try await client.createToken(withSSNLast4: "1234")
+        XCTAssertNotNil(token.tokenId)
+        XCTAssertEqual(token.type, .PII)
     }
 }

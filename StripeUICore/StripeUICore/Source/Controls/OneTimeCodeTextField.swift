@@ -11,7 +11,7 @@ import UIKit
 /// A field for collecting one-time codes (OTCs).
 /// For internal SDK use only
 @objc(STP_Internal_OneTimeCodeTextField)
-@_spi(STP) public final class OneTimeCodeTextField: UIControl {
+@_spi(InternalOnlyAPI) public final class OneTimeCodeTextField: UIControl {
 
     public struct Configuration {
         /// Total number of digits of the one-time code.
@@ -36,13 +36,25 @@ import UIKit
         /// The height of each digit item.
         let itemHeight: CGFloat
 
+        /// The maximum width of each digit item. When set, the digits are centered if the field is wider than they need.
+        let itemMaxWidth: CGFloat?
+
+        /// The width of the focused ring's border.
+        let itemFocusRingThickness: CGFloat
+
+        /// The background color of the focused field.
+        let itemFocusBackgroundColor: UIColor?
+
         public init(
             numberOfDigits: Int = 6,
             itemSpacing: CGFloat = 6,
             enableDigitGrouping: Bool = true,
             font: UIFont = .systemFont(ofSize: 20),
             itemCornerRadius: CGFloat = 8,
-            itemHeight: CGFloat = 60
+            itemHeight: CGFloat = 60,
+            itemMaxWidth: CGFloat? = nil,
+            itemFocusRingThickness: CGFloat = 2,
+            itemFocusBackgroundColor: UIColor? = nil
         ) {
             self.numberOfDigits = numberOfDigits
             self.itemSpacing = itemSpacing
@@ -50,6 +62,9 @@ import UIKit
             self.font = font
             self.itemCornerRadius = itemCornerRadius
             self.itemHeight = itemHeight
+            self.itemMaxWidth = itemMaxWidth
+            self.itemFocusRingThickness = itemFocusRingThickness
+            self.itemFocusBackgroundColor = itemFocusBackgroundColor
         }
     }
 
@@ -77,7 +92,7 @@ import UIKit
 
     // MARK: - Private properties
 
-    private let theme: ElementsUITheme
+    private let theme: ElementsAppearance
 
     private let textStorage: TextStorage
 
@@ -92,14 +107,16 @@ import UIKit
         return DigitView(
             configuration: DigitView.Configuration(
                 cornerRadius: configuration.itemCornerRadius,
+                focusRingThickness: configuration.itemFocusRingThickness,
                 font: configuration.font,
-                itemHeight: configuration.itemHeight
+                itemHeight: configuration.itemHeight,
+                focusBackgroundColor: configuration.itemFocusBackgroundColor
             ),
             theme: theme
         )
     }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     private let feedbackGenerator = UINotificationFeedbackGenerator()
 #endif
 
@@ -135,7 +152,7 @@ import UIKit
     // MARK: -
     public init(
         configuration: Configuration = Configuration(),
-        theme: ElementsUITheme = .default
+        theme: ElementsAppearance = .default
     ) {
         self.configuration = configuration
         self.textStorage = TextStorage(capacity: configuration.numberOfDigits)
@@ -147,7 +164,7 @@ import UIKit
         isAccessibilityElement = true
         accessibilityLabel = STPLocalizedString(
             "Code field",
-            "Accessibility label describing a field for entering a login code"
+            "Accessibility label describing a field for entering a sign-in code"
         )
 
         setupUI()
@@ -187,7 +204,7 @@ import UIKit
         let result = super.resignFirstResponder()
 
         if result {
-            #if !canImport(CompositorServices)
+            #if !os(visionOS)
             hideMenu()
             #endif
             update()
@@ -205,7 +222,7 @@ import UIKit
         }
 
         if isFirstResponder {
-            #if !canImport(CompositorServices)
+            #if !os(visionOS)
             toggleMenu()
             #endif
         } else {
@@ -225,7 +242,28 @@ private extension OneTimeCodeTextField {
         stackView.alignment = .center
         stackView.distribution = .fillEqually
         stackView.semanticContentAttribute = .forceLeftToRight
-        addAndPinSubview(stackView)
+
+        guard let itemMaxWidth = configuration.itemMaxWidth else {
+            addAndPinSubview(stackView)
+            return
+        }
+
+        for digitView in digitViews {
+            digitView.widthAnchor.constraint(lessThanOrEqualToConstant: itemMaxWidth).isActive = true
+        }
+
+        // Fill the field until the digits reach their maximum width, then center them.
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stackView)
+        let fillWidthConstraint = stackView.widthAnchor.constraint(equalTo: widthAnchor)
+        fillWidthConstraint.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: topAnchor),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stackView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stackView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
+            fillWidthConstraint,
+        ])
     }
 
     func arrangedDigitViews() -> [UIView] {
@@ -275,7 +313,7 @@ private extension OneTimeCodeTextField {
             : STPLocalizedString("Double tap to edit", "Accessibility hint for a text field")
     }
 
-    #if !canImport(CompositorServices) // Don't mess with the UIMenuController on visionOS
+    #if !os(visionOS) // Don't mess with the UIMenuController on visionOS
     func toggleMenu() {
         if UIMenuController.shared.isMenuVisible {
             hideMenu()
@@ -363,7 +401,7 @@ public extension OneTimeCodeTextField {
             digitView.borderLayer.add(borderColorAnimation, forKey: "borderColor")
         }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
         feedbackGenerator.notificationOccurred(.error)
 #endif
 
@@ -402,7 +440,7 @@ extension OneTimeCodeTextField: UIKeyInput {
         inputDelegate?.textDidChange(self)
 
         sendActions(for: [.editingChanged, .valueChanged])
-        #if !canImport(CompositorServices)
+        #if !os(visionOS)
         hideMenu()
         #endif
         update()
@@ -418,7 +456,7 @@ extension OneTimeCodeTextField: UIKeyInput {
         inputDelegate?.textDidChange(self)
 
         sendActions(for: [.editingChanged, .valueChanged])
-        #if !canImport(CompositorServices)
+        #if !os(visionOS)
         hideMenu()
         #endif
         update()
@@ -666,20 +704,27 @@ private extension OneTimeCodeTextField {
     final class DigitView: UIView {
 
         struct Configuration {
-            let borderWidth: CGFloat = 1
+            let borderWidth: CGFloat
             let cornerRadius: CGFloat
-            let focusRingThickness: CGFloat = 2
+            let focusRingThickness: CGFloat
             let font: UIFont
             let itemHeight: CGFloat
+            let focusBackgroundColor: UIColor?
 
             init(
+                borderWidth: CGFloat = 1,
                 cornerRadius: CGFloat,
+                focusRingThickness: CGFloat = 2,
                 font: UIFont,
-                itemHeight: CGFloat
+                itemHeight: CGFloat,
+                focusBackgroundColor: UIColor? = nil
             ) {
+                self.borderWidth = borderWidth
                 self.cornerRadius = cornerRadius
+                self.focusRingThickness = focusRingThickness
                 self.font = font
                 self.itemHeight = itemHeight
+                self.focusBackgroundColor = focusBackgroundColor
             }
         }
 
@@ -704,7 +749,7 @@ private extension OneTimeCodeTextField {
 
         private let configuration: Configuration
 
-        private let theme: ElementsUITheme
+        private let theme: ElementsAppearance
 
         private(set) lazy var borderLayer: CALayer = {
             let borderLayer = CALayer()
@@ -746,7 +791,7 @@ private extension OneTimeCodeTextField {
             return CGSize(width: UIView.noIntrinsicMetric, height: configuration.itemHeight)
         }
 
-        init(configuration: Configuration, theme: ElementsUITheme) {
+        init(configuration: Configuration, theme: ElementsAppearance) {
             self.configuration = configuration
             self.theme = theme
             super.init(frame: .zero)
@@ -795,14 +840,31 @@ private extension OneTimeCodeTextField {
                 hideCaret()
             }
 
+            // Animate background color change when field becomes active
+            if isActive, let backgroundColor = configuration.focusBackgroundColor?.resolvedColor(with: traitCollection) {
+                let backgroundAnimation = CABasicAnimation(keyPath: "backgroundColor")
+                backgroundAnimation.fromValue = borderLayer.backgroundColor
+                backgroundAnimation.toValue = backgroundColor.cgColor
+                backgroundAnimation.duration = 0.2
+                backgroundAnimation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                backgroundAnimation.fillMode = .forwards
+                backgroundAnimation.isRemovedOnCompletion = false
+                borderLayer.add(backgroundAnimation, forKey: "backgroundColor")
+            } else {
+                // Reset background color when inactive
+                borderLayer.removeAnimation(forKey: "backgroundColor")
+                updateColors()
+            }
+
             CATransaction.commit()
         }
 
         private func updateColors() {
-            borderLayer.backgroundColor = isEnabled ? theme.colors.background.cgColor : theme.colors.disabledBackground.cgColor
-            borderLayer.borderColor = theme.colors.border.cgColor
-            caret.backgroundColor = label.textColor.cgColor
-            focusRing.borderColor = tintColor.cgColor
+            let backgroundColor = isEnabled ? theme.colors.componentBackground : theme.colors.disabledBackground
+            borderLayer.backgroundColor = backgroundColor.resolvedColor(with: traitCollection).cgColor
+            borderLayer.borderColor = theme.colors.border.resolvedColor(with: traitCollection).cgColor
+            caret.backgroundColor = label.textColor.resolvedColor(with: traitCollection).cgColor
+            focusRing.borderColor = tintColor.resolvedColor(with: traitCollection).cgColor
         }
 
         private func showCaret() {
@@ -829,7 +891,7 @@ private extension OneTimeCodeTextField {
             updateColors()
         }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
         override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
             super.traitCollectionDidChange(previousTraitCollection)
             updateColors()

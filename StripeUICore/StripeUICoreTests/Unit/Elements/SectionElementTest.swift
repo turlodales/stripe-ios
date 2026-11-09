@@ -6,7 +6,7 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@testable @_spi(STP) import StripeUICore
+@testable @_spi(InternalOnlyAPI) import StripeUICore
 import XCTest
 
 class SectionElementTest: XCTestCase {
@@ -31,7 +31,7 @@ class SectionElementTest: XCTestCase {
             }
         }
 
-        func shouldDisplay(isUserEditing: Bool) -> Bool {
+        func shouldDisplay(isUserEditing: Bool, displayEmptyFields: Bool) -> Bool {
             switch self {
             case .undisplayableError:
                 return false

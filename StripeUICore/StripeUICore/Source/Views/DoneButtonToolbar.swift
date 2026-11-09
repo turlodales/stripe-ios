@@ -8,12 +8,12 @@
 
 import UIKit
 
-@_spi(STP) public protocol DoneButtonToolbarDelegate: AnyObject {
+@_spi(InternalOnlyAPI) public protocol DoneButtonToolbarDelegate: AnyObject {
     func didTapDone(_ toolbar: DoneButtonToolbar)
     func didTapCancel(_ toolbar: DoneButtonToolbar)
 }
 
-@_spi(STP) public extension DoneButtonToolbarDelegate {
+@_spi(InternalOnlyAPI) public extension DoneButtonToolbarDelegate {
     func didTapCancel(_ toolbar: DoneButtonToolbar) {
         // no-op, cancel button is hidden by default
     }
@@ -21,16 +21,22 @@ import UIKit
 
 /// For internal SDK use only
 @objc(STP_Internal_DoneButtonToolbar)
-@_spi(STP) public final class DoneButtonToolbar: UIToolbar {
+@_spi(InternalOnlyAPI) public final class DoneButtonToolbar: UIToolbar {
 
     public weak var doneButtonToolbarDelegate: DoneButtonToolbarDelegate?
 
+    private var doneButton: UIBarButtonItem?
+    private var doneButtonTintColor: UIColor = .systemBlue
+
     // MARK: - Initializers
 
-    public init(delegate: DoneButtonToolbarDelegate?, showCancelButton: Bool = false, theme: ElementsUITheme = .default) {
-        // Initializing w/ an arbitrary frame stops autolayout from complaining on the first layout pass
-        super.init(frame: CGRect(x: 0, y: 0, width: 100, height: 44))
+    public init(delegate: DoneButtonToolbarDelegate?, showCancelButton: Bool = false, theme: ElementsAppearance = .default) {
 
+        let needsAdditionalHeightBetweenKeyboard = LiquidGlassDetector.isEnabledInMerchantApp
+        let height = needsAdditionalHeightBetweenKeyboard ? 52 : 44
+
+        // Initializing w/ a frame stops autolayout from complaining on the first layout pass. On iOS 26, we set the height in order to give some space between the keyboard and the toolbar buttons.
+        super.init(frame: CGRect(x: 0, y: 0, width: 100, height: height))
         self.doneButtonToolbarDelegate = delegate
 
         let doneButton = UIBarButtonItem(
@@ -38,7 +44,9 @@ import UIKit
             target: self,
             action: #selector(didTapDone)
         )
-        doneButton.tintColor = theme.colors.primary
+        self.doneButton = doneButton
+        self.doneButtonTintColor = theme.colors.primary
+        updateDoneButtonTintColor()
         let cancelButton = UIBarButtonItem(
             barButtonSystemItem: .cancel,
             target: self,
@@ -52,7 +60,9 @@ import UIKit
         }
 
         setItems(items, animated: false)
-        sizeToFit()
+        if !needsAdditionalHeightBetweenKeyboard {
+            sizeToFit()
+        }
         setContentHuggingPriority(.defaultLow, for: .horizontal)
     }
 
@@ -60,7 +70,23 @@ import UIKit
         fatalError("init(coder:) has not been implemented")
     }
 
+#if !os(visionOS)
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            updateDoneButtonTintColor()
+        }
+    }
+#endif
+
     // MARK: Internal Methods
+
+    /// Applies the tint resolved for the current traits. On iOS 26, the system picks the done button's
+    /// foreground (checkmark) color based on its tint, but doesn't re-evaluate it when a dynamic tint
+    /// changes with the theme, so we re-assign a resolved color whenever the appearance changes.
+    private func updateDoneButtonTintColor() {
+        doneButton?.tintColor = doneButtonTintColor.resolvedColor(with: traitCollection)
+    }
 
     @objc
     private func didTapDone() {
@@ -70,5 +96,21 @@ import UIKit
     @objc
     private func didTapCancel() {
         doneButtonToolbarDelegate?.didTapCancel(self)
+    }
+
+    public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = super.hitTest(point, with: event)
+        guard LiquidGlassDetector.isEnabledInMerchantApp else {
+            return hitView
+        }
+
+        // On iOS 26+, the toolbar eats all taps, even when you tap the empty space outside of the toolbar buttons, preventing you from dismissing the keyboard.
+        // Hack: To tell if the touch is inside a button vs. the background, look at the touched view's width. The button is observed to be 38 points wide.
+        let buttonWidthGuess = 50.0
+        if hitView?.frame.size.width ?? 0 > buttonWidthGuess {
+            // Don't return the background view or any other non-button view
+            return nil
+        }
+        return hitView
     }
 }

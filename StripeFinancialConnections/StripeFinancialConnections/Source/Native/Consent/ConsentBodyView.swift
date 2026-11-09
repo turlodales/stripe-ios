@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class ConsentBodyView: UIView {
@@ -17,7 +17,7 @@ class ConsentBodyView: UIView {
         didSelectURL: @escaping (URL) -> Void
     ) {
         super.init(frame: .zero)
-        backgroundColor = .customBackgroundColor
+        backgroundColor = FinancialConnectionsAppearance.Colors.background
 
         let verticalStackView = HitTestStackView()
         verticalStackView.axis = .vertical
@@ -55,7 +55,8 @@ private func CreateLabelView(
 ) -> UIView {
     let imageView = UIImageView()
     imageView.contentMode = .scaleAspectFit
-    imageView.setImage(with: iconUrl)
+    imageView.setImage(with: iconUrl, useAlwaysTemplateRenderingMode: true)
+    imageView.tintColor = FinancialConnectionsAppearance.Colors.icon
     imageView.translatesAutoresizingMaskIntoConstraints = false
     let imageDiameter: CGFloat = 20
     NSLayoutConstraint.activate([

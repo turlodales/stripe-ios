@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI {
 
@@ -43,12 +43,39 @@ extension StripeAPI {
         /// If true, the client cannot support the VerificationSession.
         let unsupportedClient: Bool
         let bottomsheet: [String: VerificationPageStaticContentBottomSheetContent]?
+        /// session ID to identify experiement exposure
+        let userSessionId: String
+        let experiments: [VerificationPageStaticContentExperiment]
+        /// Whether this verification was triggered by Stripe
+        let isStripe: Bool
+        /// If true, the SDK will skip rendering a success page at the end of the flow
+        let skipSuccessPage: Bool
+
     }
 
 }
 
 extension StripeAPI.VerificationPage {
+    private enum ThreeDFaceCaptureExperiment {
+        static let experimentName = "idprod_3d_face_capture_mobile"
+    }
+
+    var has3DFaceCaptureExperiment: Bool {
+        return experiments.contains { experiment in
+            experiment.experimentName == ThreeDFaceCaptureExperiment.experimentName
+        }
+    }
+
+    /// Without MediaPipe, sessions in the experiment use the standard selfie flow.
+    var enable3DFaceCapture: Bool {
+        return has3DFaceCaptureExperiment && FaceGeometryDetectorFactory.isAvailable
+    }
+
+    var shouldSubmit3DFaceCaptureData: Bool {
+        return enable3DFaceCapture
+    }
+
     func copyWithNewMissings(newMissings: Set<StripeAPI.VerificationPageFieldType>) -> StripeAPI.VerificationPage {
-        return StripeAPI.VerificationPage(biometricConsent: self.biometricConsent, documentCapture: self.documentCapture, documentSelect: self.documentSelect, individual: self.individual, countryNotListed: self.countryNotListed, individualWelcome: self.individualWelcome, phoneOtp: self.phoneOtp, fallbackUrl: self.fallbackUrl, id: self.id, livemode: self.livemode, requirements: StripeAPI.VerificationPageRequirements(missing: newMissings), selfie: self.selfie, status: self.status, submitted: self.submitted, success: self.success, unsupportedClient: self.unsupportedClient, bottomsheet: self.bottomsheet)
+        return StripeAPI.VerificationPage(biometricConsent: self.biometricConsent, documentCapture: self.documentCapture, documentSelect: self.documentSelect, individual: self.individual, countryNotListed: self.countryNotListed, individualWelcome: self.individualWelcome, phoneOtp: self.phoneOtp, fallbackUrl: self.fallbackUrl, id: self.id, livemode: self.livemode, requirements: StripeAPI.VerificationPageRequirements(missing: newMissings), selfie: self.selfie, status: self.status, submitted: self.submitted, success: self.success, unsupportedClient: self.unsupportedClient, bottomsheet: self.bottomsheet, userSessionId: self.userSessionId, experiments: self.experiments, isStripe: self.isStripe, skipSuccessPage: self.skipSuccessPage)
     }
 }

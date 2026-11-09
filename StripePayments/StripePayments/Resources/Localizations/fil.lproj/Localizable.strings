@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Bangko";
-
 "Boleto" = "Boleto";
 
 "Card" = "Kard";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "SEPA Debit";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Nag- time out sa pagpapatunay ng iyong paraan ng pagbabayad --- subukin muli";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "Account sa Bangko sa US";
+"US bank account" = "Account sa bangko sa US";
 
 "Unknown" = "Di kilala";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

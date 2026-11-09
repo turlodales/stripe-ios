@@ -10,18 +10,23 @@ import iOSSnapshotTestCase
 import StripeCoreTestUtils
 import UIKit
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
-@testable@_spi(STP) import StripeUICore
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import StripeUICore
 
 class LinkLegalTermsViewSnapshotTests: STPSnapshotTestCase {
 
     func testDefault() {
         let sut = makeSUT()
         verify(sut)
+    }
+
+    func testDefaultOnelink() {
+        let sut = makeSUT(brand: .onelink)
+        verify(sut, identifier: "onelink")
     }
 
     func testCentered() {
@@ -91,8 +96,8 @@ extension LinkLegalTermsViewSnapshotTests {
 
 extension LinkLegalTermsViewSnapshotTests {
 
-    func makeSUT() -> LinkLegalTermsView {
-        return LinkLegalTermsView()
+    func makeSUT(brand: LinkBrand = .link) -> LinkLegalTermsView {
+        return LinkLegalTermsView(brand: brand)
     }
 
     func makeSUT(textAlignment: NSTextAlignment) -> LinkLegalTermsView {

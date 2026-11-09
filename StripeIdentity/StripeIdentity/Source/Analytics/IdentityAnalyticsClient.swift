@@ -7,10 +7,10 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
-enum IdentityAnalyticsClientError: AnalyticLoggableError {
+enum IdentityAnalyticsClientError: AnalyticLoggableErrorV2 {
     /// `startTrackingTimeToScreen` was called twice in a row without calling
     /// `stopTrackingTimeToScreenAndLogIfNeeded`
     case timeToScreenAlreadyStarted(
@@ -20,7 +20,7 @@ enum IdentityAnalyticsClientError: AnalyticLoggableError {
 
     func analyticLoggableSerializeForLogging() -> [String: Any] {
         var payload: [String: Any] = [
-            "domain": (self as NSError).domain
+            "domain": (self as NSError).domain,
         ]
         switch self {
         case .timeToScreenAlreadyStarted(let alreadyStartedForScreen, let requestedForScreen):
@@ -34,6 +34,11 @@ enum IdentityAnalyticsClientError: AnalyticLoggableError {
         }
         return payload
     }
+}
+
+private enum CameraPermissionError: String, AnalyticLoggableStringErrorV2 {
+    case denied = "cameraPermissionDenied"
+    case unknown = "cameraPermissionUnknown"
 }
 
 /// Wrapper for AnalyticsClient that formats Identity-specific analytics
@@ -59,6 +64,8 @@ final class IdentityAnalyticsClient {
         case timeToScreen = "time_to_screen"
         // MARK: Errors
         case genericError = "generic_error"
+        // MARK: Experiment
+        case experimentExposure = "preloaded_experiment_retrieved"
     }
 
     enum ScreenName: String {
@@ -81,6 +88,15 @@ final class IdentityAnalyticsClient {
     enum ScannerName: String {
         case document
         case selfie
+    }
+
+    enum CameraSource: String {
+        case cameraSession = "camera_session"
+        case imagePicker = "image_picker"
+    }
+    enum CameraEventKind: String {
+        case permission = "permission"
+        case runtimeError = "runtime_error"
     }
 
     static let sharedAnalyticsClient = AnalyticsClientV2(
@@ -141,10 +157,61 @@ final class IdentityAnalyticsClient {
         }
     }
 
+    private func cameraMetadata(
+        screenName: ScreenName,
+        cameraSource: CameraSource,
+        cameraEventKind: CameraEventKind
+    ) -> [String: Any] {
+        return [
+            "screen_name": screenName.rawValue,
+            "camera_source": cameraSource.rawValue,
+            "camera_event_kind": cameraEventKind.rawValue,
+        ]
+    }
+
+    private func cameraAccessState(isGranted: Bool?) -> String {
+        guard let isGranted = isGranted else {
+            return "unknown"
+        }
+        return isGranted ? "granted" : "denied"
+    }
+
+    private func cameraPermissionError(isGranted: Bool?) -> CameraPermissionError {
+        guard let isGranted = isGranted else {
+            return .unknown
+        }
+        if isGranted {
+            assertionFailure("cameraPermissionError should not be created for granted camera access")
+            return .unknown
+        }
+        return .denied
+    }
+
     private func logAnalytic(
         _ eventName: EventName,
-        metadata: [String: Any]
+        metadata: [String: Any],
+        verificationPage: StripeAPI.VerificationPage?
     ) {
+        if let verificationPage = verificationPage {
+            let userSessionId = verificationPage.userSessionId
+            let experiments = verificationPage.experiments
+
+            for exp in experiments {
+                if exp.eventName == eventName.rawValue &&
+                    (exp.eventMetadata.allSatisfy { (key, value) in
+                        return metadata[key] as? String == value
+                    }) {
+                    analyticsClient.log(
+                        eventName: EventName.experimentExposure.rawValue,
+                        parameters: [
+                            "arb_id": userSessionId,
+                            "experiment_retrieved": exp.experimentName,
+                        ]
+                    )
+                }
+            }
+        }
+
         analyticsClient.log(
             eventName: eventName.rawValue,
             parameters: [
@@ -155,10 +222,11 @@ final class IdentityAnalyticsClient {
     }
 
     /// Logs an event when the verification sheet is presented
-    func logSheetPresented() {
+    func logSheetPresented(sheetController: VerificationSheetControllerProtocol) {
         logAnalytic(
             .sheetPresented,
-            metadata: [:]
+            metadata: [:],
+            verificationPage: try? sheetController.verificationPageResponse?.get()
         )
     }
 
@@ -171,13 +239,19 @@ final class IdentityAnalyticsClient {
     ) {
         switch result {
         case .flowCompleted:
-            logSheetClosed(sessionResult: "flow_complete")
+            logSheetClosed(
+                sessionResult: "flow_complete",
+                sheetController: sheetController
+            )
 
         case .flowCanceled:
             logVerificationCanceled(
                 sheetController: sheetController
             )
-            logSheetClosed(sessionResult: "flow_canceled")
+            logSheetClosed(
+                sessionResult: "flow_canceled",
+                sheetController: sheetController
+            )
 
         case .flowFailed(let error):
             logVerificationFailed(
@@ -189,8 +263,8 @@ final class IdentityAnalyticsClient {
         }
     }
 
-    /// Helper to create metadata common to both failed, canceled, and succeed analytic events
-    private func failedCanceledSucceededCommonMetadataPayload(
+    /// Helper to create metadata common to flow outcome analytic events
+    private func flowOutcomeCommonMetadataPayload(
         sheetController: VerificationSheetControllerProtocol
     ) -> [String: Any] {
         var metadata: [String: Any] = [:]
@@ -209,13 +283,29 @@ final class IdentityAnalyticsClient {
         return metadata
     }
 
+    private func addLastScreenNameIfAvailable(
+        to metadata: inout [String: Any],
+        sheetController: VerificationSheetControllerProtocol
+    ) {
+        if let lastScreenName = sheetController.flowController.analyticsLastScreen?.analyticsScreenName.rawValue {
+            metadata["last_screen_name"] = lastScreenName
+        }
+    }
+
     /// Logs an event when the verification sheet is closed
-    private func logSheetClosed(sessionResult: String) {
+    private func logSheetClosed(sessionResult: String, sheetController: VerificationSheetControllerProtocol) {
+        var metadata = flowOutcomeCommonMetadataPayload(
+            sheetController: sheetController
+        )
+        metadata["session_result"] = sessionResult
+        addLastScreenNameIfAvailable(
+            to: &metadata,
+            sheetController: sheetController
+        )
         logAnalytic(
             .sheetClosed,
-            metadata: [
-                "session_result": sessionResult
-            ]
+            metadata: metadata,
+            verificationPage: try? sheetController.verificationPageResponse?.get()
         )
     }
 
@@ -226,7 +316,11 @@ final class IdentityAnalyticsClient {
         filePath: StaticString,
         line: UInt
     ) {
-        var metadata = failedCanceledSucceededCommonMetadataPayload(
+        var metadata = flowOutcomeCommonMetadataPayload(
+            sheetController: sheetController
+        )
+        addLastScreenNameIfAvailable(
+            to: &metadata,
             sheetController: sheetController
         )
         metadata["error"] = AnalyticsClientV2.serialize(
@@ -235,28 +329,29 @@ final class IdentityAnalyticsClient {
             line: line
         )
 
-        logAnalytic(.verificationFailed, metadata: metadata)
+        logAnalytic(.verificationFailed, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     /// Logs an event when verification sheet is canceled
     private func logVerificationCanceled(
         sheetController: VerificationSheetControllerProtocol
     ) {
-        var metadata = failedCanceledSucceededCommonMetadataPayload(
+        var metadata = flowOutcomeCommonMetadataPayload(
             sheetController: sheetController
         )
-        if let lastScreen = sheetController.flowController.analyticsLastScreen {
-            metadata["last_screen_name"] = lastScreen.analyticsScreenName.rawValue
-        }
+        addLastScreenNameIfAvailable(
+            to: &metadata,
+            sheetController: sheetController
+        )
 
-        logAnalytic(.verificationCanceled, metadata: metadata)
+        logAnalytic(.verificationCanceled, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     /// Logs an event when verification sheet succeeds
     func logVerificationSucceeded(
         sheetController: VerificationSheetControllerProtocol
     ) {
-        var metadata = failedCanceledSucceededCommonMetadataPayload(
+        var metadata = flowOutcomeCommonMetadataPayload(
             sheetController: sheetController
         )
 
@@ -280,63 +375,134 @@ final class IdentityAnalyticsClient {
             metadata["doc_back_blur_score"] = blurScoreBack
         }
 
-        logAnalytic(.verificationSucceeded, metadata: metadata)
+        logAnalytic(.verificationSucceeded, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     /// Logs an event when a screen is presented
     func logScreenAppeared(
         screenName: ScreenName,
+        previousScreenName: ScreenName? = nil,
         sheetController: VerificationSheetControllerProtocol
     ) {
-        let metadata: [String: Any] = [
-            "screen_name": screenName.rawValue
+        var metadata: [String: Any] = [
+            "screen_name": screenName.rawValue,
         ]
+        if let previousScreenName = previousScreenName {
+            metadata["previous_screen_name"] = previousScreenName.rawValue
+        }
 
-        logAnalytic(.screenAppeared, metadata: metadata)
+        logAnalytic(.screenAppeared, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     /// Logs an event when a camera error occurs
     func logCameraError(
         sheetController: VerificationSheetControllerProtocol,
         error: Error,
+        screenName: ScreenName,
+        cameraSource: CameraSource,
         filePath: StaticString = #filePath,
         line: UInt = #line
     ) {
-        var metadata: [String: Any] = [:]
+        var metadata = cameraMetadata(
+            screenName: screenName,
+            cameraSource: cameraSource,
+            cameraEventKind: .runtimeError
+        )
         metadata["error"] = AnalyticsClientV2.serialize(
             error: error,
             filePath: filePath,
             line: line
         )
-        logAnalytic(.cameraError, metadata: metadata)
+        logAnalytic(.cameraError, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
-    /// Logs either a permission denied or granted event when the camera permissions are checked prior to starting a camera session
+    /// Logs a permission analytic when camera access is checked prior to starting a camera session
     func logCameraPermissionsChecked(
         sheetController: VerificationSheetControllerProtocol,
-        isGranted: Bool?
+        isGranted: Bool?,
+        screenName: ScreenName,
+        cameraSource: CameraSource,
+        filePath: StaticString = #filePath,
+        line: UInt = #line
     ) {
-        let eventName: EventName =
-            (isGranted == true) ? .cameraPermissionGranted : .cameraPermissionDenied
+        guard isGranted != true else {
+            var metadata = cameraMetadata(
+                screenName: screenName,
+                cameraSource: cameraSource,
+                cameraEventKind: .permission
+            )
+            metadata["camera_access_state"] = cameraAccessState(isGranted: isGranted)
+            logAnalytic(
+                .cameraPermissionGranted,
+                metadata: metadata,
+                verificationPage: try? sheetController.verificationPageResponse?.get()
+            )
+            return
+        }
+        logCameraPermissionDeniedOrUnknown(
+            sheetController: sheetController,
+            isGranted: isGranted,
+            screenName: screenName,
+            cameraSource: cameraSource,
+            filePath: filePath,
+            line: line
+        )
+    }
 
-        logAnalytic(eventName, metadata: [:])
+    /// Logs a permission analytic only when camera access is denied or unknown
+    func logCameraPermissionDeniedOrUnknown(
+        sheetController: VerificationSheetControllerProtocol,
+        isGranted: Bool?,
+        screenName: ScreenName,
+        cameraSource: CameraSource,
+        filePath: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard isGranted != true else {
+            return
+        }
+        var metadata = cameraMetadata(
+            screenName: screenName,
+            cameraSource: cameraSource,
+            cameraEventKind: .permission
+        )
+        metadata["camera_access_state"] = cameraAccessState(isGranted: isGranted)
+
+        logAnalytic(
+            .cameraPermissionDenied,
+            metadata: metadata,
+            verificationPage: try? sheetController.verificationPageResponse?.get()
+        )
+
+        metadata["error"] = AnalyticsClientV2.serialize(
+            error: cameraPermissionError(isGranted: isGranted),
+            filePath: filePath,
+            line: line
+        )
+        logAnalytic(
+            .cameraError,
+            metadata: metadata,
+            verificationPage: try? sheetController.verificationPageResponse?.get()
+        )
     }
 
     /// Logs an event when document capture times out
     func logDocumentCaptureTimeout(
-        documentSide: DocumentSide
+        documentSide: DocumentSide,
+        sheetController: VerificationSheetControllerProtocol
     ) {
         logAnalytic(
             .documentCaptureTimeout,
             metadata: [
                 "side": documentSide.rawValue,
-            ]
+            ],
+            verificationPage: try? sheetController.verificationPageResponse?.get()
         )
     }
 
     /// Logs an event when selfie capture times out
-    func logSelfieCaptureTimeout() {
-        logAnalytic(.selfieCaptureTimeout, metadata: [:])
+    func logSelfieCaptureTimeout(sheetController: VerificationSheetControllerProtocol) {
+        logAnalytic(.selfieCaptureTimeout, metadata: [:], verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     // MARK: - Performance Events
@@ -345,7 +511,8 @@ final class IdentityAnalyticsClient {
     func logAverageFramesPerSecond(
         averageFPS: Double,
         numFrames: Int,
-        scannerName: ScannerName
+        scannerName: ScannerName,
+        sheetController: VerificationSheetControllerProtocol
     ) {
         logAnalytic(
             .averageFPS,
@@ -353,13 +520,15 @@ final class IdentityAnalyticsClient {
                 "type": scannerName.rawValue,
                 "value": averageFPS,
                 "frames": numFrames,
-            ]
+            ],
+            verificationPage: try? sheetController.verificationPageResponse?.get()
         )
     }
 
     /// Logs the average inference and post-processing times for every ML model used for one scan
     func logModelPerformance(
-        mlModelMetricsTrackers: [MLDetectorMetricsTrackerProtocol]
+        mlModelMetricsTrackers: [MLDetectorMetricsTrackerProtocol],
+        sheetController: VerificationSheetControllerProtocol
     ) {
         mlModelMetricsTrackers.forEach { metricsTracker in
             // Cache values to avoid weakly capturing performanceTracker
@@ -370,7 +539,8 @@ final class IdentityAnalyticsClient {
                 self.logModelPerformance(
                     modelName: modelName,
                     averageMetrics: averageMetrics,
-                    numFrames: numFrames
+                    numFrames: numFrames,
+                    sheetController: sheetController
                 )
             }
         }
@@ -380,7 +550,8 @@ final class IdentityAnalyticsClient {
     private func logModelPerformance(
         modelName: String,
         averageMetrics: MLDetectorMetricsTracker.Metrics,
-        numFrames: Int
+        numFrames: Int,
+        sheetController: VerificationSheetControllerProtocol
     ) {
         logAnalytic(
             .modelPerformance,
@@ -389,7 +560,8 @@ final class IdentityAnalyticsClient {
                 "inference": averageMetrics.inference.milliseconds,
                 "postprocess": averageMetrics.postProcess.milliseconds,
                 "frames": numFrames,
-            ]
+            ],
+            verificationPage: try? sheetController.verificationPageResponse?.get()
         )
     }
 
@@ -399,7 +571,8 @@ final class IdentityAnalyticsClient {
         compressionQuality: CGFloat,
         fileId: String,
         fileName: String,
-        fileSizeBytes: Int
+        fileSizeBytes: Int,
+        sheetController: VerificationSheetControllerProtocol
     ) {
         // NOTE: File size is logged in kB
         let metadata: [String: Any] = [
@@ -410,21 +583,23 @@ final class IdentityAnalyticsClient {
             "file_size": fileSizeBytes / 1024,
         ]
 
-        logAnalytic(.imageUpload, metadata: metadata)
+        logAnalytic(.imageUpload, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     /// Tracks the time when a user taps a button to continue to the next screen.
     /// Should be followed by a call to `stopTrackingTimeToScreenAndLogIfNeeded`
     /// when the next screen appears.
     func startTrackingTimeToScreen(
-        from fromScreen: ScreenName?
+        from fromScreen: ScreenName?,
+        sheetController: VerificationSheetControllerProtocol
     ) {
         if timeToScreenStartTime != nil {
             logGenericError(
                 error: IdentityAnalyticsClientError.timeToScreenAlreadyStarted(
                     alreadyStartedForScreen: timeToScreenFromScreen,
                     requestedForScreen: fromScreen
-                )
+                ),
+                sheetController: sheetController
             )
         }
         timeToScreenStartTime = Date()
@@ -435,7 +610,10 @@ final class IdentityAnalyticsClient {
     /// action to proceed to the next screen in the flow.
     /// If `startTrackingTimeToScreen` was not called before calling this method,
     /// an analytic is not logged.
-    func stopTrackingTimeToScreenAndLogIfNeeded(to toScreen: ScreenName) {
+    func stopTrackingTimeToScreenAndLogIfNeeded(
+        to toScreen: ScreenName,
+        sheetController: VerificationSheetControllerProtocol
+    ) {
         let endTime = Date()
 
         defer {
@@ -462,7 +640,7 @@ final class IdentityAnalyticsClient {
             metadata["from_screen_name"] = fromScreen.rawValue
         }
 
-        logAnalytic(.timeToScreen, metadata: metadata)
+        logAnalytic(.timeToScreen, metadata: metadata, verificationPage: try? sheetController.verificationPageResponse?.get())
     }
 
     // MARK: - Error Events
@@ -470,17 +648,43 @@ final class IdentityAnalyticsClient {
     /// Logs when an error occurs.
     func logGenericError(
         error: Error,
+        additionalMetadata: [String: Any] = [:],
+        filePath: StaticString = #filePath,
+        line: UInt = #line,
+        sheetController: VerificationSheetControllerProtocol
+    ) {
+        var metadata = additionalMetadata
+        metadata["error_details"] = AnalyticsClientV2.serialize(
+            error: error,
+            filePath: filePath,
+            line: line
+        )
+        logAnalytic(
+            .genericError,
+            metadata: metadata,
+            verificationPage: try? sheetController.verificationPageResponse?.get()
+        )
+    }
+
+    static func logUnscopedGenericError(
+        _ error: Error,
+        context: String,
+        additionalMetadata: [String: Any] = [:],
         filePath: StaticString = #filePath,
         line: UInt = #line
     ) {
-        logAnalytic(
-            .genericError,
-            metadata: [
-                "error_details": AnalyticsClientV2.serialize(
-                    error: error,
-                    filePath: filePath,
-                    line: line
-                ),
+        var eventMetadata = additionalMetadata
+        eventMetadata["error_context"] = context
+        eventMetadata["error_details"] = AnalyticsClientV2.serialize(
+            error: error,
+            filePath: filePath,
+            line: line
+        )
+
+        sharedAnalyticsClient.log(
+            eventName: EventName.genericError.rawValue,
+            parameters: [
+                "event_metadata": eventMetadata,
             ]
         )
     }

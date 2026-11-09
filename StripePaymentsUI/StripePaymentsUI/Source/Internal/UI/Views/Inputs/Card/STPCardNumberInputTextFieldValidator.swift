@@ -6,8 +6,8 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
 import UIKit
 
 class STPCardNumberInputTextFieldValidator: STPInputTextFieldValidator {
@@ -70,7 +70,8 @@ class STPCardNumberInputTextFieldValidator: STPInputTextFieldValidator {
             if STPBINController.shared.hasBINRanges(forPrefix: inputValue) {
                 updateValidationState()
             } else {
-                STPBINController.shared.retrieveBINRanges(forPrefix: inputValue) { (_) in
+                // TODO: BIN retrieval is broken if you don't use STPAPIClient.shared (https://jira.corp.stripe.com/browse/MOBILESDK-4322)
+                STPBINController.shared.retrieveBINRanges(apiClient: STPAPIClient.shared, forPrefix: inputValue) { (_) in
                     // Needs better error handling and analytics https://jira.corp.stripe.com/browse/MOBILESDK-110
                     updateValidationState()
                 }

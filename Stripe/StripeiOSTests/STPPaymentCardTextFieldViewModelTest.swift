@@ -8,11 +8,11 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPPaymentCardTextFieldViewModelTest: XCTestCase {
     var viewModel: STPPaymentCardTextFieldViewModel?
@@ -41,15 +41,15 @@ class STPPaymentCardTextFieldViewModelTest: XCTestCase {
         // swiftlint:disable:next large_tuple
         let tests: [(String, String, String, String, STPCardValidationState)] = [
             ("", "", "", "", .incomplete),
-            ("12/25", "12/25", "12", "25", .valid),
-            ("1225", "12/25", "12", "25", .valid),
+            ("12/26", "12/26", "12", "26", .valid),
+            ("1226", "12/26", "12", "26", .valid),
             ("1", "1", "1", "", .incomplete),
             ("2", "02/", "02", "", .incomplete),
             ("12", "12/", "12", "", .incomplete),
             ("12/2", "12/2", "12", "2", .incomplete),
             ("99/23", "99", "99", "23", .invalid),
             ("10/12", "10/12", "10", "12", .invalid),
-            ("12*25", "12/25", "12", "25", .valid),
+            ("12*26", "12/26", "12", "26", .valid),
             ("12/*", "12/", "12", "", .incomplete),
             ("*", "", "", "", .incomplete),
         ]
@@ -72,7 +72,7 @@ class STPPaymentCardTextFieldViewModelTest: XCTestCase {
 
     func testValidity() {
         viewModel?.cardNumber = "4242424242424242"
-        viewModel?.rawExpiration = "12/24"
+        viewModel?.rawExpiration = "12/40"
         viewModel?.cvc = "123"
         XCTAssertTrue(viewModel!.isValid)
 

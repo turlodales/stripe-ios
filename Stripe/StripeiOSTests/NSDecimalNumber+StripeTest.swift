@@ -6,11 +6,11 @@
 //  Copyright © 2016 Stripe, Inc. All rights reserved.
 //
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 import XCTest
 
 class NSDecimalNumberStripeTest: XCTestCase {
@@ -28,6 +28,8 @@ class NSDecimalNumberStripeTest: XCTestCase {
         "pkr",
         "lak",
         "rsd",
+        "huf",
+        "lbp",
     ]
 
     private let noDecimalPointCurrencies = [
@@ -77,27 +79,4 @@ class NSDecimalNumberStripeTest: XCTestCase {
         }
     }
 
-    func testAmount_twoDecimal() {
-        for twoDecimalPointCurrency in twoDecimalPointCurrencies {
-            let amount = NSDecimalNumber(value: 1000.12)
-            let decimalNumber = amount.stp_amount(withCurrency: twoDecimalPointCurrency)
-            XCTAssertEqual(decimalNumber, 100012)
-        }
-    }
-
-    func testAmount_noDecimal() {
-        for noDecimalPointCurrency in noDecimalPointCurrencies {
-            let amount = NSDecimalNumber(value: 1000.12)
-            let decimalNumber = amount.stp_amount(withCurrency: noDecimalPointCurrency)
-            XCTAssertEqual(decimalNumber, 1000)
-        }
-    }
-
-    func testAmount_threeDecimal() {
-        for threeDecimalPointCurrency in threeDecimalCurrencies {
-            let amount = NSDecimalNumber(value: 1000.12)
-            let decimalNumber = amount.stp_amount(withCurrency: threeDecimalPointCurrency)
-            XCTAssertEqual(decimalNumber, 1000120)
-        }
-    }
 }

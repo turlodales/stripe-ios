@@ -5,8 +5,8 @@
 //  Created by Vardges Avetisyan on 6/6/22.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class FinancialConnectionsNavigationController: UINavigationController {
@@ -130,68 +130,48 @@ extension FinancialConnectionsNavigationController {
         let backButtonImage = Image
             .back_arrow
             .makeImage(template: false)
-            .withAlignmentRectInsets(UIEdgeInsets(top: 0, left: -13, bottom: -2, right: 0))
+            .applyFinancialConnectionsBackButtonEdgeInsets()
         let appearance = UINavigationBarAppearance()
         appearance.setBackIndicatorImage(backButtonImage, transitionMaskImage: backButtonImage)
-        appearance.backgroundColor = .customBackgroundColor
+        appearance.backgroundColor = FinancialConnectionsAppearance.Colors.background
         appearance.shadowColor = .clear  // remove border
         navigationBar.standardAppearance = appearance
         navigationBar.scrollEdgeAppearance = appearance
         navigationBar.compactAppearance = appearance
 
         // change the back button color
-        navigationBar.tintColor = UIColor.iconDefault
+        navigationBar.tintColor = FinancialConnectionsAppearance.Colors.icon
         navigationBar.isTranslucent = false
     }
 
     static func configureNavigationItemForNative(
         _ navigationItem: UINavigationItem?,
         closeItem: UIBarButtonItem,
-        shouldHideStripeLogo: Bool,
-        shouldLeftAlignStripeLogo: Bool
+        shouldHideLogo: Bool,
+        appearance: FinancialConnectionsAppearance
     ) {
-        if !shouldHideStripeLogo {
-            let stripeLogoView: UIView = {
-                let stripeLogoImageView = UIImageView(
-                    image: {
-                        if shouldLeftAlignStripeLogo {
-                            return Image
-                                .stripe_logo
-                                .makeImage(template: true)
-                                .withInsets(UIEdgeInsets(top: 0, left: 3, bottom: 0, right: 0))
-                        } else {
-                            return Image
-                                .stripe_logo
-                                .makeImage(template: true)
-                        }
-                    }()
-                )
-                stripeLogoImageView.tintColor = UIColor.textActionPrimary
-                stripeLogoImageView.contentMode = .scaleAspectFit
-                stripeLogoImageView.sizeToFit()
-                stripeLogoImageView.frame = CGRect(
-                    x: 0,
-                    y: 0,
-                    width: stripeLogoImageView.bounds.width * (20 / max(1, stripeLogoImageView.bounds.height)),
-                    height: 20
-                )
-                // If `titleView` is directly set to the `UIImageView`
-                // we can't control the sizing...so we create a `containerView`
-                // so we can control `UIImageView` sizing.
-                let containerView = UIView()
-                containerView.frame = stripeLogoImageView.bounds
-                containerView.addSubview(stripeLogoImageView)
+        let iconHeight: CGFloat = 20
+        let logoView: UIView? = {
+            guard !shouldHideLogo else { return nil }
 
-                stripeLogoImageView.center = containerView.center
-                return containerView
-            }()
+            let logoImage = UIImageView(image: appearance.logo.makeImage(template: true))
+            logoImage.tintColor = appearance.logoTintColor
+            logoImage.contentMode = .scaleAspectFit
+            logoImage.sizeToFit()
 
-            if shouldLeftAlignStripeLogo {
-                navigationItem?.leftBarButtonItem = UIBarButtonItem(customView: stripeLogoView)
-            } else {
-                navigationItem?.titleView = stripeLogoView
-            }
-        }
+            let logoImageViewWidth = logoImage.bounds.width * (iconHeight / max(1, logoImage.bounds.height))
+            logoImage.frame = CGRect(
+                x: 0,
+                y: 0,
+                width: logoImageViewWidth,
+                height: iconHeight
+            )
+            // Use a container to preserve the logo's size when used as a title view.
+            let containerView = UIView(frame: logoImage.bounds)
+            containerView.addSubview(logoImage)
+            return containerView
+        }()
+        navigationItem?.titleView = logoView
         navigationItem?.backButtonTitle = ""
         navigationItem?.rightBarButtonItem = closeItem
     }

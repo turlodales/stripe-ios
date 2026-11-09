@@ -8,7 +8,7 @@
 
 import Foundation
 import PassKit
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeContact {
     /// Initializes a new Contact with data from an PassKit contact.
@@ -51,6 +51,19 @@ extension StripeContact {
 }
 
 extension StripeAPI.BillingDetails {
+    init(
+        from payment: PKPayment,
+        fallbackBillingDetails: StripeAPI.BillingDetails?
+    ) {
+        self = StripeAPI.BillingDetails(from: payment) ?? StripeAPI.BillingDetails()
+        if let fallbackBillingDetails {
+            email = email ?? fallbackBillingDetails.email
+            name = name ?? fallbackBillingDetails.name
+            phone = phone ?? fallbackBillingDetails.phone
+            address = address ?? fallbackBillingDetails.address
+        }
+    }
+
     init?(
         from payment: PKPayment
     ) {

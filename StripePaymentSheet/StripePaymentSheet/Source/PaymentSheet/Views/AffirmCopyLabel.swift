@@ -5,8 +5,8 @@
 //  Created by Reshma Karthikeyan on 2/22/22.
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
-@_spi(STP) import StripePaymentsUI
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// For internal SDK use only
@@ -15,7 +15,7 @@ class AffirmCopyLabel: UIView {
 
     let logo = NSTextAttachment()
 
-    convenience init(theme: ElementsUITheme = .default) {
+    convenience init(theme: ElementsAppearance = .default) {
         self.init(frame: .zero)
         let affirmLabel = UILabel()
 
@@ -30,7 +30,7 @@ class AffirmCopyLabel: UIView {
         addAndPinSubview(affirmLabel)
     }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         logo.image = PaymentSheetImageLibrary.affirmLogo()

@@ -8,24 +8,29 @@
 import StripeIdentity
 import UIKit
 
-@available(iOS 14.3, *)
 class ExampleVerificationViewController: UIViewController {
 
     // Constants
-    let baseURL = "https://stripe-mobile-identity-verification-example.glitch.me"
-    let verifyEndpoint = "/create-verification-session"
+    // View and fork the backend code here: https://codesandbox.io/p/devbox/dsx4vq
+    let baseURL = "https://stripe-mobile-identity-verification-playground.stripedemos.com"
+    let verifyEndpoint = "/verification-sessions"
+    private var is3DFaceCaptureEnabled: Bool {
+        return faceCaptureEnabledSwitch.isOn
+    }
 
     // Outlets
     @IBOutlet weak var verifyButton: UIButton!
     @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
 
     var verificationSheet: IdentityVerificationSheet?
+    private let faceCaptureEnabledSwitch = UISwitch()
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         activityIndicator.hidesWhenStopped = true
         verifyButton.addTarget(self, action: #selector(didTapVerifyButton), for: .touchUpInside)
+        add3DFaceCaptureSwitch()
     }
 
     @objc
@@ -40,10 +45,18 @@ class ExampleVerificationViewController: UIViewController {
         // Make request to our verification endpoint
         let session = URLSession.shared
         let url = URL(string: baseURL + verifyEndpoint)!
+        let requestJson = try? JSONSerialization.data(
+            withJSONObject: [
+                "type": "document",
+                "3d_face_capture_enabled": is3DFaceCaptureEnabled,
+            ],
+            options: []
+        )
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-type")
+        urlRequest.httpBody = requestJson
 
         let task = session.dataTask(with: urlRequest) { [weak self] data, _, error in
             DispatchQueue.main.async { [weak self] in
@@ -94,6 +107,30 @@ class ExampleVerificationViewController: UIViewController {
         } else {
             activityIndicator.stopAnimating()
         }
+    }
+
+    private func add3DFaceCaptureSwitch() {
+        let label = UILabel()
+        label.text = "3D face capture enabled"
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 17)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        faceCaptureEnabledSwitch.isOn = true
+        faceCaptureEnabledSwitch.setContentHuggingPriority(.required, for: .horizontal)
+
+        let containerView = UIStackView(arrangedSubviews: [label, faceCaptureEnabledSwitch])
+        containerView.axis = .horizontal
+        containerView.alignment = .center
+        containerView.spacing = 8
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(containerView)
+
+        NSLayoutConstraint.activate([
+            containerView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            containerView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            containerView.bottomAnchor.constraint(equalTo: verifyButton.topAnchor, constant: -24),
+        ])
     }
 
     func displayAlert(_ message: String) {

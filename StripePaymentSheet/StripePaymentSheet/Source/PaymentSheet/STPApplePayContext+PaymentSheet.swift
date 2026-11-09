@@ -8,30 +8,40 @@
 
 import Foundation
 import PassKit
-@_spi(STP) import StripeApplePay
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripeApplePay
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
 
 typealias PaymentSheetResultCompletionBlock = ((PaymentSheetResult, STPAnalyticsClient.DeferredIntentConfirmationType?) -> Void)
 
 /// A shim class; ApplePayContext expects a protocol/delegate, but PaymentSheet uses closures.
+@MainActor
 private class ApplePayContextClosureDelegate: NSObject, ApplePayContextDelegate {
     let completion: PaymentSheetResultCompletionBlock
     /// Retain this class until Apple Pay completes
     var selfRetainer: ApplePayContextClosureDelegate?
-    let authorizationResultHandler:
-    ((PKPaymentAuthorizationResult, @escaping ((PKPaymentAuthorizationResult) -> Void)) -> Void)?
+    let authorizationResultHandler: PaymentSheet.ApplePayConfiguration.Handlers.AuthorizationResultHandler?
+    let shippingMethodUpdateHandler:
+    ((PKShippingMethod, @escaping ((PKPaymentRequestShippingMethodUpdate) -> Void)) -> Void)?
+    let shippingContactUpdateHandler:
+    ((PKContact, @escaping ((PKPaymentRequestShippingContactUpdate) -> Void)) -> Void)?
     let intent: Intent
 
     init(
         intent: Intent,
-        authorizationResultHandler: (
-            (PKPaymentAuthorizationResult, @escaping ((PKPaymentAuthorizationResult) -> Void)) -> Void
+        authorizationResultHandler: PaymentSheet.ApplePayConfiguration.Handlers.AuthorizationResultHandler?,
+        shippingMethodUpdateHandler: (
+            (PKShippingMethod, @escaping ((PKPaymentRequestShippingMethodUpdate) -> Void)) -> Void
+        )?,
+        shippingContactUpdateHandler: (
+            (PKContact, @escaping ((PKPaymentRequestShippingContactUpdate) -> Void)) -> Void
         )?,
         completion: @escaping PaymentSheetResultCompletionBlock
     ) {
         self.completion = completion
         self.authorizationResultHandler = authorizationResultHandler
+        self.shippingMethodUpdateHandler = shippingMethodUpdateHandler
+        self.shippingContactUpdateHandler = shippingContactUpdateHandler
         self.intent = intent
         super.init()
         self.selfRetainer = self
@@ -40,34 +50,128 @@ private class ApplePayContextClosureDelegate: NSObject, ApplePayContextDelegate 
     func applePayContext(
         _ context: STPApplePayContext,
         didCreatePaymentMethod paymentMethod: StripeAPI.PaymentMethod,
-        paymentInformation: PKPayment,
-        completion: @escaping STPIntentClientSecretCompletionBlock
-    ) {
+        paymentInformation: PKPayment
+    ) async throws -> String {
         switch intent {
-        case .paymentIntent(_, let paymentIntent):
-            completion(paymentIntent.clientSecret, nil)
-        case .setupIntent(_, let setupIntent):
-            completion(setupIntent.clientSecret, nil)
-        case .deferredIntent(_, let intentConfig):
+        case .paymentIntent(let paymentIntent):
+            return paymentIntent.clientSecret
+        case .setupIntent(let setupIntent):
+            return setupIntent.clientSecret
+        case .deferredIntent(let intentConfig):
             guard let stpPaymentMethod = STPPaymentMethod.decodedObject(fromAPIResponse: paymentMethod.allResponseFields) else {
                 assertionFailure("Failed to convert StripeAPI.PaymentMethod to STPPaymentMethod!")
-                completion(nil, STPApplePayContext.makeUnknownError(message: "Failed to convert StripeAPI.PaymentMethod to STPPaymentMethod."))
-                return
+                throw STPApplePayContext.makeUnknownError(message: "Failed to convert StripeAPI.PaymentMethod to STPPaymentMethod.")
             }
-            let shouldSavePaymentMethod = false // Apple Pay doesn't present the customer the choice to choose to save their payment method
-            intentConfig.confirmHandler(stpPaymentMethod, shouldSavePaymentMethod) { result in
-                switch result {
-                case .success(let clientSecret):
-                    guard clientSecret != PaymentSheet.IntentConfiguration.COMPLETE_WITHOUT_CONFIRMING_INTENT else {
-                        completion(STPApplePayContext.COMPLETE_WITHOUT_CONFIRMING_INTENT, nil)
-                        return
-                    }
-                    completion(clientSecret, nil)
-                case .failure(let error):
-                    completion(nil, error)
+
+            // Check if this is a shared payment token session, which will have a preparePaymentMethodHandler
+            if let preparePaymentMethodHandler = intentConfig.preparePaymentMethodHandler {
+                // Extract shipping address from the PKPayment
+                let shippingAddress = paymentInformation.shippingContact != nil ? STPAddress(pkContact: paymentInformation.shippingContact!) : nil
+
+                preparePaymentMethodHandler(stpPaymentMethod, shippingAddress)
+                return STPApplePayContext.COMPLETE_WITHOUT_CONFIRMING_INTENT
+            }
+
+            // Route to confirmation token flow or payment method flow based on available handlers
+            if let confirmationTokenConfirmHandler = intentConfig.confirmationTokenConfirmHandler {
+                // Confirmation token flow
+                return try await handleConfirmationTokenFlow(
+                    intentConfig: intentConfig,
+                    paymentMethod: stpPaymentMethod,
+                    paymentInformation: paymentInformation,
+                    context: context,
+                    confirmationTokenConfirmHandler: confirmationTokenConfirmHandler
+                )
+            } else if let confirmHandler = intentConfig.confirmHandler {
+                // PaymentMethod-based deferred intent flow
+                let shouldSavePaymentMethod = false // Apple Pay doesn't present the customer the choice to choose to save their payment method
+                let clientSecret = try await confirmHandler(stpPaymentMethod, shouldSavePaymentMethod)
+                guard clientSecret != PaymentSheet.IntentConfiguration.COMPLETE_WITHOUT_CONFIRMING_INTENT else {
+                    return STPApplePayContext.COMPLETE_WITHOUT_CONFIRMING_INTENT
                 }
+                return clientSecret
+            } else {
+                // Neither handler is available
+                throw PaymentSheetError.integrationError(nonPIIDebugDescription: "No confirm handler available in IntentConfiguration")
             }
+        default:
+            throw PaymentSheetError.unknown(debugDescription: "Unsupported intent for STPApplePayContext.")
         }
+    }
+
+    private func handleConfirmationTokenFlow(
+        intentConfig: PaymentSheet.IntentConfiguration,
+        paymentMethod: STPPaymentMethod,
+        paymentInformation: PKPayment,
+        context: STPApplePayContext,
+        confirmationTokenConfirmHandler: @escaping PaymentSheet.IntentConfiguration.ConfirmationTokenConfirmHandler
+    ) async throws -> String {
+        // Create confirmation token params
+        let confirmationTokenParams = STPConfirmationTokenParams()
+        confirmationTokenParams.paymentMethod = paymentMethod.stripeId
+        confirmationTokenParams.returnURL = context.returnUrl
+        confirmationTokenParams.clientAttributionMetadata = context.clientAttributionMetadata
+        // Only send clientContext in DEBUG to validate client IntentConfiguration matches server intent.
+        // This helps catch integration errors during development (e.g. mismatched currency/amount/SFU)
+        // without breaking production payments if server intent changes after client configuration.
+        #if DEBUG
+        confirmationTokenParams.clientContext = intentConfig.createClientContext(customerId: paymentMethod.customerId)
+        #endif
+        switch intentConfig.mode {
+        case .payment(_, _, let setupFutureUsage, _, _):
+            if let sfu = setupFutureUsage?.paymentIntentParamsValue {
+                confirmationTokenParams.setupFutureUsage = sfu
+            }
+        case .setup(_, let setupFutureUsage):
+            confirmationTokenParams.setupFutureUsage = setupFutureUsage.paymentIntentParamsValue
+        }
+
+        // Set shipping details if available
+        confirmationTokenParams.shipping = makeShippingDetailsParams(from: paymentInformation)
+
+        // Create the confirmation token
+        let confirmationToken = try await context.apiClient.createConfirmationToken(
+            with: confirmationTokenParams,
+            ephemeralKeySecret: nil,
+            additionalPaymentUserAgentValues: PaymentSheet.makeDeferredPaymentUserAgentValue(intentConfiguration: intentConfig)
+        )
+
+        // Call the confirmation token handler
+        let clientSecret = try await confirmationTokenConfirmHandler(confirmationToken)
+
+        // Handle case where payment is processed off Stripe
+        guard clientSecret != PaymentSheet.IntentConfiguration.COMPLETE_WITHOUT_CONFIRMING_INTENT else {
+            return STPApplePayContext.COMPLETE_WITHOUT_CONFIRMING_INTENT
+        }
+        return clientSecret
+    }
+
+    /// Extracts shipping details from a PKPayment for CheckoutSession confirmation.
+    private func makeShippingDetailsParams(from payment: PKPayment) -> STPPaymentIntentShippingDetailsParams? {
+        guard let shippingContact = payment.shippingContact,
+              let nameComponents = shippingContact.name else {
+            return nil
+        }
+
+        let name = PersonNameComponentsFormatter.localizedString(from: nameComponents, style: .default)
+        let shippingAddress = STPAddress(pkContact: shippingContact)
+
+        // Only create shipping params if we have a valid address line1
+        guard let line1 = shippingAddress.line1 else {
+            return nil
+        }
+
+        let addressParams = STPPaymentIntentShippingDetailsAddressParams(line1: line1)
+        addressParams.line2 = shippingAddress.line2
+        addressParams.city = shippingAddress.city
+        addressParams.state = shippingAddress.state
+        addressParams.postalCode = shippingAddress.postalCode
+        addressParams.country = shippingAddress.country
+
+        let shippingDetailsParams = STPPaymentIntentShippingDetailsParams(address: addressParams, name: name)
+        shippingDetailsParams.phone = shippingAddress.phone
+
+        return shippingDetailsParams
     }
 
     func applePayContext(
@@ -88,7 +192,7 @@ private class ApplePayContextClosureDelegate: NSObject, ApplePayContextDelegate 
             case .client:
                 return .client
             case .none:
-                return STPAnalyticsClient.DeferredIntentConfirmationType.none
+                return .completeWithoutConfirmingIntent
             }
         }()
         switch status {
@@ -104,46 +208,79 @@ private class ApplePayContextClosureDelegate: NSObject, ApplePayContextDelegate 
 
     func applePayContext(
         _ context: STPApplePayContext,
-        willCompleteWithResult authorizationResult: PKPaymentAuthorizationResult,
-        handler: @escaping (PKPaymentAuthorizationResult) -> Void
-    ) {
-        if let authorizationResultHandler = authorizationResultHandler {
-            authorizationResultHandler(authorizationResult) { result in
-                handler(result)
-            }
+        willCompleteWithResult authorizationResult: PKPaymentAuthorizationResult
+    ) async -> PKPaymentAuthorizationResult {
+        if let authorizationResultHandler {
+            return await authorizationResultHandler(authorizationResult)
         } else {
-            handler(authorizationResult)
+            return authorizationResult
         }
     }
+    func applePayContext(
+        _ context: STPApplePayContext,
+        didSelect shippingMethod: PKShippingMethod,
+        handler: @escaping (PKPaymentRequestShippingMethodUpdate) -> Void) {
+            if let shippingMethodUpdateHandler {
+                shippingMethodUpdateHandler(shippingMethod) { result in
+                    handler(result)
+                }
+            } else {
+                handler(PKPaymentRequestShippingMethodUpdate())
+            }
+        }
+
+    func applePayContext(
+        _ context: STPApplePayContext,
+        didSelectShippingContact shippingContact: PKContact,
+        handler: @escaping (PKPaymentRequestShippingContactUpdate) -> Void) {
+            if let shippingContactUpdateHandler {
+                shippingContactUpdateHandler(shippingContact) { result in
+                    handler(result)
+                }
+            } else {
+                handler(PKPaymentRequestShippingContactUpdate())
+            }
+        }
+
 }
 
 extension STPApplePayContext {
 
+    @MainActor
     static func create(
         intent: Intent,
-        configuration: PaymentSheet.Configuration,
+        elementsSession: STPElementsSession,
+        configuration: PaymentElementConfiguration,
+        clientAttributionMetadata: STPClientAttributionMetadata,
         completion: @escaping PaymentSheetResultCompletionBlock
     ) -> STPApplePayContext? {
         guard let applePay = configuration.applePay else {
             return nil
         }
 
+        let cardFundingFilter = configuration.cardFundingFilter(for: elementsSession)
         var paymentRequest = createPaymentRequest(intent: intent,
                                                   configuration: configuration,
-                                                  applePay: applePay)
+                                                  applePay: applePay,
+                                                  cardFundingFilter: cardFundingFilter)
 
         if let paymentRequestHandler = configuration.applePay?.customHandlers?.paymentRequestHandler {
             paymentRequest = paymentRequestHandler(paymentRequest)
         }
+
         let delegate = ApplePayContextClosureDelegate(
             intent: intent,
             authorizationResultHandler: configuration.applePay?.customHandlers?.authorizationResultHandler,
+            shippingMethodUpdateHandler: configuration.applePay?.customHandlers?.shippingMethodUpdateHandler,
+            shippingContactUpdateHandler: configuration.applePay?.customHandlers?.shippingContactUpdateHandler,
             completion: completion
         )
         if let applePayContext = STPApplePayContext(paymentRequest: paymentRequest, delegate: delegate) {
             applePayContext.shippingDetails = makeShippingDetails(from: configuration)
             applePayContext.apiClient = configuration.apiClient
             applePayContext.returnUrl = configuration.returnURL
+            applePayContext.clientAttributionMetadata = clientAttributionMetadata
+            applePayContext.fallbackBillingDetails = makeFallbackBillingDetails(configuration: configuration)
             return applePayContext
         } else {
             // Delegate only deallocs when Apple Pay completes
@@ -153,10 +290,12 @@ extension STPApplePayContext {
         }
     }
 
+    @MainActor
     static func createPaymentRequest(
         intent: Intent,
-        configuration: PaymentSheet.Configuration,
-        applePay: PaymentSheet.ApplePayConfiguration
+        configuration: PaymentElementConfiguration,
+        applePay: PaymentSheet.ApplePayConfiguration,
+        cardFundingFilter: CardFundingFilter = .default
     ) -> PKPaymentRequest {
         let paymentRequest = StripeAPI.paymentRequest(
             withMerchantIdentifier: applePay.merchantId,
@@ -164,6 +303,14 @@ extension STPApplePayContext {
             currency: intent.currency ?? "USD"
         )
         paymentRequest.requiredBillingContactFields = makeRequiredBillingDetails(from: configuration)
+        // Apple Pay can't vary billing fields by country, so automatic tax from billing needs the postal address.
+        if intent.collectsTaxFromBillingAddress {
+            paymentRequest.requiredBillingContactFields.insert(.postalAddress)
+        }
+        paymentRequest.requiredShippingContactFields = makeRequiredShippingDetails(from: configuration)
+
+        let label = intent.sellerDetails?.businessName ?? configuration.merchantDisplayName
+
         if let paymentSummaryItems = applePay.paymentSummaryItems {
             // Use the merchant supplied paymentSummaryItems
             paymentRequest.paymentSummaryItems = paymentSummaryItems
@@ -175,16 +322,16 @@ extension STPApplePayContext {
                     currency: intent.currency
                 )
                 paymentRequest.paymentSummaryItems = [
-                    PKPaymentSummaryItem(label: configuration.merchantDisplayName, amount: decimalAmount, type: .final),
+                    PKPaymentSummaryItem(label: label, amount: decimalAmount.roundedForApplePay(currency: intent.currency), type: .final),
                 ]
             } else {
                 paymentRequest.paymentSummaryItems = [
-                    PKPaymentSummaryItem(label: configuration.merchantDisplayName, amount: .zero, type: .pending),
+                    PKPaymentSummaryItem(label: label, amount: .zero, type: .pending),
                 ]
             }
         }
 
-        if intent.isSettingUp {
+        if intent.isSetupFutureUsageSet(for: .card) {
             // Disable Apple Pay Later if the merchant is setting up the payment method for future usage
 #if compiler(>=5.9)
             if #available(macOS 14.0, iOS 17.0, *) {
@@ -193,11 +340,20 @@ extension STPApplePayContext {
 #endif
         }
 
+        // Update list of `supportedNetworks` based on the merchant's configuration of cardBrandAcceptance
+        paymentRequest.supportedNetworks = paymentRequest.supportedNetworks.filter { configuration.cardBrandFilter.isAccepted(cardBrand: $0.asCardBrand) }
+
+        // Update merchantCapabilities based on the merchant's configuration of allowedCardFundingTypes
+        // Only override if a specific funding type filter is configured
+        if let merchantCapabilities = cardFundingFilter.applePayMerchantCapabilities() {
+            paymentRequest.merchantCapabilities = merchantCapabilities
+        }
+
         return paymentRequest
     }
 }
 
-private func makeShippingDetails(from configuration: PaymentSheet.Configuration) -> StripeAPI.ShippingDetails? {
+private func makeShippingDetails(from configuration: PaymentElementConfiguration) -> StripeAPI.ShippingDetails? {
     guard let shippingDetails = configuration.shippingDetails(), let name = shippingDetails.name else {
         return nil
     }
@@ -216,22 +372,72 @@ private func makeShippingDetails(from configuration: PaymentSheet.Configuration)
     )
 }
 
-private func makeRequiredBillingDetails(from configuration: PaymentSheet.Configuration) -> Set<PKContactField> {
-    var requiredPKContactFields = Set<PKContactField>()
-    let billingConfig = configuration.billingDetailsCollectionConfiguration
-    // By default, we always want to request the billing address (as it includes the postal code)
-    if billingConfig.address == .automatic || billingConfig.address == .full {
-        requiredPKContactFields.insert(.postalAddress)
+@MainActor
+private func makeFallbackBillingDetails(
+    configuration: PaymentElementConfiguration
+) -> StripeAPI.BillingDetails? {
+    guard configuration.billingDetailsCollectionConfiguration.attachDefaultsToPaymentMethod else {
+        return nil
     }
-    // Only request other fields if requested:
-    if billingConfig.email == .always {
-        requiredPKContactFields.insert(.emailAddress)
+
+    var fallbackBillingDetails = StripeAPI.BillingDetails()
+    var hasFallbackBillingDetails = false
+    let defaultBillingDetails = configuration.defaultBillingDetails
+    if let email = defaultBillingDetails.email {
+        fallbackBillingDetails.email = email
+        hasFallbackBillingDetails = true
     }
-    if billingConfig.phone == .always {
-        requiredPKContactFields.insert(.phoneNumber)
+    if let name = defaultBillingDetails.name {
+        fallbackBillingDetails.name = name
+        hasFallbackBillingDetails = true
     }
-    if billingConfig.name == .always {
-        requiredPKContactFields.insert(.name)
+    if let phone = defaultBillingDetails.phone {
+        fallbackBillingDetails.phone = phone
+        hasFallbackBillingDetails = true
     }
-    return requiredPKContactFields
+    if defaultBillingDetails.address != .init() {
+        let address = defaultBillingDetails.address
+        fallbackBillingDetails.address = StripeAPI.BillingDetails.Address(
+            city: address.city,
+            country: address.country,
+            line1: address.line1,
+            line2: address.line2,
+            postalCode: address.postalCode,
+            state: address.state
+        )
+        hasFallbackBillingDetails = true
+    }
+
+    return hasFallbackBillingDetails ? fallbackBillingDetails : nil
+}
+
+private func makeRequiredBillingDetails(from configuration: PaymentElementConfiguration) -> Set<PKContactField> {
+    return configuration.billingDetailsCollectionConfiguration.applePayRequiredBillingContactFields
+}
+
+private func makeRequiredShippingDetails(from configuration: PaymentElementConfiguration) -> Set<PKContactField> {
+    return configuration.billingDetailsCollectionConfiguration.applePayRequiredShippingContactFields
+}
+
+extension PKPaymentNetwork {
+    var asCardBrand: STPCardBrand {
+        switch self {
+        case .amex:
+            return .amex
+        case .cartesBancaires:
+            return .cartesBancaires
+        case .chinaUnionPay:
+            return .unionPay
+        case .discover:
+            return .discover
+        case .masterCard:
+            return .mastercard
+        case .visa:
+            return .visa
+        case .JCB:
+            return .JCB
+        default:
+            return .unknown
+        }
+    }
 }

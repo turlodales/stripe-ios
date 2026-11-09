@@ -6,46 +6,67 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripePaymentsUI
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class PollingViewModel {
 
     let paymentMethodType: STPPaymentMethodType
-    let supportedPaymentMethods: [STPPaymentMethodType] = [.UPI, .blik, .paynow, .promptPay]
+    let supportedPaymentMethods: [STPPaymentMethodType] = [.blik, .paynow, .promptPay, .mbWay, .bizum, .pix]
     lazy var CTA: String = {
         switch paymentMethodType {
-        case .UPI:
-            return .Localized.open_upi_app
         case .blik:
             return .Localized.blik_confirm_payment
         case .paynow, .promptPay:
             return .Localized.paynow_confirm_payment
+        case .mbWay:
+            return .Localized.mb_way_confirm_payment
+        case .bizum:
+            return .Localized.bizum_confirm_payment
+        case .pix:
+            return .Localized.pix_confirm_payment
         default:
             fatalError("Polling CTA has not been implemented for \(paymentMethodType)")
         }
     }()
+    var showsCountdown: Bool {
+        return paymentMethodType != .pix
+    }
     lazy var deadline: Date = {
         switch paymentMethodType {
-        case .UPI:
-            return Date().addingTimeInterval(60 * 5) // 5 minutes
         case .blik:
             return Date().addingTimeInterval(60) // 60 seconds
         case .paynow, .promptPay:
             return Date().addingTimeInterval(60 * 60) // 1 hour
+        case .bizum:
+            // Keep in sync with:
+            // https://stripe.sourcegraphcloud.com/stripe-internal/mint/-/blob/zoolander/src/java/com/stripe/fpintegrations/thirdpartyfpi/server/common/financialpartner/partner_configuration/config/bizum.textproto
+            return Date().addingTimeInterval(70 * 60) // 1 hour 10 minutes
+        case .mbWay:
+            // Keep in sync with:
+            // https://stripe.sourcegraphcloud.com/stripe-internal/mint/-/blob/pay-server/lib/payment_flows/private/payment_methods/mb_way/constants.rb
+            return Date().addingTimeInterval(60 * 4) // 4 minutes
+        case .pix:
+            // Used only when the API response does not include `expires_at`.
+            return Date().addingTimeInterval(60 * 60 * 24)
         default:
             fatalError("Polling deadline has not been implemented for \(paymentMethodType)")
         }
     }()
     var retryInterval: TimeInterval {
         switch paymentMethodType {
-        case .blik, .paynow, .promptPay:
+        case .blik, .paynow, .promptPay, .mbWay:
             return 1
-        case .UPI:
-            return 10
+        case .bizum:
+            // Payment Element polls every 3 seconds. Poll every second here to match the other iOS polling flows:
+            // https://stripe.sourcegraphcloud.com/stripe-internal/mint/-/blob/pay-server/stripe-js-v3/src/stripeJs/intents/actions/awaitAuthorization/awaitAuthorization.ts
+            return 1
+        case .pix:
+            // Match Payment Element's Pix polling interval.
+            return 2
         default:
             fatalError("Polling retry interval has not been implemented for \(paymentMethodType)")
         }

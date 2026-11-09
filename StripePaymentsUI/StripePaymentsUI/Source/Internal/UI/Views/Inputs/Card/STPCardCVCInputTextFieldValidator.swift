@@ -6,8 +6,8 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
 import UIKit
 
 class STPCardCVCInputTextFieldValidator: STPInputTextFieldValidator {
@@ -15,7 +15,7 @@ class STPCardCVCInputTextFieldValidator: STPInputTextFieldValidator {
     override var defaultErrorMessage: String? {
         return STPLocalizedString(
             "Your card's security code is invalid.",
-            "Error message for card entry form when CVC/CVV is invalid"
+            "Error message for card entry form when CVC is invalid"
         )
     }
 

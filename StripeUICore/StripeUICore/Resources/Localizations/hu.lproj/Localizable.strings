@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (nem kötelező)";
+
+"(not accepted)" = "(nem elfogadott)";
 
 "Account number" = "Számlaszám";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB-szám";
 
-"Billing address is same as shipping" = "A számlázási cím megegyezik a szállítási címmel";
+"Bank account •••• %@" = "Bankszámla •••• %@";
 
-"Cancel" = "Mégse";
+"Billing address is same as shipping" = "A számlázási cím megegyezik a szállítási címmel";
 
 "Card brand" = "Kártyatípus";
 
@@ -34,7 +38,7 @@
 
 "County" = "Ország";
 
-"Date is empty." = "A dátum nincs kitöltve.";
+"Date of Birth" = "Születési dátum";
 
 "Department" = "Megye";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Hiányos telefonszám";
 
-"Invalid UPI ID" = "Érvénytelen UPI-azonosító";
-
 "Island" = "Sziget";
 
 "Last" = "Vezetéknév";
@@ -82,21 +84,19 @@
 
 "Parish" = "Egyházközség";
 
-"Phone" = "Telefon";
-
 "Phone number" = "Telefonszám";
 
 "Postal code" = "Irányítószám";
 
 "Prefecture" = "Prefektúra";
 
+"Processing..." = "Feldolgozás...";
+
 "Province" = "Tartomány";
 
 "Remove" = "Eltávolítás";
 
-"Remove bank account" = "Bankszámla eltávolítása";
-
-"Remove bank account ending in %@" = "%@ számra végződő bankszámla eltávolítása";
+"Remove bank account?" = "Eltávolítja a bankszámlát?";
 
 "Remove card" = "Kártya törlése";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Válassza ki a kártya márkáját (nem kötelező)";
 
+"Selection is empty." = "A kiválasztás üres.";
+
+"Something went wrong" = "Hiba történt";
+
 "Sort code" = "Bankazonosító";
 
 "State" = "Állam";
+
+"Submit" = "Benyújtás";
 
 "Suburb" = "Külváros";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Kisváros vagy város";
 
-"UPI ID" = "UPI-azonosító";
-
 "Unable to parse phone number" = "A telefonszám nem értelmezhető";
 
 "Use rotor to access links" = "Rotor használata a hivatkozások kezeléséhez";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "BLIK kódja érvénytelen.";
 
-"Your ZIP is incomplete." = "A ZIP hiányos.";
+"Your ZIP code is incomplete." = "Az irányítószám hiányos.";
+
+"Your ZIP code is invalid." = "Az irányítószáma érvénytelen.";
 
 "Your email is invalid." = "Érvénytelen e-mail-cím.";
 
 "Your payment information will not be saved." = "Fizetési adatai nem lesznek mentve.";
 
 "Your postal code is incomplete." = "Az irányítószám hiányos.";
+
+"Your postal code is invalid." = "Az irányítószám érvénytelen.";
 
 "ZIP" = "Irányítószám";

@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 @testable import StripeIdentity
 
@@ -32,14 +32,13 @@ final class IdentityMLModelLoaderMock: IdentityMLModelLoaderProtocol {
     }
 
     func startLoadingDocumentModels(
-        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage
+        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage,
+        with sheetController: StripeIdentity.VerificationSheetControllerProtocol
     ) {
         didStartLoadingDocumentModels = true
     }
 
-    func startLoadingFaceModels(
-        from selfiePageConfig: StripeAPI.VerificationPageStaticContentSelfiePage
-    ) {
+    func startLoadingFaceModels(from verificationPage: StripeAPI.VerificationPage) {
         didStartLoadingFaceModels = true
     }
 }

@@ -5,7 +5,7 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// The BottomSheetPresentationController is the middle layer between the presentingViewController
@@ -17,13 +17,14 @@ import UIKit
 /// - Pins the presented view controller to the bottom of the screen, but doesn't constrain the height (unless `forceFullHeight` is `true`)
 @objc(STPBottomSheetPresentationController)
 class BottomSheetPresentationController: UIPresentationController {
+
     // MARK: - Properties
     private var bottomAnchor: NSLayoutConstraint?
     private var presentable: BottomSheetPresentable? {
         return presentedViewController as? BottomSheetPresentable
     }
     private lazy var fullHeightConstraint: NSLayoutConstraint = {
-        guard let containerView = containerView else {
+        guard let containerView else {
             assertionFailure()
             return NSLayoutConstraint()
         }
@@ -78,7 +79,7 @@ class BottomSheetPresentationController: UIPresentationController {
 
         coordinator.animate(alongsideTransition: { [weak self] _ in
             self?.backgroundView.alpha = 1
-            #if !canImport(CompositorServices)
+            #if !os(visionOS)
             self?.presentedViewController.setNeedsStatusBarAppearanceUpdate()
             #endif
         })
@@ -98,7 +99,7 @@ class BottomSheetPresentationController: UIPresentationController {
 
         coordinator.animate(alongsideTransition: { [weak self] _ in
             self?.backgroundView.alpha = 0
-            #if !canImport(CompositorServices)
+            #if !os(visionOS)
             self?.presentingViewController.setNeedsStatusBarAppearanceUpdate()
             #endif
         })
@@ -122,7 +123,11 @@ class BottomSheetPresentationController: UIPresentationController {
     }
 
     @objc func didTapBackgroundView() {
-        presentable?.didTapOrSwipeToDismiss()
+        // This animation isn't cleanly interruptable, don't allow dismissal until it completes.
+        // We're not aware of the animation state ourselves, so we'll check the presentedView for any attached animations.
+        if presentedView.layer.animationKeys()?.count ?? 0 == 0 {
+            presentable?.didTapOrSwipeToDismiss()
+        }
     }
 }
 
@@ -131,7 +136,7 @@ class BottomSheetPresentationController: UIPresentationController {
 extension BottomSheetPresentationController {
 
     fileprivate func installConstraints() {
-        guard let containerView = containerView else { return }
+        guard let containerView else { return }
 
         // Add a dimmed view behind the view controller
         containerView.addAndPinSubview(backgroundView)
@@ -161,7 +166,7 @@ extension BottomSheetPresentationController {
 
     private func addRoundedCorners(to view: UIView) {
         view.layer.maskedCorners =  [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        view.layer.cornerRadius = 12
+        view.layer.cornerRadius = presentable?.sheetCornerRadius ?? BottomSheetTransitioningDelegate.appearance.sheetCornerRadius
         view.layer.masksToBounds = true
     }
 }

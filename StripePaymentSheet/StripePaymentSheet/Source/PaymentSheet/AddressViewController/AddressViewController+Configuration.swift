@@ -7,9 +7,9 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePaymentsUI
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeUICore
 
 public extension AddressViewController {
     /// The customer data collected by `AddressViewController`
@@ -156,11 +156,38 @@ public extension AddressViewController {
         /// The title of the view controller. Defaults to "Shipping address".
         public var title: String = .Localized.shipping_address
 
+        /// Optionally hide the title label and set a title on the view controller instead.
+        @_spi(InternalOnlyAPI) public var useNavigationBarTitle: Bool = false
+
         /// The APIClient instance used to make requests to Stripe
         public var apiClient: STPAPIClient = .shared
 
         /// A list of two-letter country codes that support autocomplete
         /// Defaults to a list of countries that Stripe has audited to ensure a good autocomplete experience.
-        public var autocompleteCountries: [String] = ["AU", "BE", "BR", "CA", "CH", "DE", "ES", "FR", "GB", "IE", "IT", "MX", "NO", "NL", "PL", "RU", "SE", "TR", "US", "ZA"]
+        public var autocompleteCountries: [String] = AddressSectionElement.defaultAutocompleteCountries
+
+        /// The billing address to use for the "Use billing address for shipping" checkbox.
+        /// When provided, shows a checkbox that allows customers to populate shipping fields with billing address data.
+        @_spi(InternalOnlyAPI) public var billingAddress: DefaultAddressDetails?
+
+        /// Whether `AddressViewController` collects a name. Defaults to `.auto`.
+        @_spi(InternalOnlyAPI) public var nameField: NameField = .auto
+
+        /// Whether `AddressViewController` collects a name.
+        @_spi(InternalOnlyAPI) public enum NameField {
+            /// The name field is displayed and the customer is required to fill it in.
+            case auto
+            /// The name field is not displayed. The result's name is `defaultValues.name`, if any.
+            case never
+        }
+    }
+}
+
+extension AddressViewController.Configuration.DefaultAddressDetails {
+    /// Whether the address's country is in `allowedCountries`. An address without a country, or an
+    /// empty `allowedCountries`, allows any country.
+    func isCountryAllowed(_ allowedCountries: [String]) -> Bool {
+        guard !allowedCountries.isEmpty, let country = address.country else { return true }
+        return allowedCountries.contains(country)
     }
 }

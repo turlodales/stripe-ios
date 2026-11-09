@@ -6,89 +6,68 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripePayments
 
-extension Intent {
+extension STPElementsSession {
     var supportsLink: Bool {
         // Either Link is an allowed Payment Method in the elements/sessions response, or passthrough mode (Link as a Card PM) is allowed
-        return recommendedPaymentMethodTypes.contains(.link) || linkPassthroughModeEnabled
-    }
-
-    var supportsLinkCard: Bool {
-        return supportsLink && (linkFundingSources?.contains(.card) ?? false) || linkPassthroughModeEnabled
-    }
-
-    var onlySupportsLinkBank: Bool {
-        return supportsLink && (linkFundingSources == [.bankAccount])
-    }
-
-    var linkFlags: [String: Bool] {
-        switch self {
-        case .paymentIntent(let paymentIntent, _):
-            return paymentIntent.linkSettings?.linkFlags ?? [:]
-        case .setupIntent(let setupIntent, _):
-            return setupIntent.linkSettings?.linkFlags ?? [:]
-        case .deferredIntent(let elementsSession, _):
-            return elementsSession.linkSettings?.linkFlags ?? [:]
-        }
-    }
-
-    var callToAction: ConfirmButton.CallToActionType {
-        switch self {
-        case .paymentIntent(_, let paymentIntent):
-            return .pay(amount: paymentIntent.amount, currency: paymentIntent.currency)
-        case .setupIntent:
-            return .setup
-        case .deferredIntent(_, let intentConfig):
-            switch intentConfig.mode {
-            case .payment(let amount, let currency, _, _):
-                return .pay(amount: amount, currency: currency)
-            case .setup:
-                return .setup
-            }
-        }
+        orderedPaymentMethodTypes.contains(.link) || linkPassthroughModeEnabled
     }
 
     var linkPassthroughModeEnabled: Bool {
-        switch self {
-        case .paymentIntent(let paymentIntent, _):
-            return paymentIntent.linkSettings?.passthroughModeEnabled ?? false
-        case .setupIntent(let setupIntent, _):
-            return setupIntent.linkSettings?.passthroughModeEnabled ?? false
-        case .deferredIntent(let elementsSession, _):
-            return elementsSession.linkSettings?.passthroughModeEnabled ?? false
-        }
+        linkSettings?.passthroughModeEnabled ?? false
+    }
+
+    var linkCardBrandFilteringEnabled: Bool {
+        linkPassthroughModeEnabled
+    }
+
+    var supportsLinkCard: Bool {
+        supportsLink && (linkFundingSources?.contains(.card) ?? false) || linkPassthroughModeEnabled
+    }
+
+    var linkFundingSources: Set<ParsedEnum<LinkSettings.FundingSource>>? {
+        linkSettings?.fundingSources
     }
 
     var disableLinkSignup: Bool {
-        switch self {
-        case .paymentIntent(let paymentIntent, _):
-            return paymentIntent.linkSettings?.disableSignup ?? false
-        case .setupIntent(let setupIntent, _):
-            return setupIntent.linkSettings?.disableSignup ?? false
-        case .deferredIntent(let elementsSession, _):
-            return elementsSession.linkSettings?.disableSignup ?? false
-        }
-    }
-
-    var linkFundingSources: Set<LinkSettings.FundingSource>? {
-        return elementsSession.linkSettings?.fundingSources
+        linkSettings?.disableSignup ?? false
     }
 
     var linkPopupWebviewOption: LinkSettings.PopupWebviewOption {
-        return elementsSession.linkSettings?.popupWebviewOption ?? .shared
+        linkSettings?.popupWebviewOption ?? .shared
     }
 
-    func countryCode(overrideCountry: String?) -> String? {
-#if DEBUG
-        if let overrideCountry {
-            return overrideCountry
-        }
-#endif
-        return elementsSession.countryCode
+    func shouldShowLink2FABeforePaymentSheet(
+        for linkAccount: PaymentSheetLinkAccount,
+        savedPaymentMethods: [STPPaymentMethod]
+    ) -> Bool {
+        self.supportsLink &&
+        linkAccount.sessionState == .requiresVerification &&
+        linkAccount.currentSession?.hasStartedOTPVerification != true &&
+        linkAccount.useMobileEndpoints &&
+        self.linkSettings?.suppress2FAModal != true &&
+        linkAccount.currentSession?.mobileFallbackWebviewParams?.webviewRequirementType != .required &&
+        savedPaymentMethods.isEmpty // prefer MPE checkout when SPMs are present 
     }
 
-    var merchantCountryCode: String? {
-        return elementsSession.merchantCountryCode
+    var linkFlags: [String: Bool] {
+        linkSettings?.linkFlags ?? [:]
+    }
+
+    var linkMFAAuthFlowEnabled: Bool {
+        linkSettings?.mfaAuthFlowEnabled ?? false
+    }
+
+    var linkSupportedVerificationTypes: [SupportedVerificationType] {
+        SupportedVerificationType.nativeCapabilities(mfaAuthFlowEnabled: linkMFAAuthFlowEnabled)
+    }
+
+    var shouldShowPreferDebitCardHint: Bool {
+        linkSettings?.linkShowPreferDebitCardHint ?? false
+    }
+
+    var linkPaymentMethodBankAccountDataConsent: String? {
+        linkSettings?.linkPaymentMethodBankAccountDataConsent
     }
 }

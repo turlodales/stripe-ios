@@ -11,7 +11,7 @@ import UIKit
 /// A `UIImageView` that dynamically changes it's `image` according to the brightness of the
 /// `pairedColor`.
 @objc(STP_Internal_DynamicImageView)
-@_spi(STP) public class DynamicImageView: UIImageView {
+@_spi(InternalOnlyAPI) public class DynamicImageView: UIImageView {
     private let pairedColor: UIColor
     private let dynamicImage: UIImage?
 
@@ -43,7 +43,7 @@ import UIKit
         fatalError("init(coder:) has not been implemented")
     }
 
-    #if !canImport(CompositorServices)
+    #if !os(visionOS)
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         image = Self.makeImage(for: traitCollection, dynamicImage: dynamicImage, pairedColor: pairedColor)

@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Bank";
-
 "Boleto" = "Boleto";
 
 "Card" = "Card";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "SEPA Debit";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Timed out authenticating your payment method - please try again";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "US Bank Account";
+"US bank account" = "US bank account";
 
 "Unknown" = "Unknown";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

@@ -6,12 +6,18 @@
 //
 
 import Foundation
-@_spi(STP) @testable import StripeCore
+@_spi(InternalOnlyAPI) @testable import StripeCore
 
-@_spi(STP) public class STPTestingAnalyticsClient: STPAnalyticsClient {
+@_spi(InternalOnlyAPI) public class STPTestingAnalyticsClient: STPAnalyticsClient {
+    public var forceAlwaysSendAnalytics: Bool = false
     public var events = [Analytic]()
+
+    public override func shouldSendAnalytic() -> Bool {
+        return forceAlwaysSendAnalytics
+    }
 
     public override func log(analytic: Analytic, apiClient: STPAPIClient = .shared) {
         events.append(analytic)
+        super.log(analytic: analytic)
     }
 }

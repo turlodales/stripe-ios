@@ -6,11 +6,13 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 func TerminalErrorView(
     allowManualEntry: Bool,
+    appearance: FinancialConnectionsAppearance,
     didSelectManualEntry: @escaping () -> Void,
     didSelectClose: @escaping () -> Void
 ) -> UIView {
@@ -18,12 +20,10 @@ func TerminalErrorView(
         contentView: PaneLayoutView.createContentView(
             iconView: RoundedIconView(
                 image: .image(.warning_triangle),
-                style: .circle
+                style: .circle,
+                appearance: appearance
             ),
-            title: STPLocalizedString(
-                "Something went wrong",
-                "Title of a screen that shows an error. The error screen appears after user has selected a bank. The error is a generic one: something wrong happened and we are not sure what."
-            ),
+            title: String.Localized.something_went_wrong,
             subtitle: {
                 if allowManualEntry {
                     return STPLocalizedString(
@@ -56,7 +56,8 @@ func TerminalErrorView(
                         }
                     )
                 }
-            }()
+            }(),
+            appearance: appearance
         ).footerView
     ).createView()
 }

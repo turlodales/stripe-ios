@@ -8,13 +8,12 @@
 
 import AVKit
 import Foundation
-@_spi(STP) import StripeCameraCoreTestUtils
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeCoreTestUtils
-import StripeCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCameraCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCoreTestUtils
 import XCTest
 
-@testable@_spi(STP) import StripeCameraCore
+@testable@_spi(InternalOnlyAPI) import StripeCameraCore
 @testable import StripeIdentity
 
 final class DocumentCaptureViewControllerTest: XCTestCase {
@@ -38,7 +37,7 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
 
     let mockError = NSError(domain: "mock_error", code: 100, userInfo: nil)
 
-    override class func setUp() {
+    override static func setUp() {
         super.setUp()
         mockSampleBuffer = CapturedImageMock.frontDriversLicense.image.convertToSampleBuffer()
         guard let mockVerificationPage = try? VerificationPageMock.response200.make() else {
@@ -89,11 +88,11 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         )
     }
 
-    func testTransitionFromScanningCardFront() {
+    func testTransitionFromScanningCardFrontLegacy() {
         let vc = makeViewController(
             state: .scanning(.front, nil)
         )
-        let mockDocumentScannerOutput = makeDocumentScannerOutput(with: .idCardFront)
+        let mockDocumentScannerOutput = makeDocumentScannerOutputLegacy(with: .idCardFront)
         // Mock timer so we can verify it was invalidated
         mockTimeoutTimer(vc)
         mockCameraFrameCaptured(vc)
@@ -116,6 +115,70 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
             mockDocumentUploader.uploadedDocumentScannerOutput,
             mockDocumentScannerOutput
         )
+    }
+
+    func testTransitionFromScanningCardFrontLegacyPicksBestFrameWithinBestFrameWindow() {
+        let vc = DocumentCaptureViewController(
+            apiConfig: DocumentCaptureViewControllerTest.mockVerificationPage.documentCapture,
+            initialState: .scanning(.front, nil),
+            sheetController: mockSheetController,
+            cameraSession: mockCameraSession,
+            cameraPermissionsManager: mockCameraPermissionsManager,
+            documentUploader: mockDocumentUploader,
+            anyDocumentScanner: .init(mockDocumentScanner),
+            concurrencyManager: mockConcurrencyManager,
+            appSettingsHelper: mockAppSettingsHelper,
+            avaialableIDTypes: DocumentCaptureViewControllerTest.mockVerificationPage.documentSelect.idDocumentTypeAllowlistKeys,
+            bestFramePicker: .init(window: 1.0)
+        )
+
+        func makeOutput(frontScore: Float) -> DocumentScannerOutput {
+            return makeDocumentScannerOutputLegacyWithIddetectorOutput(
+                .init(
+                    classification: .idCardFront,
+                    documentBounds: CGRect(x: 0.1, y: 0.33, width: 0.8, height: 0.33),
+                    allClassificationScores: [
+                        .idCardFront: frontScore
+                    ]
+                )
+            )
+        }
+
+        let outputs = [
+            makeOutput(frontScore: 0.3),
+            makeOutput(frontScore: 0.6),
+            makeOutput(frontScore: 0.4),
+            makeOutput(frontScore: 0.9),
+            makeOutput(frontScore: 0.5),
+        ]
+        let expectedBestOutput = outputs[3]
+
+        for output in outputs {
+            mockCameraFrameCaptured(vc)
+            mockConcurrencyManager.respondToScan(output: output)
+        }
+
+        let windowExp = expectation(description: "Best frame window expired")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            windowExp.fulfill()
+        }
+        wait(for: [windowExp], timeout: 2)
+
+        // Next frame triggers the pick + upload. Use a lower score so it doesn't replace the best.
+        mockCameraFrameCaptured(vc)
+        mockConcurrencyManager.respondToScan(output: makeOutput(frontScore: 0.1))
+
+        verify(
+            vc,
+            expectedState: .scanned(.front, UIImage()),
+            expectedButtonState: .enabled
+        )
+        waitForCameraSessionToStop()
+        XCTAssertTrue(mockDocumentScanner.didReset)
+        XCTAssertTrue(mockConcurrencyManager.didReset)
+        XCTAssertEqual(mockDocumentUploader.uploadedSide, .front)
+        XCTAssertEqual(mockDocumentUploader.uploadMethod, .autoCapture)
+        XCTAssertEqual(mockDocumentUploader.uploadedDocumentScannerOutput, expectedBestOutput)
     }
 
     func testTransitionFromScannedCardFront() {
@@ -149,7 +212,7 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         let vc = makeViewController(
             state: .scanning(.back, nil)
         )
-        let mockDocumentScannerOutput = makeDocumentScannerOutput(with: .idCardBack)
+        let mockDocumentScannerOutput = makeDocumentScannerOutputLegacy(with: .idCardBack)
         // Mock timer so we can verify it was invalidated
         mockTimeoutTimer(vc)
         mockCameraFrameCaptured(vc)
@@ -222,7 +285,7 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         let vc = makeViewController(
             state: .scanning(.front, nil)
         )
-        let mockDocumentScannerOutput = makeDocumentScannerOutput(with: .passport)
+        let mockDocumentScannerOutput = makeDocumentScannerOutputLegacy(with: .passport)
         // Mock timer so we can verify it was invalidated
         mockTimeoutTimer(vc)
         mockCameraFrameCaptured(vc)
@@ -275,7 +338,12 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
     func testResetTimeoutDuringScanning() {
         // Mock that existing sacnningState already found a desired classification
         let vc = makeViewController(
-            state: .scanning(.front, .init(classification: .passport, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))
+            state: .scanning(
+                .front,
+                makeDocumentScannerOutputLegacyWithIddetectorOutput(
+                    .init(classification: .passport, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])
+                )
+            )
         )
 
         // Mock that scanner found non-desired classification
@@ -298,10 +366,14 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
 
         // Request to save data
         vc.saveOrFlipDocument(scannedImage: mockFrontImage, documentSide: .front)
-
-        guard case .success = mockSheetController.frontUploadedDocumentsResult else {
-            return XCTFail("Expected success result")
+        let e = expectation(description: "back upload result")
+        mockDocumentUploader.frontUploadPromise.observe { _ in
+            guard case .success = self.mockSheetController.frontUploadedDocumentsResult else {
+                return XCTFail("Expected success result")
+            }
+            e.fulfill()
         }
+        waitForExpectations(timeout: 1)
 
         // Verify state
         verify(
@@ -324,9 +396,14 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         // Request to save data
         vc.saveOrFlipDocument(scannedImage: mockBackImage, documentSide: .back)
 
-        guard case .success = mockSheetController.backUploadedDocumentsResult else {
-            return XCTFail("Expected success result")
+        let e = expectation(description: "back upload result")
+        mockDocumentUploader.backUploadPromise.observe { _ in
+            guard case .success = self.mockSheetController.backUploadedDocumentsResult else {
+                return XCTFail("Expected success result")
+            }
+            e.fulfill()
         }
+        waitForExpectations(timeout: 1)
 
         // Verify state
         verify(
@@ -351,11 +428,36 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
             expectedState: .noCameraAccess,
             expectedButtonState: .enabled
         )
+        let analytic = mockAnalyticsClient.loggedAnalyticPayloads(
+            withEventName: "camera_permission_denied"
+        ).first
+        XCTAssert(analytic: analytic, hasMetadata: "screen_name", withValue: "live_capture")
+        XCTAssert(
+            analytic: analytic,
+            hasMetadata: "camera_source",
+            withValue: "camera_session"
+        )
+        XCTAssert(analytic: analytic, hasMetadata: "camera_event_kind", withValue: "permission")
+        XCTAssert(analytic: analytic, hasMetadata: "camera_access_state", withValue: "denied")
         XCTAssertEqual(
             mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_permission_granted")
                 .count,
             0
         )
+
+        let errorAnalytic = mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_error")
+            .first
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "screen_name", withValue: "live_capture")
+        XCTAssert(
+            analytic: errorAnalytic,
+            hasMetadata: "camera_source",
+            withValue: "camera_session"
+        )
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "camera_event_kind", withValue: "permission")
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "camera_access_state", withValue: "denied")
+        let error = (errorAnalytic?["event_metadata"] as? [String: Any])?["error"] as? [String: Any]
+        XCTAssertEqual(error?["type"] as? String, "cameraPermissionDenied")
+        XCTAssertEqual(error?["file"] as? String, "DocumentCaptureViewController.swift")
     }
 
     func testCameraSessionFailedConfigure() {
@@ -387,9 +489,16 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
             code: 100,
             fileName: "DocumentCaptureViewController.swift"
         )
+        XCTAssert(analytic: analytic, hasMetadata: "screen_name", withValue: "live_capture")
+        XCTAssert(
+            analytic: analytic,
+            hasMetadata: "camera_source",
+            withValue: "camera_session"
+        )
+        XCTAssert(analytic: analytic, hasMetadata: "camera_event_kind", withValue: "runtime_error")
     }
 
-    func testCameraAccessGrantedAnalytic() {
+    func testCameraAccessGrantedLogsExistingAnalytic() {
         // Mock collected data for analytics
         mockSheetController.collectedData = VerificationPageDataUpdateMock.default.collectedData!
 
@@ -401,8 +510,17 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
 
         // Verify analytics
         XCTAssertEqual(
+            mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_permission_granted")
+                .count,
+            1
+        )
+        XCTAssertEqual(
             mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_permission_denied")
                 .count,
+            0
+        )
+        XCTAssertEqual(
+            mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_error").count,
             0
         )
     }
@@ -417,6 +535,150 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
             vc,
             expectedState: .noCameraAccess,
             expectedButtonState: .enabled
+        )
+    }
+
+    func testCaptureModeControlShownWhenManualCaptureIsAllowed() throws {
+        let vc = makeViewController(state: .initial)
+        XCTAssertNil(vc.navigationItem.titleView)
+        let control = try XCTUnwrap(findCaptureModeControl(in: vc.documentCaptureView))
+        XCTAssertEqual(control.selectedSegmentIndex, 0)
+        XCTAssertTrue(control.isEnabled)
+    }
+
+    func testCaptureModeControlShownWhenLiveCaptureIsRequired() throws {
+        let mockResponse = try VerificationPageMock.requireLiveCapture.make()
+        let vc = makeViewController(
+            state: .initial,
+            apiConfig: mockResponse.documentCapture
+        )
+        let control = try XCTUnwrap(findCaptureModeControl(in: vc.documentCaptureView))
+        XCTAssertEqual(control.selectedSegmentIndex, 0)
+        XCTAssertTrue(control.isEnabled)
+
+        XCTAssertNil(vc.navigationItem.titleView)
+    }
+
+    func testCaptureModeControlDisabledWhenScanned() throws {
+        let vc = makeViewController(state: .scanned(.front, UIImage()))
+        let control = try XCTUnwrap(findCaptureModeControl(in: vc.documentCaptureView))
+        XCTAssertFalse(control.isEnabled)
+    }
+
+    func testCaptureModeControlHiddenWhenTimedOut() throws {
+        let vc = makeViewController(state: .timeout(.front))
+
+        XCTAssertNil(findCaptureModeControl(in: vc.documentCaptureView))
+    }
+
+    func testManualCaptureSwitchUpdatesModeWithoutTransitioning() throws {
+        let vc = makeViewController(state: .scanning(.front, nil))
+        let control = try switchToManualCapture(vc)
+
+        XCTAssertEqual(control.selectedSegmentIndex, 1)
+        XCTAssertNil(mockFlowController.replacedWithViewController)
+        XCTAssertEqual(vc.buttonViewModels.count, 1)
+        XCTAssertEqual(vc.buttonViewModels.first?.text, "Take Photo")
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .disabled)
+    }
+
+    func testManualCaptureRequiresExplicitTakePhoto() throws {
+        let vc = makeViewController(state: .scanning(.front, nil))
+        let mockDocumentScannerOutput = makeDocumentScannerOutputLegacy(with: .idCardFront)
+
+        _ = try switchToManualCapture(vc)
+
+        mockCameraFrameCaptured(vc)
+        mockConcurrencyManager.respondToScan(output: mockDocumentScannerOutput)
+
+        XCTAssertStateEqual(
+            vc.imageScanningSession.state,
+            .scanning(.front, nil)
+        )
+        XCTAssertNil(mockDocumentUploader.uploadedSide)
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .enabled)
+        guard case .scan(let viewModel) = vc.viewModel else {
+            return XCTFail("Expected scan view model")
+        }
+        guard case .videoPreview(_, let animateBorder) = viewModel.scanningViewModel else {
+            return XCTFail("Expected video preview while scanning")
+        }
+        XCTAssertFalse(animateBorder)
+        XCTAssertEqual(
+            viewModel.instructionalText,
+            vc.scanningTextWithNoInput(
+                availableIDTypes: DocumentCaptureViewControllerTest.mockVerificationPage
+                    .documentSelect.idDocumentTypeAllowlistKeys,
+                for: .front
+            )
+        )
+
+        vc.buttonViewModels.first?.didTap()
+
+        XCTAssertStateEqual(
+            vc.imageScanningSession.state,
+            .scanned(.front, UIImage())
+        )
+        XCTAssertEqual(mockDocumentUploader.uploadedSide, .front)
+        XCTAssertEqual(mockDocumentUploader.uploadMethod, .manualCapture)
+        XCTAssertEqual(
+            mockDocumentUploader.uploadedDocumentScannerOutput,
+            mockDocumentScannerOutput
+        )
+        guard case .scan(let scannedViewModel) = vc.viewModel else {
+            return XCTFail("Expected scan view model after manual capture")
+        }
+        XCTAssertEqual(
+            scannedViewModel.instructionalText,
+            DocumentCaptureViewController.imageTakenInstructionalText
+        )
+        XCTAssertEqual(vc.buttonViewModels.count, 1)
+        XCTAssertEqual(vc.buttonViewModels.first?.text, "Continue")
+    }
+
+    func testManualCaptureCanBeActivatedWhenLiveCaptureIsRequired() throws {
+        let mockResponse = try VerificationPageMock.requireLiveCapture.make()
+        let vc = makeViewController(
+            state: .scanning(.front, nil),
+            apiConfig: mockResponse.documentCapture
+        )
+        let mockDocumentScannerOutput = makeDocumentScannerOutputLegacy(with: .idCardFront)
+
+        let control = try switchToManualCapture(vc)
+
+        XCTAssertEqual(control.selectedSegmentIndex, 1)
+        XCTAssertEqual(vc.buttonViewModels.count, 1)
+        XCTAssertEqual(vc.buttonViewModels.first?.text, "Take Photo")
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .disabled)
+
+        mockCameraFrameCaptured(vc)
+        mockConcurrencyManager.respondToScan(output: mockDocumentScannerOutput)
+
+        XCTAssertStateEqual(
+            vc.imageScanningSession.state,
+            .scanning(.front, nil)
+        )
+        XCTAssertNil(mockDocumentUploader.uploadedSide)
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .enabled)
+
+        vc.buttonViewModels.first?.didTap()
+
+        XCTAssertStateEqual(
+            vc.imageScanningSession.state,
+            .scanned(.front, UIImage())
+        )
+        XCTAssertEqual(mockDocumentUploader.uploadedSide, .front)
+        XCTAssertEqual(mockDocumentUploader.uploadMethod, .manualCapture)
+        XCTAssertEqual(
+            mockDocumentUploader.uploadedDocumentScannerOutput,
+            mockDocumentScannerOutput
+        )
+        guard case .scan(let scannedViewModel) = vc.viewModel else {
+            return XCTFail("Expected scan view model after manual capture")
+        }
+        XCTAssertEqual(
+            scannedViewModel.instructionalText,
+            DocumentCaptureViewController.imageTakenInstructionalText
         )
     }
 
@@ -438,6 +700,27 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
             mockFlowController.replacedWithViewController as Any,
             DocumentFileUploadViewController.self
         )
+    }
+
+    func testTimeoutButtonsWhenLiveCaptureIsRequired() throws {
+        let mockResponse = try VerificationPageMock.requireLiveCapture.make()
+        let vc = makeViewController(
+            state: .timeout(.front),
+            apiConfig: mockResponse.documentCapture
+        )
+
+        XCTAssertEqual(vc.buttonViewModels.count, 1)
+        XCTAssertEqual(vc.buttonViewModels.first?.text, "Try Again")
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .enabled)
+
+        vc.buttonViewModels.first?.didTap()
+
+        waitForCameraSessionToStart()
+        XCTAssertStateEqual(
+            vc.imageScanningSession.state,
+            .scanning(.front, nil)
+        )
+        XCTAssertEqual(vc.buttonViewModels.first?.state, .disabled)
     }
 
     func testNoCameraAccessButtonsReqLiveCapture() throws {
@@ -530,7 +813,7 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         XCTAssertEqual(mockSheetController.analyticsClient.numDocumentBackScanAttempts, 2)
     }
 
-    func testScanningUpdatesState() {
+    func testScanningUpdatesStateLegacy() {
         let vc = makeViewController(
             state: .scanning(.front, nil)
         )
@@ -541,24 +824,24 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
 
         // Mock that scanner found a classification that was not desired and
         // verify the state is updated accordingly
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .invalid))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .invalid))
 
-        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, .init(classification: .invalid, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])))
+        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, makeDocumentScannerOutputLegacyWithIddetectorOutput(.init(classification: .invalid, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))))
 
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .idCardBack))
-        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, .init(classification: .idCardBack, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .idCardBack))
+        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, makeDocumentScannerOutputLegacyWithIddetectorOutput(.init(classification: .idCardBack, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))))
 
         mockConcurrencyManager.respondToScan(output: nil)
         XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, nil))
 
         // Mock that scanner found desired classification, but is blurry
         mockConcurrencyManager.respondToScan(
-            output: makeDocumentScannerOutput(with: .idCardFront, isBlurry: false)
+            output: makeDocumentScannerOutputLegacy(with: .idCardFront, isBlurry: false)
         )
-        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, .init(classification: .idCardFront, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])))
+        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, makeDocumentScannerOutputLegacyWithIddetectorOutput(.init(classification: .idCardFront, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))))
 
         // Mock that scanner found desired classification
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .idCardFront))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .idCardFront))
         XCTAssertStateEqual(vc.imageScanningSession.state, .scanned(.front, UIImage()))
     }
 
@@ -573,22 +856,22 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
 
         // Mock that scanner found a classification that was not desired and
         // verify the state is updated accordingly
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .invalid))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .invalid))
 
-        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, .init(classification: .invalid, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])))
+        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, makeDocumentScannerOutputLegacyWithIddetectorOutput(.init(classification: .invalid, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))))
 
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .idCardBack))
-        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, .init(classification: .idCardBack, documentBounds: CGRect(), allClassificationScores: [.invalid: 0])))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .idCardBack))
+        XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, makeDocumentScannerOutputLegacyWithIddetectorOutput(.init(classification: .idCardBack, documentBounds: CGRect(), allClassificationScores: [.invalid: 0]))))
 
         mockConcurrencyManager.respondToScan(output: nil)
         XCTAssertStateEqual(vc.imageScanningSession.state, .scanning(.front, nil))
 
         // Mock that scanner found desired classification, and has barcode
         mockConcurrencyManager.respondToScan(
-            output: makeDocumentScannerOutput(with: .idCardFront, hasBarcode: true)
+            output: makeDocumentScannerOutputLegacy(with: .idCardFront, hasBarcode: true)
         )
         // Mock that scanner found desired classification
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .idCardFront))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .idCardFront))
         XCTAssertStateEqual(vc.imageScanningSession.state, .scanned(.front, UIImage()))
     }
 
@@ -677,7 +960,7 @@ final class DocumentCaptureViewControllerTest: XCTestCase {
         mockCameraFrameCaptured(vc)
 
         // Mock that scanner found desired classification
-        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutput(with: .idCardFront))
+        mockConcurrencyManager.respondToScan(output: makeDocumentScannerOutputLegacy(with: .idCardFront))
 
         // Verify average_fps analytic sent
         let averageFPSAnalytics = mockAnalyticsClient.loggedAnalyticPayloads(
@@ -758,6 +1041,28 @@ extension DocumentCaptureViewControllerTest {
         )
     }
 
+    @discardableResult
+    fileprivate func switchToManualCapture(_ vc: DocumentCaptureViewController) throws -> UISegmentedControl {
+        let control = try XCTUnwrap(findCaptureModeControl(in: vc.documentCaptureView))
+        control.selectedSegmentIndex = 1
+        vc.didChangeCaptureMode(control)
+        return control
+    }
+
+    fileprivate func findCaptureModeControl(in view: UIView) -> UISegmentedControl? {
+        if let control = view as? UISegmentedControl {
+            return control
+        }
+
+        for subview in view.subviews {
+            if let control = findCaptureModeControl(in: subview) {
+                return control
+            }
+        }
+
+        return nil
+    }
+
     fileprivate func makeViewController(
         documentType: DocumentType
     ) -> DocumentCaptureViewController {
@@ -769,7 +1074,8 @@ extension DocumentCaptureViewControllerTest {
             documentUploader: mockDocumentUploader,
             anyDocumentScanner: .init(mockDocumentScanner),
             concurrencyManager: mockConcurrencyManager,
-            appSettingsHelper: mockAppSettingsHelper
+            appSettingsHelper: mockAppSettingsHelper,
+            avaialableIDTypes: DocumentCaptureViewControllerTest.mockVerificationPage.documentSelect.idDocumentTypeAllowlistKeys
         )
     }
 
@@ -787,46 +1093,79 @@ extension DocumentCaptureViewControllerTest {
             documentUploader: mockDocumentUploader,
             anyDocumentScanner: .init(mockDocumentScanner),
             concurrencyManager: mockConcurrencyManager,
-            appSettingsHelper: mockAppSettingsHelper
+            appSettingsHelper: mockAppSettingsHelper,
+            avaialableIDTypes: DocumentCaptureViewControllerTest.mockVerificationPage.documentSelect.idDocumentTypeAllowlistKeys,
+            bestFramePicker: .init(window: 0)
         )
     }
 
-    fileprivate func makeDocumentScannerOutput(
+    fileprivate func makeDocumentScannerOutputLegacyWithIddetectorOutput(
+        _ output: IDDetectorOutput
+    ) -> DocumentScannerOutput {
+        return .legacy(
+            output,
+            .init(
+                hasBarcode: true,
+                isTimedOut: false,
+                symbology: .pdf417,
+                timeTryingToFindBarcode: 1
+            ),
+            .init(
+                hasMotionBlur: false,
+                iou: nil,
+                frameCount: 0,
+                duration: 0
+            ),
+            .init(
+                .init(
+                    exposureDuration: CMTime(),
+                    cameraDeviceType: .builtInDualCamera,
+                    isVirtualDevice: nil,
+                    lensPosition: 0,
+                    exposureISO: 0,
+                    isAdjustingFocus: false
+                )
+            ),
+            .init(isBlurry: false, variance: 0.1)
+        )
+    }
+
+    fileprivate func makeDocumentScannerOutputLegacy(
         with classification: IDDetectorOutput.Classification,
         isBlurry: Bool = true,
         hasBarcode: Bool = false
     ) -> DocumentScannerOutput {
-        return .init(
-            idDetectorOutput: .init(
+        return .legacy(
+            .init(
                 classification: classification,
                 documentBounds: CGRect(x: 0.1, y: 0.33, width: 0.8, height: 0.33),
                 allClassificationScores: [
                     classification: 0.9
                 ]
             ),
-            barcode: .init(
+            .init(
                 hasBarcode: hasBarcode,
                 isTimedOut: false,
                 symbology: .pdf417,
                 timeTryingToFindBarcode: 1
             ),
-            motionBlur: .init(
+            .init(
                 hasMotionBlur: !isBlurry,
                 iou: nil,
                 frameCount: 0,
                 duration: 0
             ),
-            cameraProperties: .init(
+            .init(
                 .init(
-                exposureDuration: CMTime(),
-                cameraDeviceType: .builtInDualCamera,
-                isVirtualDevice: nil,
-                lensPosition: 0,
-                exposureISO: 0,
-                isAdjustingFocus: !isBlurry
+                    exposureDuration: CMTime(),
+                    cameraDeviceType: .builtInDualCamera,
+                    isVirtualDevice: nil,
+                    lensPosition: 0,
+                    exposureISO: 0,
+                    isAdjustingFocus: !isBlurry
                 )
             ),
-            blurResult: .init(isBlurry: false, variance: 0.1)
+            .init(isBlurry: false, variance: 0.1)
         )
     }
 
@@ -841,7 +1180,7 @@ extension DocumentCaptureViewControllerTest {
         let isEqual: Bool
         switch (lhs, rhs) {
         case (.scanning(let lSide, let lOutput), .scanning(let rSide, let rOutput)):
-            isEqual = (lSide == rSide) && (lOutput?.classification == rOutput?.classification)
+            isEqual = (lSide == rSide) && (lOutput?.idDetectorOutput.classification == rOutput?.idDetectorOutput.classification)
         case (.scanned(let left, _), .scanned(let right, _)),
             (.timeout(let left), .timeout(let right)):
             isEqual = (left == right)

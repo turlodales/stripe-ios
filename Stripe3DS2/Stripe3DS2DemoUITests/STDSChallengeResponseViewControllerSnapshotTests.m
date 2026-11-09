@@ -12,6 +12,9 @@
 
 #import "STDSChallengeResponseViewController.h"
 #import "STDSChallengeResponseObject+TestObjects.h"
+#import "STDSExpandableInformationView.h"
+#import "STDSStackView.h"
+#import "STDSTextChallengeView.h"
 
 /**
  Calls FBSnapshotVerifyView with a default 2% per-pixel color differentiation, as M1 and Intel machines render shadows differently.
@@ -25,13 +28,29 @@ FBSnapshotVerifyViewWithPixelOptions(view__, identifier__, FBSnapshotTestCaseDef
 
 @end
 
+@interface STDSChallengeResponseViewController (Testing)
+
+- (nullable id<STDSChallengeResponseSelectionInfo>)whitelistResponse;
+
+@end
+
 @implementation STDSChallengeResponseViewControllerSnapshotTests
 
 - (void)setUp {
     [super setUp];
-    
-    /// Recorded on an iPhone 12 Mini running iOS 15.4
-//    self.recordMode = YES;
+    self.recordMode = YES;
+}
+
+- (NSString *)getReferenceImageDirectoryWithDefault:(NSString *)dir {
+    NSString *envDir = NSProcessInfo.processInfo.environment[@"SNAPSHOT_RECORD_DIR"];
+    return envDir ?: @"/tmp/snapshot-records";
+}
+
+- (void)recordIssue:(XCTIssue *)issue {
+    if (self.recordMode && [issue.compactDescription containsString:@"record mode"]) {
+        return;
+    }
+    [super recordIssue:issue];
 }
 
 - (void)testVerifyTextChallengeDesign {
@@ -40,7 +59,20 @@ FBSnapshotVerifyViewWithPixelOptions(view__, identifier__, FBSnapshotTestCaseDef
     
     [self waitForChallengeResponseTimer];
 
+    XCTAssertNil([challengeResponseViewController whitelistResponse]);
+
     STPSnapshotVerifyView(challengeResponseViewController.view, @"TextChallengeResponse");
+}
+
+- (void)testWhitelistResponseExists {
+    id<STDSChallengeResponse> object = [STDSChallengeResponseObject textChallengeResponseWithWhitelist:YES resendCode:NO];
+    
+    STDSChallengeResponseViewController *challengeResponseViewController = [self challengeResponseViewControllerForResponse:object directoryServer:STDSDirectoryServerVisa];
+    [challengeResponseViewController view];
+
+    [self waitForChallengeResponseTimer];
+    
+    XCTAssertNotNil([challengeResponseViewController whitelistResponse]);
 }
 
 - (void)testVerifySingleSelectDesign {
@@ -68,6 +100,45 @@ FBSnapshotVerifyViewWithPixelOptions(view__, identifier__, FBSnapshotTestCaseDef
     [self waitForChallengeResponseTimer];
     
     STPSnapshotVerifyView(challengeResponseViewController.view, @"OOBResponse");
+}
+
+- (void)testHorizontalStackViewUsesRightToLeftOrder {
+    STDSStackView *stackView = [[STDSStackView alloc] initWithAlignment:STDSStackViewLayoutAxisHorizontal];
+    stackView.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    stackView.frame = CGRectMake(0, 0, 100, 40);
+
+    UIView *firstView = [UIView new];
+    UIView *secondView = [UIView new];
+    [stackView addArrangedSubview:firstView];
+    [stackView addArrangedSubview:secondView];
+    [NSLayoutConstraint activateConstraints:@[
+        [firstView.widthAnchor constraintEqualToConstant:40],
+        [secondView.widthAnchor constraintEqualToConstant:60],
+    ]];
+
+    [stackView layoutIfNeeded];
+
+    XCTAssertGreaterThan(CGRectGetMinX(firstView.frame), CGRectGetMinX(secondView.frame));
+}
+
+- (void)testExpandableInformationChevronFlipsForRightToLeftLayout {
+    STDSExpandableInformationView *view = [STDSExpandableInformationView new];
+    UIImageView *titleImageView = [view valueForKey:@"titleImageView"];
+
+    XCTAssertTrue(titleImageView.image.flipsForRightToLeftLayoutDirection);
+}
+
+- (void)testTextFieldEditingRectDoesNotOverlapRightToLeftClearButton {
+    STDSTextField *textField = [STDSTextField new];
+    textField.frame = CGRectMake(0, 0, 320, 44);
+    textField.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    textField.clearButtonMode = UITextFieldViewModeAlways;
+    textField.text = @"123456";
+
+    CGRect editingRect = [textField editingRectForBounds:textField.bounds];
+    CGRect clearButtonRect = [textField clearButtonRectForBounds:textField.bounds];
+
+    XCTAssertFalse(CGRectIntersectsRect(editingRect, clearButtonRect));
 }
 
 - (void)testLoadingAmex {
@@ -105,7 +176,7 @@ FBSnapshotVerifyViewWithPixelOptions(view__, identifier__, FBSnapshotTestCaseDef
 - (STDSChallengeResponseViewController *)challengeResponseViewControllerForResponse:(id<STDSChallengeResponse>)response directoryServer:(STDSDirectoryServer)directoryServer {
     STDSImageLoader *imageLoader = [[STDSImageLoader alloc] initWithURLSession:NSURLSession.sharedSession];
 
-    STDSChallengeResponseViewController *vc = [[STDSChallengeResponseViewController alloc] initWithUICustomization:[STDSUICustomization defaultSettings] imageLoader:imageLoader directoryServer:directoryServer];
+    STDSChallengeResponseViewController *vc = [[STDSChallengeResponseViewController alloc] initWithUICustomization:[STDSUICustomization defaultSettings] imageLoader:imageLoader directoryServer:directoryServer analyticsDelegate:nil];
     [vc setChallengeResponse:response animated:NO];
     return vc;
 }

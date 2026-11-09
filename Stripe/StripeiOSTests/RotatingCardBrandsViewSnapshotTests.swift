@@ -8,16 +8,24 @@
 
 import iOSSnapshotTestCase
 import StripeCoreTestUtils
-@_spi(STP) import StripePayments
+@_spi(InternalOnlyAPI) import StripePayments
 import XCTest
 
 @testable import Stripe
-@testable @_spi(STP) import StripePaymentSheet
+@testable @_spi(InternalOnlyAPI) import StripePaymentSheet
 
 class RotatingCardBrandsViewSnapshotTests: STPSnapshotTestCase {
     func testAllCardBrands() {
         let rotatingCardBrandsView = RotatingCardBrandsView()
         rotatingCardBrandsView.cardBrands = RotatingCardBrandsView.orderedCardBrands(from: STPCardBrand.allCases)
+        rotatingCardBrandsView.autosizeHeight(width: 140)
+        STPSnapshotVerifyView(rotatingCardBrandsView)
+    }
+
+    func testCardBrands_CBCDisabled() {
+        let rotatingCardBrandsView = RotatingCardBrandsView()
+        rotatingCardBrandsView.cardBrands = RotatingCardBrandsView.orderedCardBrands(from: STPCardBrand.allCases)
+        rotatingCardBrandsView.cardBrands.remove(.cartesBancaires)
         rotatingCardBrandsView.autosizeHeight(width: 140)
         STPSnapshotVerifyView(rotatingCardBrandsView)
     }

@@ -7,8 +7,9 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCameraCoreTestUtils
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCameraCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCoreTestUtils
 import UIKit
 import XCTest
 
@@ -20,6 +21,7 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
     var mockCameraPermissionsManager: MockCameraPermissionsManager!
     var mockAppSettingsHelper: MockAppSettingsHelper!
     var mockSheetController: VerificationSheetControllerMock!
+    var mockAnalyticsClient: MockAnalyticsClientV2!
 
     let mockImage = CapturedImageMock.frontDriversLicense.image
     let mockImageURL = CapturedImageMock.frontDriversLicense.url
@@ -31,14 +33,20 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
         mockCameraPermissionsManager = .init()
         mockAppSettingsHelper = .init()
         mockAppSettingsHelper.canOpenAppSettings = true
-        mockSheetController = .init()
+        mockAnalyticsClient = .init()
+        mockSheetController = .init(
+            analyticsClient: IdentityAnalyticsClient(
+                verificationSessionId: "",
+                analyticsClient: mockAnalyticsClient
+            )
+        )
     }
 
     func testIdCardFront() {
         let vc = makeViewController()
         // Allows front
         XCTAssertEqual(vc.viewModel.listViewModel?.items.count, 1)
-        XCTAssertEqual(vc.viewModel.listViewModel?.items[0].text, "Front of identity card")
+        XCTAssertEqual(vc.viewModel.listViewModel?.items[0].text, "Front of driver's license or passport")
     }
 
     func testIdCardBack() {
@@ -50,8 +58,8 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
         let vc = makeViewController()
         // Allows front and back
         XCTAssertEqual(vc.viewModel.listViewModel?.items.count, 2)
-        XCTAssertEqual(vc.viewModel.listViewModel?.items[0].text, "Front of identity card")
-        XCTAssertEqual(vc.viewModel.listViewModel?.items[1].text, "Back of identity card")
+        XCTAssertEqual(vc.viewModel.listViewModel?.items[0].text, "Front of driver's license or passport")
+        XCTAssertEqual(vc.viewModel.listViewModel?.items[1].text, "Back of driver's license")
 
         // Verify button is only enabled after both front and back images are uploaded
         XCTAssertEqual(vc.buttonState, .disabled)
@@ -63,7 +71,7 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
 
     func testAlertNoRequireLiveCapture() {
         let vc = makeViewController(requireLiveCapture: false)
-        vc.didTapSelect(for: .front)
+        vc.didTapSelect(for: .front, from: UIButton())
         guard let alert = vc.test_presentedViewController as? UIAlertController else {
             return XCTFail("Expected UIAlertController")
         }
@@ -72,10 +80,25 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
         XCTAssert(Set(alert.actions.map { $0.title }).isSuperset(of: ["Photo Library", "Choose File", "Cancel"]))
     }
 
+    func testAlertRequireLiveCaptureOnlyShowsManualCaptureSources() {
+        let vc = makeViewController(requireLiveCapture: true)
+        vc.didTapSelect(for: .front, from: UIButton())
+        guard let alert = vc.test_presentedViewController as? UIAlertController else {
+            return XCTFail("Expected UIAlertController")
+        }
+
+        let actionTitles = Set(alert.actions.map { $0.title })
+        XCTAssertFalse(actionTitles.contains("Photo Library"))
+        XCTAssertFalse(actionTitles.contains("Choose File"))
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            XCTAssertTrue(actionTitles.contains("Take Photo"))
+        }
+    }
+
     func testSelectPhotoFromLibrary() {
         let vc = makeViewController()
         // Mock that user selected to upload front of document
-        vc.didTapSelect(for: .front)
+        vc.didTapSelect(for: .front, from: UIButton())
         // Mock that user chooses to Photo Library
         vc.selectPhotoFromLibrary()
         guard let pickerController = vc.test_presentedViewController as? UIImagePickerController
@@ -101,7 +124,7 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
 
         let vc = makeViewController()
         // Mock that user selected to upload front of document
-        vc.didTapSelect(for: .back)
+        vc.didTapSelect(for: .back, from: UIButton())
         // Mock that user chooses to Take Photo
         vc.takePhoto()
         XCTAssertTrue(mockCameraPermissionsManager.didRequestCameraAccess)
@@ -115,12 +138,51 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
             return XCTFail("Expected UIAlertController")
         }
         XCTAssertEqual(alertController.actions.map { $0.title }, ["App Settings", "OK"])
+
+        let analytic = mockAnalyticsClient.loggedAnalyticPayloads(
+            withEventName: "camera_permission_denied"
+        ).first
+        XCTAssert(analytic: analytic, hasMetadata: "screen_name", withValue: "file_upload")
+        XCTAssert(analytic: analytic, hasMetadata: "camera_source", withValue: "image_picker")
+        XCTAssert(analytic: analytic, hasMetadata: "camera_event_kind", withValue: "permission")
+        XCTAssert(analytic: analytic, hasMetadata: "camera_access_state", withValue: "denied")
+
+        let errorAnalytic = mockAnalyticsClient.loggedAnalyticPayloads(
+            withEventName: "camera_error"
+        ).first
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "screen_name", withValue: "file_upload")
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "camera_source", withValue: "image_picker")
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "camera_event_kind", withValue: "permission")
+        XCTAssert(analytic: errorAnalytic, hasMetadata: "camera_access_state", withValue: "denied")
+        let error = (errorAnalytic?["event_metadata"] as? [String: Any])?["error"] as? [String: Any]
+        XCTAssertEqual(error?["type"] as? String, "cameraPermissionDenied")
+        XCTAssertEqual(error?["file"] as? String, "DocumentFileUploadViewController.swift")
+    }
+
+    func testTakePhotoCameraPermissionsGrantedDoesNotLogAnalytics() {
+        let vc = makeViewController()
+        vc.didTapSelect(for: .front, from: UIButton())
+        vc.takePhoto()
+        XCTAssertTrue(mockCameraPermissionsManager.didRequestCameraAccess)
+
+        mockCameraPermissionsManager.respondToRequest(granted: true)
+        wait(for: [mockCameraPermissionsManager.didCompleteExpectation], timeout: 1)
+        XCTAssertEqual(
+            mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_permission_granted")
+                .count,
+            0
+        )
+        XCTAssertEqual(
+            mockAnalyticsClient.loggedAnalyticPayloads(withEventName: "camera_permission_denied")
+                .count,
+            0
+        )
     }
 
     func testSelectFileFromSystem() {
         let vc = makeViewController()
         // Mock that user selected to upload front of document
-        vc.didTapSelect(for: .front)
+        vc.didTapSelect(for: .front, from: UIButton())
         // Mock that user chooses to Select File
         vc.selectFileFromSystem()
         guard
@@ -151,14 +213,32 @@ final class DocumentFileUploadViewControllerTest: XCTestCase {
         // click continue button to upload back
         vc.didTapContinueButton()
         // Verify data saved and transitioned to next screen
-        guard case .success(let front) = mockSheetController.frontUploadedDocumentsResult else {
-            return XCTFail("Expected success result")
+        let e = expectation(description: "back upload result")
+        mockDocumentUploader.frontUploadPromise.observe { _ in
+            guard case .success(let front) = self.mockSheetController.frontUploadedDocumentsResult else {
+                return XCTFail("Expected success result")
+            }
+            guard case .success(let back) = self.mockSheetController.backUploadedDocumentsResult else {
+                return XCTFail("Expected success result")
+            }
+            XCTAssertEqual(front, frontFileData)
+            XCTAssertEqual(back, backFileData)
+            e.fulfill()
         }
-        guard case .success(let back) = mockSheetController.backUploadedDocumentsResult else {
-            return XCTFail("Expected success result")
-        }
-        XCTAssertEqual(front, frontFileData)
-        XCTAssertEqual(back, backFileData)
+        waitForExpectations(timeout: 1)
+    }
+
+    func testWarningAlertViewModelInitiallyNil() {
+        let vc = makeViewController()
+
+        XCTAssertNil(vc.warningAlertViewModel)
+    }
+
+    func testWarningAlertViewModelAfterUploadStarts() {
+        let vc = makeViewController()
+        mockDocumentUploader.frontUploadStatus = .inProgress
+
+        XCTAssertNotNil(vc.warningAlertViewModel)
     }
 }
 
@@ -171,7 +251,8 @@ extension DocumentFileUploadViewControllerTest {
             sheetController: mockSheetController,
             documentUploader: mockDocumentUploader,
             cameraPermissionsManager: mockCameraPermissionsManager,
-            appSettingsHelper: mockAppSettingsHelper
+            appSettingsHelper: mockAppSettingsHelper,
+            availableIDTypes: ["driving_license", "passport"]
         )
     }
 }

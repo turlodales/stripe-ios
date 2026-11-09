@@ -9,27 +9,38 @@
 import Foundation
 import UIKit
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 
 protocol SavedPaymentOptionsViewControllerDelegate: AnyObject {
     func didUpdate(_ viewController: SavedPaymentOptionsViewController)
     func didUpdateSelection(
         viewController: SavedPaymentOptionsViewController,
-        paymentMethodSelection: SavedPaymentOptionsViewController.Selection)
+        paymentMethodSelection: SavedPaymentOptionsViewController.Selection,
+        previousSelection: SavedPaymentOptionsViewController.SelectionSnapshot)
     func didSelectRemove(
         viewController: SavedPaymentOptionsViewController,
         paymentMethodSelection: SavedPaymentOptionsViewController.Selection)
-    func didSelectUpdate(
+    func didSelectUpdateCardBrand(
         viewController: SavedPaymentOptionsViewController,
         paymentMethodSelection: SavedPaymentOptionsViewController.Selection,
         updateParams: STPPaymentMethodUpdateParams) async throws -> STPPaymentMethod
+    func didSelectUpdateDefault(
+        viewController: SavedPaymentOptionsViewController,
+        paymentMethodSelection: SavedPaymentOptionsViewController.Selection) async throws -> STPCustomer
+    func shouldCloseSheet(_ viewController: SavedPaymentOptionsViewController)
 }
 
 /// For internal SDK use only
 @objc(STP_Internal_SavedPaymentOptionsViewController)
 class SavedPaymentOptionsViewController: UIViewController {
+    enum Error: Swift.Error {
+        case collectionViewDidSelectItemAtAdd
+        case unableToDequeueReusableCell
+        case paymentOptionCellDidSelectEditOnNonSavedItem
+        case removePaymentMethodOnNonSavedItem
+    }
     // MARK: - Types
     // TODO (cleanup) Replace this with didSelectX delegate methods. Turn this into a private ViewModel class
     /**
@@ -59,21 +70,51 @@ class SavedPaymentOptionsViewController: UIViewController {
             case .applePay, .link, .add:
                 return false
             case .saved(paymentMethod: let paymentMethod):
-                guard let availableNetworks = paymentMethod.card?.networks?.available else { return false }
-                return availableNetworks.count > 1
+                return paymentMethod.isCoBrandedCard
             }
         }
+
+        var savedPaymentMethod: STPPaymentMethod? {
+            switch self {
+            case .applePay, .link, .add:
+                return nil
+            case .saved(paymentMethod: let paymentMethod):
+                return paymentMethod
+            }
+        }
+
+        var analyticsValue: String {
+            switch self {
+            case .add:
+                return "add"
+            case .saved:
+                return "saved"
+            case .applePay:
+                return "applePay"
+            case .link:
+                return "link"
+            }
+        }
+    }
+
+    /// The visible and persisted selection state immediately before a customer selection.
+    struct SelectionSnapshot {
+        fileprivate let selectedIndex: Int?
+        fileprivate let persistedPaymentOption: CustomerPaymentOption?
     }
 
     struct Configuration {
         let customerID: String?
         let showApplePay: Bool
         let showLink: Bool
+        let linkBrand: LinkBrand
         let removeSavedPaymentMethodMessage: String?
         let merchantDisplayName: String
         let isCVCRecollectionEnabled: Bool
-        let isTestMode: Bool
         let allowsRemovalOfLastSavedPaymentMethod: Bool
+        let allowsRemovalOfPaymentMethods: Bool
+        let allowsSetAsDefaultPM: Bool
+        let allowsUpdatePaymentMethod: Bool
     }
 
     // MARK: - Internal Properties
@@ -84,12 +125,14 @@ class SavedPaymentOptionsViewController: UIViewController {
         case 0:
             return false
         case 1:
-            // If there's exactly one PM, customer can only edit if configuration allows removal or if that single PM allows for the card brand choice to be updated.
-            return configuration.allowsRemovalOfLastSavedPaymentMethod || viewModels.contains(where: {
+            // If there's exactly one PM, customer can only edit if configuration allows removal or allows setting as default or if that single PM allows for the card brand choice or other card details to be updated.
+            return (configuration.allowsRemovalOfPaymentMethods && configuration.allowsRemovalOfLastSavedPaymentMethod) || configuration.allowsSetAsDefaultPM || configuration.allowsUpdatePaymentMethod || viewModels.contains(where: {
                 $0.isCoBrandedCard && cbcEligible
             })
         default:
-            return true
+            return configuration.allowsRemovalOfPaymentMethods || configuration.allowsUpdatePaymentMethod || configuration.allowsSetAsDefaultPM || viewModels.contains(where: {
+                $0.isCoBrandedCard && cbcEligible
+            })
         }
     }
 
@@ -99,6 +142,11 @@ class SavedPaymentOptionsViewController: UIViewController {
         }
         set {
             collectionView.isRemovingPaymentMethods = newValue
+            collectionView.needsVerticalPaddingForBadge = hasDefault
+            collectionView.performBatchUpdates({
+                collectionView.reloadSections(IndexSet(integer: 0))
+                animateHeightChange { self.collectionView.updateLayout() }
+            })
             UIView.transition(with: collectionView,
                               duration: 0.3,
                               options: .transitionCrossDissolve,
@@ -115,6 +163,11 @@ class SavedPaymentOptionsViewController: UIViewController {
             }
         }
     }
+
+    var hasDefault: Bool {
+        return viewModels.contains(where: { isDefaultPaymentMethod(savedPaymentMethodId: $0.savedPaymentMethod?.stripeId) })
+    }
+
     var bottomNoticeAttributedString: NSAttributedString? {
         if case .saved(let paymentMethod, _) = selectedPaymentOption {
             if paymentMethod.usBankAccount != nil {
@@ -127,6 +180,9 @@ class SavedPaymentOptionsViewController: UIViewController {
     let configuration: Configuration
     private let intent: Intent
     private let paymentSheetConfiguration: PaymentSheet.Configuration
+    private let analyticsHelper: PaymentSheetAnalyticsHelper
+    private let linkBrandProvider: () -> LinkBrand
+    private var currentLinkBrand: LinkBrand
 
     var selectedPaymentOption: PaymentOption? {
         guard let index = selectedViewModelIndex, viewModels.indices.contains(index) else {
@@ -139,7 +195,7 @@ class SavedPaymentOptionsViewController: UIViewController {
         case .applePay:
             return .applePay
         case .link:
-            return .link(option: .wallet)
+            return .link(option: .wallet(brand: currentLinkBrand))
         case let .saved(paymentMethod):
             return .saved(paymentMethod: paymentMethod, confirmParams: selectedPaymentOptionIntentConfirmParams)
         }
@@ -172,6 +228,11 @@ class SavedPaymentOptionsViewController: UIViewController {
             updateUI()
         }
     }
+    private(set) var defaultPaymentMethod: STPPaymentMethod? {
+        didSet {
+            collectionView.needsVerticalPaddingForBadge = hasDefault
+        }
+    }
     /// Whether or not there are any payment options we can show
     /// i.e. Are there any cells besides the Add cell?
     var hasPaymentOptions: Bool {
@@ -184,11 +245,13 @@ class SavedPaymentOptionsViewController: UIViewController {
     }
     weak var delegate: SavedPaymentOptionsViewControllerDelegate?
     var appearance = PaymentSheet.Appearance.default
+    var elementsSession: STPElementsSession
 
     // MARK: - Private Properties
     private var selectedViewModelIndex: Int?
     private var viewModels: [Selection] = []
     private let cbcEligible: Bool
+    private var linkAccountObserver: LinkAccountContextObserver?
 
     private var selectedIndexPath: IndexPath? {
         guard
@@ -200,6 +263,15 @@ class SavedPaymentOptionsViewController: UIViewController {
         }
 
         return IndexPath(item: index, section: 0)
+    }
+
+    private var selectionSnapshot: SelectionSnapshot {
+        return SelectionSnapshot(
+            selectedIndex: selectedViewModelIndex,
+            persistedPaymentOption: CustomerPaymentOption.localDefaultPaymentMethod(
+                for: configuration.customerID
+            )
+        )
     }
     private lazy var cvcFormElement: PaymentMethodElement = {
         return makeElement()
@@ -213,14 +285,7 @@ class SavedPaymentOptionsViewController: UIViewController {
             return FormElement(autoSectioningElements: [])
         }
 
-        let formElement = PaymentSheetFormFactory(
-            intent: intent,
-            configuration: .paymentSheet(paymentSheetConfiguration),
-            paymentMethod: .stripe(.card),
-            previousCustomerInput: nil)
-        let cvcCollectionElement = formElement.makeCardCVCCollection(paymentMethod: paymentMethod,
-                                                                     mode: .inputOnly,
-                                                                     appearance: appearance)
+        let cvcCollectionElement = CVCRecollectionElement(paymentMethod: paymentMethod, mode: .inputOnly, appearance: appearance)
         cvcCollectionElement.delegate = self
         return cvcCollectionElement
     }
@@ -239,8 +304,8 @@ class SavedPaymentOptionsViewController: UIViewController {
     }
 
     // MARK: - Views
-    private lazy var collectionView: SavedPaymentMethodCollectionView = {
-        let collectionView = SavedPaymentMethodCollectionView(appearance: appearance)
+    lazy var collectionView: SavedPaymentMethodCollectionView = {
+        let collectionView = SavedPaymentMethodCollectionView(appearance: appearance, needsVerticalPaddingForBadge: hasDefault)
         collectionView.delegate = self
         collectionView.dataSource = self
         return collectionView
@@ -259,9 +324,9 @@ class SavedPaymentOptionsViewController: UIViewController {
         let mandateView = SimpleMandateTextView(mandateText: mandateText, theme: appearance.asElementsTheme)
         let margins = NSDirectionalEdgeInsets.insets(
             top: 8,
-            leading: PaymentSheetUI.defaultMargins.leading,
+            leading: appearance.formInsets.leading,
             bottom: 0,
-            trailing: PaymentSheetUI.defaultMargins.trailing
+            trailing: appearance.formInsets.trailing
         )
         view.addAndPinSubview(mandateView, directionalLayoutMargins: margins)
         return view
@@ -273,7 +338,7 @@ class SavedPaymentOptionsViewController: UIViewController {
 
     private lazy var cvcRecollectionContainerView: DynamicHeightContainerView = {
         let view = DynamicHeightContainerView(pinnedDirection: .top)
-        view.directionalLayoutMargins = PaymentSheetUI.defaultMargins
+        view.directionalLayoutMargins = .insets(leading: appearance.formInsets.leading, trailing: appearance.formInsets.trailing)
         view.addPinnedSubview(cvcFormElementView)
         view.updateHeight()
         return view
@@ -286,7 +351,10 @@ class SavedPaymentOptionsViewController: UIViewController {
         paymentSheetConfiguration: PaymentSheet.Configuration,
         intent: Intent,
         appearance: PaymentSheet.Appearance,
+        elementsSession: STPElementsSession,
         cbcEligible: Bool = false,
+        analyticsHelper: PaymentSheetAnalyticsHelper,
+        linkBrandProvider: (() -> LinkBrand)? = nil,
         delegate: SavedPaymentOptionsViewControllerDelegate? = nil
     ) {
         self.savedPaymentMethods = savedPaymentMethods
@@ -294,8 +362,13 @@ class SavedPaymentOptionsViewController: UIViewController {
         self.paymentSheetConfiguration = paymentSheetConfiguration
         self.intent = intent
         self.appearance = appearance
+        self.elementsSession = elementsSession
+        self.defaultPaymentMethod = elementsSession.customer?.getDefaultPaymentMethod()
         self.cbcEligible = cbcEligible
         self.delegate = delegate
+        self.analyticsHelper = analyticsHelper
+        self.currentLinkBrand = configuration.linkBrand
+        self.linkBrandProvider = linkBrandProvider ?? { configuration.linkBrand }
         super.init(nibName: nil, bundle: nil)
         updateUI()
     }
@@ -307,6 +380,14 @@ class SavedPaymentOptionsViewController: UIViewController {
     // MARK: - UIViewController
     override func viewDidLoad() {
         super.viewDidLoad()
+        if configuration.showLink {
+            linkAccountObserver = LinkAccountContextObserver { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.syncLinkBrand()
+                }
+            }
+            _ = linkAccountObserver
+        }
         view.addAndPinSubview(stackView)
     }
 
@@ -319,11 +400,12 @@ class SavedPaymentOptionsViewController: UIViewController {
         collectionView.selectItem(at: selectedIndexPath, animated: false, scrollPosition: .bottom)
     }
 
-    func didFinishAnimatingHeight() {
-        // Wait 150ms after the view is presented to emphasize to users to enter their CVC
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(150))) {
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Wait 200ms after the view is presented to emphasize to users to enter their CVC
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(200))) {
             if self.isViewLoaded {
-                self.toggleCVCElement()
+                self.displayCVCRecollectionIfNeeded()
             }
         }
     }
@@ -335,9 +417,12 @@ class SavedPaymentOptionsViewController: UIViewController {
             savedPaymentMethods: savedPaymentMethods,
             customerID: configuration.customerID,
             showApplePay: configuration.showApplePay,
-            showLink: configuration.showLink
+            showLink: configuration.showLink,
+            elementsSession: elementsSession,
+            defaultPaymentMethod: defaultPaymentMethod
         )
 
+        collectionView.updateLayout()
         collectionView.reloadData()
         collectionView.selectItem(at: selectedIndexPath, animated: false, scrollPosition: [])
         collectionView.scrollToItem(at: IndexPath(item: 0, section: 0), at: .left, animated: false)
@@ -345,6 +430,17 @@ class SavedPaymentOptionsViewController: UIViewController {
         if isViewLoaded {
             updateFormElement()
         }
+    }
+
+    private func syncLinkBrand() {
+        let resolvedLinkBrand = linkBrandProvider()
+        guard resolvedLinkBrand != currentLinkBrand else {
+            return
+        }
+        currentLinkBrand = resolvedLinkBrand
+        collectionView.reloadData()
+        collectionView.selectItem(at: selectedIndexPath, animated: false, scrollPosition: [])
+        delegate?.didUpdate(self)
     }
 
     private func updateMandateView() {
@@ -364,9 +460,9 @@ class SavedPaymentOptionsViewController: UIViewController {
     private func updateFormElement() {
         cvcFormElement = makeElement()
         swapFormElementUIIfNeeded()
-        toggleCVCElement()
+        displayCVCRecollectionIfNeeded()
     }
-    private func toggleCVCElement() {
+    private func displayCVCRecollectionIfNeeded() {
         let shouldHideCVCRecollection = !selectedPaymentOptionIntentConfirmParamsRequired
         if cvcRecollectionContainerView.isHidden != shouldHideCVCRecollection {
             stackView.toggleArrangedSubview(cvcRecollectionContainerView, shouldShow: !shouldHideCVCRecollection, animated: isViewLoaded)
@@ -396,7 +492,7 @@ class SavedPaymentOptionsViewController: UIViewController {
         }
     }
 
-    private func unselectPaymentMethod() {
+    func unselectPaymentMethod() {
         guard let selectedIndexPath = selectedIndexPath else {
             return
         }
@@ -405,24 +501,78 @@ class SavedPaymentOptionsViewController: UIViewController {
         collectionView.reloadItems(at: [selectedIndexPath])
     }
 
+    func setSelectedCellLoading(_ loading: Bool) {
+        guard let selectedIndexPath else {
+            return
+        }
+        let cell = collectionView.cellForItem(at: selectedIndexPath)
+            as? SavedPaymentMethodCollectionView.PaymentOptionCell
+        cell?.setLoading(loading)
+    }
+
+    func restoreSelection(_ snapshot: SelectionSnapshot) {
+        if let selectedIndexPath {
+            collectionView.deselectItem(at: selectedIndexPath, animated: true)
+        }
+        CustomerPaymentOption.setDefaultPaymentMethod(
+            snapshot.persistedPaymentOption,
+            forCustomer: configuration.customerID
+        )
+        if let index = snapshot.selectedIndex, viewModels.indices.contains(index) {
+            selectedViewModelIndex = index
+            collectionView.selectItem(at: selectedIndexPath, animated: false, scrollPosition: [])
+        } else {
+            selectedViewModelIndex = nil
+        }
+        updateMandateView()
+        updateFormElement()
+    }
+
+    /// Selects a carousel option while rebuilding canceled FlowController state, without
+    /// persisting the selection or treating it as new customer input.
+    func setSelectionForCancellationRestoration(to paymentOption: PaymentOption) {
+        let customerPaymentOption: CustomerPaymentOption? = {
+            switch paymentOption {
+            case .applePay:
+                return .applePay
+            case .link:
+                return .link
+            case .saved(let paymentMethod, _):
+                return .stripeId(paymentMethod.stripeId)
+            case .new, .external:
+                return nil
+            }
+        }()
+        guard let customerPaymentOption,
+              let index = viewModels.firstIndex(where: { $0 == customerPaymentOption }) else {
+            return
+        }
+
+        selectedViewModelIndex = index
+        collectionView.selectItem(at: selectedIndexPath, animated: false, scrollPosition: [])
+        updateMandateView()
+        if isViewLoaded {
+            updateFormElement()
+        }
+    }
+
+    private func isDefaultPaymentMethod(savedPaymentMethodId: String?) -> Bool {
+        guard configuration.allowsSetAsDefaultPM, let savedPaymentMethodId, let defaultPaymentMethod else { return false }
+        return savedPaymentMethodId == defaultPaymentMethod.stripeId
+    }
+
     // MARK: - Helpers
 
     /// Creates the list of viewmodels to display in the "saved payment methods" carousel e.g. `["+ Add", "Apple Pay", "Link", "Visa 4242"]`
     /// - Returns defaultSelectedIndex: The index of the view model that is the default e.g. in the above list, if "Visa 4242" is the default, the index is 3.
-    static func makeViewModels(savedPaymentMethods: [STPPaymentMethod], customerID: String?, showApplePay: Bool, showLink: Bool) -> (defaultSelectedIndex: Int, viewModels: [Selection]) {
-
-        var savedPaymentMethods = savedPaymentMethods
+    static func makeViewModels(savedPaymentMethods: [STPPaymentMethod], customerID: String?, showApplePay: Bool, showLink: Bool, elementsSession: STPElementsSession, defaultPaymentMethod: STPPaymentMethod?) -> (defaultSelectedIndex: Int, viewModels: [Selection]) {
         // Get the default
-        let defaultPaymentMethod = CustomerPaymentOption.defaultPaymentMethod(for: customerID)
-
-        // Move default to front
-        if let defaultPMIndex = savedPaymentMethods.firstIndex(where: {
-            $0.stripeId == defaultPaymentMethod?.value
-        }) {
-            let defaultPM = savedPaymentMethods.remove(at: defaultPMIndex)
-            savedPaymentMethods.insert(defaultPM, at: 0)
+        var defaultPaymentOption: CustomerPaymentOption?
+        if elementsSession.paymentMethodSetAsDefaultForPaymentSheet,
+           let defaultPaymentMethod {
+            defaultPaymentOption = .stripeId(defaultPaymentMethod.stripeId)
         }
-
+        let selectedPaymentMethodOption = defaultPaymentOption ?? CustomerPaymentOption.selectedPaymentMethod(for: customerID, elementsSession: elementsSession, surface: .paymentSheet)
         // Transform saved PaymentMethods into view models
         let savedPMViewModels = savedPaymentMethods.compactMap { paymentMethod in
             return Selection.saved(paymentMethod: paymentMethod)
@@ -442,7 +592,7 @@ class SavedPaymentOptionsViewController: UIViewController {
         let firstPaymentMethodIsLink = !showApplePay && showLink
         let defaultIndex = firstPaymentMethodIsLink ? 2 : 1
 
-        let defaultSelectedIndex = viewModels.firstIndex(where: { $0 == defaultPaymentMethod }) ?? defaultIndex
+        let defaultSelectedIndex = viewModels.firstIndex(where: { $0 == selectedPaymentMethodOption }) ?? defaultIndex
         return (defaultSelectedIndex, viewModels)
     }
 }
@@ -468,10 +618,20 @@ extension SavedPaymentOptionsViewController: UICollectionViewDataSource, UIColle
                     .reuseIdentifier, for: indexPath)
                 as? SavedPaymentMethodCollectionView.PaymentOptionCell
         else {
-            assertionFailure()
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedPaymentSheetError,
+                                              error: Error.unableToDequeueReusableCell)
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+            stpAssertionFailure()
             return UICollectionViewCell()
         }
-        cell.setViewModel(viewModel, cbcEligible: cbcEligible)
+        cell.setViewModel(viewModel,
+                          cbcEligible: cbcEligible,
+                          allowsPaymentMethodRemoval: self.configuration.allowsRemovalOfPaymentMethods,
+                          allowsPaymentMethodUpdate: self.configuration.allowsUpdatePaymentMethod,
+                          allowsSetAsDefaultPM: configuration.allowsSetAsDefaultPM,
+                          needsVerticalPaddingForBadge: hasDefault,
+                          showDefaultPMBadge: isDefaultPaymentMethod(savedPaymentMethodId: viewModel.savedPaymentMethod?.stripeId),
+                          linkBrand: currentLinkBrand)
         cell.delegate = self
         cell.isRemovingPaymentMethods = self.collectionView.isRemovingPaymentMethods
         cell.appearance = appearance
@@ -483,24 +643,34 @@ extension SavedPaymentOptionsViewController: UICollectionViewDataSource, UIColle
         -> Bool
     {
         guard !self.collectionView.isRemovingPaymentMethods else {
+            if let cell = collectionView.cellForItem(at: indexPath) as? SavedPaymentMethodCollectionView.PaymentOptionCell, cell.isEditable {
+                paymentOptionCellDidSelectEdit(cell)
+            }
             return false
         }
         let viewModel = viewModels[indexPath.item]
         if case .add = viewModel {
-            delegate?.didUpdateSelection(viewController: self, paymentMethodSelection: viewModel)
+            delegate?.didUpdateSelection(
+                viewController: self,
+                paymentMethodSelection: viewModel,
+                previousSelection: selectionSnapshot
+            )
             return false
         }
         return true
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        let previousSelection = selectionSnapshot
         selectedViewModelIndex = indexPath.item
         let viewModel = viewModels[indexPath.item]
 
         switch viewModel {
         case .add:
-            // Should have been handled in shouldSelectItemAt: before we got here!
-            assertionFailure()
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedPaymentSheetError,
+                                              error: Error.collectionViewDidSelectItemAtAdd)
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+            stpAssertionFailure()
         case .applePay:
             CustomerPaymentOption.setDefaultPaymentMethod(.applePay, forCustomer: configuration.customerID)
         case .link:
@@ -514,7 +684,11 @@ extension SavedPaymentOptionsViewController: UICollectionViewDataSource, UIColle
         updateMandateView()
         cvcFormElement.clearTextFields()
         updateFormElement()
-        delegate?.didUpdateSelection(viewController: self, paymentMethodSelection: viewModel)
+        delegate?.didUpdateSelection(
+            viewController: self,
+            paymentMethodSelection: viewModel,
+            previousSelection: previousSelection
+        )
     }
 }
 
@@ -525,47 +699,48 @@ extension SavedPaymentOptionsViewController: PaymentOptionCellDelegate {
         guard let indexPath = collectionView.indexPath(for: paymentOptionCell),
               case .saved(let paymentMethod) = viewModels[indexPath.row]
         else {
-            assertionFailure()
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedPaymentSheetError,
+                                              error: Error.paymentOptionCellDidSelectEditOnNonSavedItem)
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+            stpAssertionFailure()
             return
         }
-
-        let editVc = UpdateCardViewController(paymentOptionCell: paymentOptionCell,
-                                              paymentMethod: paymentMethod,
-                                              removeSavedPaymentMethodMessage: configuration.removeSavedPaymentMethodMessage,
-                                              appearance: appearance,
-                                              hostedSurface: .paymentSheet,
-                                              canRemoveCard: savedPaymentMethods.count > 1 || configuration.allowsRemovalOfLastSavedPaymentMethod,
-                                              isTestMode: configuration.isTestMode)
+        let updateConfig = UpdatePaymentMethodViewController.Configuration(paymentMethod: paymentMethod,
+                                                                           appearance: appearance,
+                                                                           billingDetailsCollectionConfiguration: paymentSheetConfiguration.billingDetailsCollectionConfiguration,
+                                                                           hostedSurface: .paymentSheet,
+                                                                           checkoutSessionID: analyticsHelper.checkoutSessionID,
+                                                                           cardBrandFilter: paymentSheetConfiguration.cardBrandFilter,
+                                                                           canRemove: configuration.allowsRemovalOfPaymentMethods && (savedPaymentMethods.count > 1 || configuration.allowsRemovalOfLastSavedPaymentMethod),
+                                                                           canUpdate: intent.allowsPaymentMethodUpdate(elementsSession: elementsSession),
+                                                                           isCBCEligible: paymentMethod.isCoBrandedCard && cbcEligible,
+                                                                           allowsSetAsDefaultPM: configuration.allowsSetAsDefaultPM,
+                                                                           isDefault: isDefaultPaymentMethod(savedPaymentMethodId: paymentMethod.stripeId))
+        let removeSavedPaymentMethodMessage = UpdatePaymentMethodViewController.resolveRemoveMessage(
+            removeSavedPaymentMethodMessage: configuration.removeSavedPaymentMethodMessage,
+            paymentMethodRemoveIsPartial: elementsSession.paymentMethodRemoveIsPartialForPaymentSheet(),
+            merchantName: configuration.merchantDisplayName)
+        let editVc = UpdatePaymentMethodViewController(removeSavedPaymentMethodMessage: removeSavedPaymentMethodMessage,
+                                                       configuration: updateConfig)
         editVc.delegate = self
         self.bottomSheetController?.pushContentViewController(editVc)
     }
 
-    func paymentOptionCellDidSelectRemove(
-        _ paymentOptionCell: SavedPaymentMethodCollectionView.PaymentOptionCell
-    ) {
-        guard let indexPath = collectionView.indexPath(for: paymentOptionCell),
-              case .saved(let paymentMethod) = viewModels[indexPath.row]
+    private func removePaymentMethod(_ paymentMethod: STPPaymentMethod, completion: (() -> Void)? = nil) {
+        guard let row = viewModels.firstIndex(where: { $0.savedPaymentMethod?.stripeId == paymentMethod.stripeId })
         else {
-            assertionFailure()
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedPaymentSheetError,
+                                              error: Error.removePaymentMethodOnNonSavedItem,
+                                              additionalNonPIIParams: [
+                                                "viewModels": viewModels.map { $0.analyticsValue },
+                                                ]
+                                              )
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+            stpAssertionFailure()
+            completion?()
             return
         }
-
-        let alertController = UIAlertController.makeRemoveAlertController(paymentMethod: paymentMethod,
-                                                                          removeSavedPaymentMethodMessage: configuration.removeSavedPaymentMethodMessage) { [weak self] in
-            guard let self = self else { return }
-            self.removePaymentMethod(paymentOptionCell: paymentOptionCell)
-        }
-
-        present(alertController, animated: true, completion: nil)
-    }
-
-    private func removePaymentMethod(paymentOptionCell: SavedPaymentMethodCollectionView.PaymentOptionCell) {
-        guard let indexPath = collectionView.indexPath(for: paymentOptionCell),
-              case .saved(let paymentMethod) = viewModels[indexPath.row]
-        else {
-            assertionFailure()
-            return
-        }
+        let indexPath = IndexPath(row: row, section: 0)
         let viewModel = viewModels[indexPath.row]
         self.viewModels.remove(at: indexPath.row)
         // the deletion needs to be in a performBatchUpdates so we make sure it is completed
@@ -573,6 +748,7 @@ extension SavedPaymentOptionsViewController: PaymentOptionCellDelegate {
         // this deletion)
         self.collectionView.performBatchUpdates {
             self.collectionView.deleteItems(at: [indexPath])
+            self.collectionView.updateLayout()
         } completion: { _ in
             self.savedPaymentMethods.removeAll(where: {
                 $0.stripeId == paymentMethod.stripeId
@@ -590,72 +766,154 @@ extension SavedPaymentOptionsViewController: PaymentOptionCellDelegate {
                 viewController: self,
                 paymentMethodSelection: viewModel
             )
+            completion?()
         }
     }
 }
 
-// MARK: - UpdateCardViewControllerDelegate
-extension SavedPaymentOptionsViewController: UpdateCardViewControllerDelegate {
-    func didRemove(paymentOptionCell: SavedPaymentMethodCollectionView.PaymentOptionCell) {
-        removePaymentMethod(paymentOptionCell: paymentOptionCell)
+// MARK: - UpdatePaymentMethodViewControllerDelegate
+extension SavedPaymentOptionsViewController: UpdatePaymentMethodViewControllerDelegate {
+    func didRemove(viewController: UpdatePaymentMethodViewController, paymentMethod: STPPaymentMethod) {
+        // if it's the default pm, unset it
+        if isDefaultPaymentMethod(savedPaymentMethodId: paymentMethod.stripeId) {
+            defaultPaymentMethod = nil
+        }
+        // if it's the last saved pm, there's some animation jank from trying to dismiss the update pm screen and expanding the add card screen, so we wait until the update pm screen is dismissed before expanding
+        if savedPaymentMethods.count == 1 {
+            _ = self.bottomSheetController?.popContentViewController { [self] in
+                removePaymentMethod(paymentMethod)
+            }
+        }
+        // if it isn't the last saved pm, waiting for update pm screen dismissal results in a weird flash, so we do it like this
+        else {
+            removePaymentMethod(paymentMethod) {
+                _ = self.bottomSheetController?.popContentViewController()
+            }
+        }
     }
 
-    func didUpdate(paymentOptionCell: SavedPaymentMethodCollectionView.PaymentOptionCell,
-                   updateParams: STPPaymentMethodUpdateParams) async throws {
-        guard let indexPath = collectionView.indexPath(for: paymentOptionCell),
-              case .saved = viewModels[indexPath.row],
-              let delegate = delegate
-        else {
-            assertionFailure()
-            throw PaymentSheetError.unknown(debugDescription: NSError.stp_unexpectedErrorMessage())
+    func didUpdate(viewController: UpdatePaymentMethodViewController,
+                   paymentMethod: STPPaymentMethod) async -> UpdatePaymentMethodResult {
+        var errors: [Swift.Error] = []
+
+        // Perform update if needed
+        if let updateParams = viewController.updateParams,
+           case .card(let paymentMethodCardParams, let billingDetails) = updateParams {
+            let updateParams = STPPaymentMethodUpdateParams(card: paymentMethodCardParams, billingDetails: billingDetails)
+            let hasOnlyChangedCardBrand = viewController.hasOnlyChangedCardBrand(originalPaymentMethod: paymentMethod,
+                                                                                 updatedPaymentMethodCardParams: paymentMethodCardParams,
+                                                                                 updatedBillingDetailsParams: billingDetails)
+            if case .failure(let error) = await updateCard(paymentMethod: paymentMethod,
+                                                           updateParams: updateParams,
+                                                           hasOnlyChangedCardBrand: hasOnlyChangedCardBrand) {
+                errors.append(error)
+            }
         }
 
-        let viewModel = viewModels[indexPath.row]
-        let updatedPaymentMethod = try await delegate.didSelectUpdate(viewController: self,
-                                                    paymentMethodSelection: viewModel,
-                                                    updateParams: updateParams)
+        // Update default payment method if needed
+        if viewController.shouldSetAsDefault {
+            if case .failure(let error) = await updateDefault(paymentMethod: paymentMethod) {
+                errors.append(error)
+            }
+        }
 
-        let updatedViewModel: Selection = .saved(paymentMethod: updatedPaymentMethod)
-        viewModels[indexPath.row] = updatedViewModel
-        collectionView.reloadData()
+        guard errors.isEmpty else {
+            return .failure(errors)
+        }
+
+        updateUI()
+        _ = viewController.bottomSheetController?.popContentViewController()
+        return .success
+    }
+
+    private func updateCard(paymentMethod: STPPaymentMethod, updateParams: STPPaymentMethodUpdateParams, hasOnlyChangedCardBrand: Bool) async -> Result<Void, Swift.Error> {
+        guard let row = viewModels.firstIndex(where: { $0.savedPaymentMethod?.stripeId == paymentMethod.stripeId }),
+              let delegate = delegate
+        else {
+            stpAssertionFailure()
+            return .failure(PaymentSheetError.unknown(debugDescription: NSError.stp_unexpectedErrorMessage()))
+        }
+
+        do {
+            let viewModel = viewModels[row]
+            let updatedPaymentMethod = try await delegate.didSelectUpdateCardBrand(viewController: self,
+                                                                                   paymentMethodSelection: viewModel,
+                                                                                   updateParams: updateParams)
+
+            let updatedViewModel: Selection = .saved(paymentMethod: updatedPaymentMethod)
+            viewModels[row] = updatedViewModel
+            // Update savedPaymentMethods
+            if let row = self.savedPaymentMethods.firstIndex(where: { $0.stripeId == updatedPaymentMethod.stripeId }) {
+                self.savedPaymentMethods[row] = updatedPaymentMethod
+            }
+            return .success(())
+        } catch {
+            return hasOnlyChangedCardBrand ? .failure(NSError.stp_cardBrandNotUpdatedError()) : .failure(NSError.stp_genericErrorOccurredError())
+        }
+    }
+
+    private func updateDefault(paymentMethod: STPPaymentMethod) async -> Result<Void, Swift.Error> {
+        guard let row = viewModels.firstIndex(where: { $0.savedPaymentMethod?.stripeId == paymentMethod.stripeId }),
+              let delegate = delegate
+        else {
+            stpAssertionFailure()
+            return .failure(PaymentSheetError.unknown(debugDescription: NSError.stp_unexpectedErrorMessage()))
+        }
+
+        do {
+            let viewModel = viewModels[row]
+            _ = try await delegate.didSelectUpdateDefault(viewController: self,
+                                                          paymentMethodSelection: viewModel)
+            defaultPaymentMethod = paymentMethod
+            return .success(())
+        } catch {
+            return .failure(NSError.stp_defaultPaymentMethodNotUpdatedError())
+        }
+    }
+
+    func shouldCloseSheet(_: UpdatePaymentMethodViewController) {
+        delegate?.shouldCloseSheet(self)
     }
 }
 
 extension STPPaymentMethod {
+    enum Error: Swift.Error {
+        case removalMessageUndefined
+    }
     var removalMessage: (title: String, message: String) {
         switch type {
         case .card:
-            let brandString = STPCardBrandUtilities.stringFrom(card?.networks?.preferred?.toCardBrand ?? card?.brand ?? .unknown) ?? ""
-            let last4 = card?.last4 ?? ""
-            let formattedMessage = STPLocalizedString(
-                "%1$@ •••• %2$@",
-                "Content for alert popup prompting to confirm removing a saved card. {card brand} •••• {last 4} e.g. 'Visa •••• 3155'"
-            )
-            return (
-                title: STPLocalizedString(
-                    "Remove card?",
-                    "Title for confirmation alert to remove a card"
-                ),
-                message: String(format: formattedMessage, brandString, last4)
-            )
+            if let linkPaymentDetails {
+                return linkPaymentDetails.removalMessage
+            } else {
+                return makeCardRemovalMessage(
+                    brand: card?.preferredDisplayBrand ?? .unknown,
+                    last4: card?.last4 ?? ""
+                )
+            }
+        case .link:
+            return linkPaymentDetails?.removalMessage ?? makeInvalidRemovalMessage()
         case .SEPADebit:
             let last4 = sepaDebit?.last4 ?? ""
-            let formattedMessage = String.Localized.removeBankAccountEndingIn
+            let formattedMessage = String.Localized.bank_account_xxxx
             return (
                 title: String.Localized.removeBankAccount,
                 message: String(format: formattedMessage, last4)
             )
         case .USBankAccount:
-            let last4 = usBankAccount?.last4 ?? ""
-            let formattedMessage = String.Localized.removeBankAccountEndingIn
-            return (
-                title: String.Localized.removeBankAccount,
-                message: String(format: formattedMessage, last4)
-            )
+            return makeBankAccountRemovalMessage(last4: usBankAccount?.last4 ?? "")
         default:
-            assertionFailure()
-            return (title: "", message: "")
+            return makeInvalidRemovalMessage()
         }
+    }
+
+    private func makeInvalidRemovalMessage() -> (title: String, message: String) {
+        let errorAnalytic = ErrorAnalytic(event: .unexpectedPaymentSheetError,
+                                          error: Error.removalMessageUndefined,
+                                          additionalNonPIIParams: ["payment_method_type": type.identifier])
+        STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+        stpAssertionFailure()
+        return (title: "", message: "")
     }
 }
 
@@ -697,4 +955,50 @@ extension SavedPaymentOptionsViewController: ElementDelegate {
         delegate?.didUpdate(self)
         animateHeightChange()
     }
+}
+
+extension STPPaymentMethod {
+    var isCoBrandedCard: Bool {
+        guard let availableNetworks = card?.networks?.available else { return false }
+        return availableNetworks.count > 1
+    }
+}
+
+private extension LinkPaymentDetails {
+
+    var removalMessage: (title: String, message: String) {
+        switch self {
+        case .card(let cardDetails):
+            return makeCardRemovalMessage(brand: cardDetails.brand, last4: cardDetails.last4)
+        case .bankAccount(let bankDetails):
+            return makeBankAccountRemovalMessage(last4: bankDetails.last4)
+        case .generic(let genericDetails):
+            return (
+                title: STPLocalizedString(
+                    "Remove payment method?",
+                    "Title for confirmation alert to remove a payment method"
+                ),
+                message: genericDetails.formattedDisplayText
+            )
+        }
+    }
+}
+
+private func makeCardRemovalMessage(brand: STPCardBrand, last4: String) -> (title: String, message: String) {
+    let brandString = STPCardBrandUtilities.stringFrom(brand) ?? ""
+    return (
+        title: STPLocalizedString(
+            "Remove card?",
+            "Title for confirmation alert to remove a card"
+        ),
+        message: String(format: String.Localized.card_details_xxxx, brandString, last4)
+    )
+}
+
+private func makeBankAccountRemovalMessage(last4: String) -> (title: String, message: String) {
+    let formattedMessage = String.Localized.bank_account_xxxx
+    return (
+        title: String.Localized.removeBankAccount,
+        message: String(format: formattedMessage, last4)
+    )
 }

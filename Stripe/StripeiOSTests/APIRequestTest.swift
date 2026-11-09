@@ -8,11 +8,12 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+import StripePaymentsTestUtils
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class AnyAPIResponse: NSObject, STPAPIResponseDecodable {
     override required init() {
@@ -32,11 +33,13 @@ class AnyAPIResponse: NSObject, STPAPIResponseDecodable {
 
 }
 
-class APIRequestTest: XCTestCase {
-    let apiClient = STPAPIClient()
+class APIRequestTest: STPNetworkStubbingTestCase {
+    var apiClient: STPAPIClient!
     override func setUp() {
+        super.setUp()
+        apiClient = STPAPIClient()
         // HTTPBin clone
-        apiClient.apiURL = URL(string: "https://luxurious-alpine-devourer.glitch.me")
+        apiClient.apiURL = URL(string: "https://stripe-mobile-luxurious-alpine-devourer.stripedemos.com")
     }
 
     func testPublishableKeyAuthorization() {
@@ -137,6 +140,7 @@ class APIRequestTest: XCTestCase {
 
         APIRequest<STPCard>.parseResponse(
             httpURLResponse,
+            method: "GET",
             body: body,
             error: errorParameter
         ) { (object: STPCard?, response, error) in
@@ -156,7 +160,7 @@ class APIRequestTest: XCTestCase {
     func testParseResponseWithReturnedError() {
         let expectation = self.expectation(description: "parseResponse")
 
-        let httpURLResponse = HTTPURLResponse()
+        let httpURLResponse = HTTPURLResponse(url: URL(string: "https://api.stripe.com/v1/some_endpoint")!, statusCode: 400, httpVersion: nil, headerFields: nil)
         let json = [
             "error": [
                 "type": "invalid_request_error",
@@ -166,14 +170,15 @@ class APIRequestTest: XCTestCase {
         ]
         let body = try? JSONSerialization.data(withJSONObject: json, options: [])
         let errorParameter: NSError? = nil
-        let expectedError = NSError.stp_error(fromStripeResponse: json)
+        let expectedError = NSError.stp_error(fromStripeResponse: json, httpResponse: httpURLResponse)
 
         APIRequest<STPCard>.parseResponse(
             httpURLResponse,
+            method: "GET",
             body: body,
             error: errorParameter
         ) { (object: STPCard?, response, error) in
-            guard let error = error, let expectedError = expectedError else {
+            guard let error else {
                 XCTFail()
                 return
             }
@@ -189,24 +194,27 @@ class APIRequestTest: XCTestCase {
     func testParseResponseWithMissingError() {
         let expectation = self.expectation(description: "parseResponse")
 
-        let httpURLResponse = HTTPURLResponse()
+        let httpURLResponse = HTTPURLResponse(url: URL(string: "https://api.stripe.com/v1/some_endpoint")!, statusCode: 400, httpVersion: nil, headerFields: nil)
         let json: [AnyHashable: Any] = [:]
         let body = try? JSONSerialization.data(withJSONObject: json, options: [])
         let errorParameter: NSError? = nil
-        let expectedError = NSError.stp_genericFailedToParseResponseError()
 
         APIRequest<STPCard>.parseResponse(
             httpURLResponse,
+            method: "GET",
             body: body,
             error: errorParameter
         ) { (object: STPCard?, response, error) in
-            guard let error = error else {
+            guard let error = error as? NSError else {
                 XCTFail()
                 return
             }
             XCTAssertNil(object)
             XCTAssertEqual(response, httpURLResponse)
-            XCTAssertEqual(error as NSError, expectedError as NSError)
+            XCTAssertEqual(error.domain, STPError.stripeDomain)
+            XCTAssertNil(error.userInfo[STPError.errorMessageKey])
+            XCTAssertEqual(error.localizedDescription, "There was an unexpected error -- try again in a few seconds")
+            XCTAssertEqual(error.userInfo[STPError.httpStatusCodeKey] as? Int, 400)
             expectation.fulfill()
         }
 
@@ -227,6 +235,7 @@ class APIRequestTest: XCTestCase {
 
         APIRequest<STPCard>.parseResponse(
             httpURLResponse,
+            method: "GET",
             body: body,
             error: errorParameter
         ) { (object: STPCard?, response, error) in
@@ -244,6 +253,8 @@ class APIRequestTest: XCTestCase {
     }
 
     func test429Backoff() {
+        let oldMaxRetries = StripeAPI.maxRetries
+        StripeAPI.maxRetries = 2
         var inProgress = true
 
         let e = expectation(description: "Request completed")
@@ -267,6 +278,7 @@ class APIRequestTest: XCTestCase {
         }
 
         wait(for: [e, checkedStillInProgress], timeout: 30)
+        StripeAPI.maxRetries = oldMaxRetries
     }
 
     func test429NoBackoff() {
@@ -277,6 +289,24 @@ class APIRequestTest: XCTestCase {
         APIRequest<AnyAPIResponse>.getWith(apiClient, endpoint: "status/429", parameters: [:]) {
             (_, response, _) in
             XCTAssertEqual(response?.statusCode, 429)
+            e.fulfill()
+        }
+
+        // We expect this request to return ~immediately, so we set a timeout lower than the highest
+        // amount of backoff.
+        wait(for: [e], timeout: 5.0)
+        StripeAPI.maxRetries = oldMaxRetries
+    }
+
+    func testSTPEmptyStripeResponse429() throws {
+        let oldMaxRetries = StripeAPI.maxRetries
+        StripeAPI.maxRetries = 0
+        let e = expectation(description: "Request completed")
+        APIRequest<STPEmptyStripeResponse>.getWith(apiClient, endpoint: "status/429", parameters: [:]) {
+            (responseObject, response, error) in
+            XCTAssertEqual(response?.statusCode, 429)
+            XCTAssertNil(responseObject)
+            XCTAssertNotNil(error)
             e.fulfill()
         }
 

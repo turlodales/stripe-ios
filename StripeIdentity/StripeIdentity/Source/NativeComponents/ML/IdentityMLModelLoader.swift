@@ -8,14 +8,16 @@
 
 import CoreML
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import Vision
 
-enum IdentityMLModelLoaderError: Error, AnalyticLoggableError {
+enum IdentityMLModelLoaderError: Error, AnalyticLoggableErrorV2 {
     /// Attempted to open a URL that could not be constructed from the given string
     case malformedURL(String)
     /// The ML model never started loading on the client
     case mlModelNeverLoaded
+    /// MediaPipe face detection is not available.
+    case mediaPipeFaceDetectorUnavailable(String)
 
     func analyticLoggableSerializeForLogging() -> [String: Any] {
         switch self {
@@ -26,7 +28,12 @@ enum IdentityMLModelLoaderError: Error, AnalyticLoggableError {
             ]
         case .mlModelNeverLoaded:
             return [
-                "type": "ml_model_never_loaded"
+                "type": "ml_model_never_loaded",
+            ]
+        case .mediaPipeFaceDetectorUnavailable(let reason):
+            return [
+                "type": "media_pipe_face_detector_unavailable",
+                "reason": reason,
             ]
         }
     }
@@ -37,12 +44,11 @@ protocol IdentityMLModelLoaderProtocol {
     var faceModelsFuture: Future<AnyFaceScanner> { get }
 
     func startLoadingDocumentModels(
-        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage
+        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage,
+        with sheetController: VerificationSheetControllerProtocol
     )
 
-    func startLoadingFaceModels(
-        from selfiePageConfig: StripeAPI.VerificationPageStaticContentSelfiePage
-    )
+    func startLoadingFaceModels(from verificationPage: StripeAPI.VerificationPage)
 }
 
 /// Loads the ML models used by Identity.
@@ -107,6 +113,11 @@ final class IdentityMLModelLoader: IdentityMLModelLoaderProtocol {
             )
             return cacheDirectory
         } catch {
+            Self.logModelLoadingError(
+                error,
+                modelType: "shared",
+                stage: "create_cache_directory"
+            )
             // If creating the subdirectory fails, use temp directory directly
             return tempDirectory
         }
@@ -120,13 +131,20 @@ final class IdentityMLModelLoader: IdentityMLModelLoaderProtocol {
     /// - Parameters:
     ///   - documentModelURLs: The URLs of all the ML models required to scan documents
     func startLoadingDocumentModels(
-        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage
+        from capturePageConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage,
+        with sheetController: VerificationSheetControllerProtocol
     ) {
         guard let idDetectorURL = URL(string: capturePageConfig.models.idDetectorUrl) else {
+            let error = IdentityMLModelLoaderError.malformedURL(
+                capturePageConfig.models.idDetectorUrl
+            )
+            Self.logModelLoadingError(
+                error,
+                modelType: "document",
+                stage: "url_validation"
+            )
             documentMLModelsPromise.reject(
-                with: IdentityMLModelLoaderError.malformedURL(
-                    capturePageConfig.models.idDetectorUrl
-                )
+                with: error
             )
             return
         }
@@ -134,29 +152,75 @@ final class IdentityMLModelLoader: IdentityMLModelLoaderProtocol {
         mlModelLoader.loadVisionModel(
             fromRemote: idDetectorURL
         ).chained { idDetectorModel in
-            return Promise(
-                value: .init(
+            return Promise<AnyDocumentScanner>(
+                value: AnyDocumentScanner(
                     DocumentScanner(
                         idDetectorModel: idDetectorModel,
-                        configuration: .init(from: capturePageConfig)
+                        configuration: .init(from: capturePageConfig),
+                        sheetController: sheetController
                     )
                 )
             )
         }.observe { [weak self] result in
+            if case .failure(let error) = result {
+                Self.logModelLoadingError(
+                    error,
+                    modelType: "document",
+                    stage: "load"
+                )
+            }
             self?.documentMLModelsPromise.fullfill(with: result)
         }
     }
 
     /// Starts loading the ML models needed for face scanning. When the models
     /// are done loading, they can be retrieved by observing `faceModelsFuture`.
-    func startLoadingFaceModels(
-        from selfiePageConfig: StripeAPI.VerificationPageStaticContentSelfiePage
-    ) {
-        guard let faceDetectorURL = URL(string: selfiePageConfig.models.faceDetectorUrl) else {
-            faceMLModelsPromise.reject(
-                with: IdentityMLModelLoaderError.malformedURL(
-                    selfiePageConfig.models.faceDetectorUrl
+    func startLoadingFaceModels(from verificationPage: StripeAPI.VerificationPage) {
+        guard let selfiePageConfig = verificationPage.selfie else {
+            return
+        }
+
+        if verificationPage.enable3DFaceCapture {
+            let faceGeometryDetector: FaceGeometryDetector
+            do {
+                faceGeometryDetector = try FaceGeometryDetectorFactory.makeDefaultDetector()
+            } catch {
+                let error = IdentityMLModelLoaderError.mediaPipeFaceDetectorUnavailable(
+                    String(describing: error)
                 )
+                Self.logModelLoadingError(
+                    error,
+                    modelType: "face",
+                    stage: "media_pipe_detector"
+                )
+                faceMLModelsPromise.reject(with: error)
+                return
+            }
+
+            faceMLModelsPromise.fullfill(
+                with: .success(
+                    AnyFaceScanner(
+                        FaceScanner(
+                            faceGeometryDetector: faceGeometryDetector,
+                            configuration: .init(from: selfiePageConfig)
+                        )
+                    )
+                )
+            )
+            return
+        }
+
+        guard let faceDetectorURL = URL(string: selfiePageConfig.models.faceDetectorUrl) else {
+            let error = IdentityMLModelLoaderError.malformedURL(
+                selfiePageConfig.models.faceDetectorUrl
+            )
+            Self.logModelLoadingError(
+                error,
+                modelType: "face",
+                stage: "url_validation"
+            )
+            faceMLModelsPromise.reject(
+                with: error
             )
             return
         }
@@ -164,8 +228,8 @@ final class IdentityMLModelLoader: IdentityMLModelLoaderProtocol {
         mlModelLoader.loadVisionModel(
             fromRemote: faceDetectorURL
         ).chained { faceDetectorModel in
-            return Promise(
-                value: .init(
+            return Promise<AnyFaceScanner>(
+                value: AnyFaceScanner(
                     FaceScanner(
                         faceDetectorModel: faceDetectorModel,
                         configuration: .init(from: selfiePageConfig)
@@ -173,7 +237,35 @@ final class IdentityMLModelLoader: IdentityMLModelLoaderProtocol {
                 )
             )
         }.observe { [weak self] result in
+            if case .failure(let error) = result {
+                Self.logModelLoadingError(
+                    error,
+                    modelType: "face",
+                    stage: "load"
+                )
+            }
             self?.faceMLModelsPromise.fullfill(with: result)
         }
+    }
+}
+
+private extension IdentityMLModelLoader {
+    static func logModelLoadingError(
+        _ error: Error,
+        modelType: String,
+        stage: String,
+        filePath: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        IdentityAnalyticsClient.logUnscopedGenericError(
+            error,
+            context: "ml_model_load",
+            additionalMetadata: [
+                "ml_model_type": modelType,
+                "ml_model_stage": stage,
+            ],
+            filePath: filePath,
+            line: line
+        )
     }
 }

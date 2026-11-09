@@ -6,10 +6,10 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
-@_spi(STP) public protocol CheckboxButtonDelegate: AnyObject {
+@_spi(InternalOnlyAPI) public protocol CheckboxButtonDelegate: AnyObject {
     /// Return `true` to open the URL in the device's default browser.
     /// Return `false` to custom handle the URL.
     func checkboxButton(_ checkboxButton: CheckboxButton, shouldOpen url: URL) -> Bool
@@ -17,7 +17,7 @@ import UIKit
 
 /// For internal SDK use only
 @objc(STP_Internal_CheckboxButton)
-@_spi(STP) public class CheckboxButton: UIControl {
+@_spi(InternalOnlyAPI) public class CheckboxButton: UIControl {
     // MARK: - Properties
 
     public weak var delegate: CheckboxButtonDelegate?
@@ -63,7 +63,6 @@ import UIKit
         let stackView = UIStackView(arrangedSubviews: [textView, descriptionLabel])
         stackView.spacing = 4
         stackView.axis = .vertical
-        stackView.distribution = .equalSpacing
         stackView.alignment = .leading
         stackView.translatesAutoresizingMaskIntoConstraints = false
         return stackView
@@ -104,17 +103,24 @@ import UIKit
         }
     }
 
-    public var theme: ElementsUITheme {
+    public var theme: ElementsAppearance {
         didSet {
             checkbox.theme = theme
             updateLabels()
         }
     }
 
+    private let alwaysEmphasizeText: Bool
+
     // MARK: - Initializers
 
-    public init(description: String? = nil, theme: ElementsUITheme = .default) {
+    public init(
+        description: String? = nil,
+        theme: ElementsAppearance = .default,
+        alwaysEmphasizeText: Bool = false
+    ) {
         self.theme = theme
+        self.alwaysEmphasizeText = alwaysEmphasizeText
         super.init(frame: .zero)
 
         isAccessibilityElement = true
@@ -130,13 +136,23 @@ import UIKit
         addGestureRecognizer(didTapGestureRecognizer)
     }
 
-    public convenience init(text: String, description: String? = nil, theme: ElementsUITheme = .default) {
-        self.init(description: description, theme: theme)
+    public convenience init(
+        text: String,
+        description: String? = nil,
+        theme: ElementsAppearance = .default,
+        alwaysEmphasizeText: Bool = false
+    ) {
+        self.init(description: description, theme: theme, alwaysEmphasizeText: alwaysEmphasizeText)
         setText(text)
     }
 
-    public convenience init(attributedText: NSAttributedString, description: String? = nil, theme: ElementsUITheme = .default) {
-        self.init(description: description, theme: theme)
+    public convenience init(
+        attributedText: NSAttributedString,
+        description: String? = nil,
+        theme: ElementsAppearance = .default,
+        alwaysEmphasizeText: Bool = false
+    ) {
+        self.init(description: description, theme: theme, alwaysEmphasizeText: alwaysEmphasizeText)
         setAttributedText(attributedText)
     }
 
@@ -152,7 +168,7 @@ import UIKit
         textView.invalidateIntrinsicContentSize()
     }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         updateLabels()
@@ -202,10 +218,11 @@ import UIKit
 
     private func updateLabels() {
         let hasDescription = descriptionLabel.text != nil
+        let emphasizeText = hasDescription || alwaysEmphasizeText
 
-        let textFont =  hasDescription ? emphasisFont : font
+        let textFont = emphasizeText ? emphasisFont : font
         textView.font = textFont
-        textView.textColor = hasDescription ? theme.colors.bodyText : theme.colors.secondaryText
+        textView.textColor = emphasizeText ? theme.colors.bodyText : theme.colors.secondaryText
 
         descriptionLabel.font = font
         descriptionLabel.isHidden = !hasDescription
@@ -228,21 +245,38 @@ import UIKit
         let linkRotors = textView.accessibilityCustomRotors?.filter({ $0.systemRotorType == .link }) ?? []
         accessibilityCustomRotors = linkRotors
 
-        // iOS 13 automatically includes a hint if there is a link rotor, but
-        // iOS 14+ do not so we must add one ourselves.
-        if #available(iOS 14, *) {
-            var hints = [descriptionLabel.text]
-            if !linkRotors.isEmpty {
-                hints.append(.Localized.useRotorToAccessLinks)
+        var hints = [descriptionLabel.text]
+        if !linkRotors.isEmpty {
+            hints.append(.Localized.useRotorToAccessLinks)
+        }
+        accessibilityHint = hints.compactMap { $0 }.joined(separator: ", ")
+    }
+
+    func setUserInteraction(isUserInteractionEnabled: Bool) {
+        isEnabled = isUserInteractionEnabled
+        alpha = isUserInteractionEnabled ? 1.0 : 0.6
+
+    }
+}
+
+extension CheckboxButton: EventHandler {
+    public func handleEvent(_ event: STPEvent) {
+        UIView.animate(withDuration: 0.2) {
+            switch event {
+            case .shouldDisableUserInteraction:
+                self.setUserInteraction(isUserInteractionEnabled: false)
+            case .shouldEnableUserInteraction:
+                self.setUserInteraction(isUserInteractionEnabled: true)
+            default:
+                break
             }
-            accessibilityHint = hints.compactMap { $0 }.joined(separator: ", ")
         }
     }
 }
 
 // MARK: - UITextViewDelegate
 extension CheckboxButton: UITextViewDelegate {
-    #if !canImport(CompositorServices)
+    #if !os(visionOS)
     // This is only used by StripeIdentity, which does not support visionOS.
     public func textView(_ textView: UITextView, shouldInteractWith url: URL, in characterRange: NSRange) -> Bool {
         return delegate?.checkboxButton(self, shouldOpen: url) ?? true
@@ -265,10 +299,10 @@ class CheckBox: UIView {
             return theme.colors.primary
         }
 
-        return theme.colors.background
+        return theme.colors.parentBackground
     }
 
-    var theme: ElementsUITheme {
+    var theme: ElementsAppearance {
         didSet {
             layer.applyShadow(shadow: theme.shadow)
             setNeedsDisplay()
@@ -279,7 +313,7 @@ class CheckBox: UIView {
         return CGSize(width: 20, height: 20)
     }
 
-    init(theme: ElementsUITheme = .default) {
+    init(theme: ElementsAppearance = .default) {
         self.theme = theme
         super.init(frame: .zero)
 
@@ -313,7 +347,12 @@ class CheckBox: UIView {
             fillColor.setFill()
         }
         borderPath.fill()
-        theme.colors.border.setStroke()
+        if theme.colors.border.rgba.alpha != 0 {
+            theme.colors.border.setStroke()
+        } else {
+            // If the border is clear, fall back to secondaryText
+            theme.colors.secondaryText.setStroke()
+        }
         borderPath.stroke()
 
         if isSelected {

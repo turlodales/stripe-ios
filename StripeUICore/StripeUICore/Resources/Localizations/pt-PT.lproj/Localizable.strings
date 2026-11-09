@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (opcional)";
+
+"(not accepted)" = "(rejeitado)";
 
 "Account number" = "Número de conta";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Número de BSB";
 
-"Billing address is same as shipping" = "O endereço de faturação é igual ao endereço de envio";
+"Bank account •••• %@" = "Conta bancária •••• %@";
 
-"Cancel" = "Cancelar";
+"Billing address is same as shipping" = "O endereço de faturação é igual ao endereço de envio";
 
 "Card brand" = "Marca do cartão";
 
@@ -34,7 +38,7 @@
 
 "County" = "Concelho";
 
-"Date is empty." = "A data está vazia.";
+"Date of Birth" = "Data de nascimento";
 
 "Department" = "Departamento";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Número de telefone incompleto";
 
-"Invalid UPI ID" = "ID UPI inválida";
-
 "Island" = "Ilha";
 
 "Last" = "Apelido";
@@ -82,21 +84,19 @@
 
 "Parish" = "Paróquia";
 
-"Phone" = "Telefone";
-
 "Phone number" = "Número de telefone";
 
 "Postal code" = "Código postal";
 
 "Prefecture" = "Câmara municipal";
 
+"Processing..." = "A processar...";
+
 "Province" = "Província";
 
 "Remove" = "Remover";
 
-"Remove bank account" = "Remover conta bancária";
-
-"Remove bank account ending in %@" = "Remover conta bancária a terminar em %@";
+"Remove bank account?" = "Remover conta bancária?";
 
 "Remove card" = "Eliminar cartão";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Selecione a marca do cartão (opcional)";
 
+"Selection is empty." = "A seleção está vazia.";
+
+"Something went wrong" = "Algo correu mal";
+
 "Sort code" = "Código da agência bancária";
 
 "State" = "Estado";
+
+"Submit" = "Submeter";
 
 "Suburb" = "Subúrbio";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Localidade ou cidade";
 
-"UPI ID" = "ID UPI";
-
 "Unable to parse phone number" = "Impossível analisar número de telefone";
 
 "Use rotor to access links" = "Utilizar o rotor para aceder a ligações";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "O seu código BLIK é inválido.";
 
-"Your ZIP is incomplete." = "O seu código ZIP está incompleto.";
+"Your ZIP code is incomplete." = "O seu código postal está incompleto.";
+
+"Your ZIP code is invalid." = "O seu código postal é inválido.";
 
 "Your email is invalid." = "O seu email é inválido.";
 
 "Your payment information will not be saved." = "As suas informações de pagamento não serão guardadas.";
 
 "Your postal code is incomplete." = "O seu código postal está incompleto.";
+
+"Your postal code is invalid." = "O seu código postal é inválido.";
 
 "ZIP" = "C.P.";

@@ -26,12 +26,10 @@ NSString *const STPTestJSONSourceAlipay = @"AlipaySource";
 NSString *const STPTestJSONSourceBancontact = @"BancontactSource";
 NSString *const STPTestJSONSourceCard = @"CardSource";
 NSString *const STPTestJSONSourceEPS = @"EPSSource";
-NSString *const STPTestJSONSourceGiropay = @"GiropaySource";
 NSString *const STPTestJSONSourceiDEAL = @"iDEALSource";
 NSString *const STPTestJSONSourceMultibanco = @"MultibancoSource";
 NSString *const STPTestJSONSourceP24 = @"P24Source";
 NSString *const STPTestJSONSourceSEPADebit = @"SEPADebitSource";
-NSString *const STPTestJSONSourceSofort = @"SofortSource";
 NSString *const STPTestJSONSourceWeChatPay = @"WeChatPaySource";
 
 @import StripeCore;
@@ -82,7 +80,7 @@ NSString *const STPTestJSONSourceWeChatPay = @"WeChatPaySource";
     STPPaymentMethodCardParams *cardParams = [STPPaymentMethodCardParams new];
     cardParams.number = @"4242424242424242";
     cardParams.expMonth = @(10);
-    cardParams.expYear = @(99);
+    cardParams.expYear = @(50);
     cardParams.cvc = @"123";
     return cardParams;
 }

@@ -10,9 +10,12 @@ import XCTest
 
 extension XCUIApplication {
 
-    static func fc_launch() -> XCUIApplication {
+    static func fc_launch(playgroundConfigurationString: String? = nil) -> XCUIApplication {
+        var launchEnvironment: [String: String] = ["UITesting": "true"]
+        launchEnvironment["UITesting_playground_configuration_string"] = playgroundConfigurationString
+
         let app = XCUIApplication()
-        app.launchEnvironment = ["UITesting": "true"]
+        app.launchEnvironment = launchEnvironment
         app.launch()
         return app
     }
@@ -65,8 +68,29 @@ extension XCUIApplication {
 
     var fc_nativeConsentAgreeButton: XCUIElement {
         let consentAgreeButton = buttons["consent_agree_button"]
-        XCTAssertTrue(consentAgreeButton.waitForExistence(timeout: 120.0), "Failed to open Consent pane - \(#function) waiting failed")  // glitch app can take time to lload
+        XCTAssertTrue(consentAgreeButton.waitForExistence(timeout: 120.0), "Failed to open Consent pane - \(#function) waiting failed")  // backend app can take time to load
         return consentAgreeButton
+    }
+
+    var fc_nativeManuallyVerifyLabel: XCUIElement {
+        let consentManuallyVerifyLabel = otherElements["consent_manually_verify_label"]
+        // wait so `consentManuallyVerifyLabel.links` returns correct values
+        _ = consentManuallyVerifyLabel.waitForExistence(timeout: 10.0)
+        // we need to dig into "links" (instead of just accessing the label directly)
+        // because the label is part-label, part a link, and we want to tap the link
+        //
+        // the `lastMatch` is important for token flows:
+        // - for unknown reason, the "Token" flow label returns "2" links for UI tests (iOS 17.2),
+        //   where only the second one is tappable
+        return consentManuallyVerifyLabel.links.lastMatch
+    }
+
+    var fc_nativeNetworkingWarmupContinueButton: XCUIElement {
+        return buttons["link_continue_button"]
+    }
+
+    var fc_nativeTestModeAutofillButton: XCUIElement {
+        return buttons["test_mode_autofill_button"]
     }
 
     var fc_nativePrepaneContinueButton_noWait: XCUIElement {
@@ -104,10 +128,46 @@ extension XCUIApplication {
         return prepaneCancelButton
     }
 
-    var fc_nativeAccountPickerLinkAccountsButton: XCUIElement {
-        let accountPickerLinkAccountsButton = buttons["account_picker_link_accounts_button"]
+    var fc_nativeConnectAccountsButton: XCUIElement {
+        let accountPickerLinkAccountsButton = buttons["connect_accounts_button"]
         XCTAssertTrue(accountPickerLinkAccountsButton.waitForExistence(timeout: 120.0), "Failed to open Account Picker pane - \(#function) waiting failed")  // wait for accounts to fetch
+        XCTAssert(accountPickerLinkAccountsButton.isEnabled, "no account selected")
         return accountPickerLinkAccountsButton
+    }
+
+    var fc_nativeSaveToLinkButton: XCUIElement {
+        return buttons["networking_link_signup_footer_view.save_to_link_button"]
+    }
+
+    var fc_nativeNetworkingNotNowButton: XCUIElement {
+        return buttons["networking_link_signup_footer_view.not_now_button"]
+    }
+
+    func fc_skipNetworkingSignupIfNeeded(timeout: TimeInterval = 10.0) {
+        let notNowButton = fc_nativeNetworkingNotNowButton
+        let successDoneButton = buttons["success_done_button"]
+
+        // Account selection can lead directly to Success or show the optional Link signup pane.
+        XCTAssertTrue(
+            notNowButton.wait(
+                until: { $0.exists || successDoneButton.exists },
+                timeout: timeout
+            ),
+            "Failed to open either the networking Link signup pane or Success pane"
+        )
+
+        if notNowButton.exists {
+            // The email field can become focused shortly after this pane appears. Wait for
+            // that transition so the keyboard cannot race the tap on the footer button.
+            if keyboards.firstMatch.waitForExistence(timeout: 2.0) {
+                fc_dismissKeyboard()
+            }
+            XCTAssertTrue(
+                notNowButton.wait(until: { $0.isHittable }, timeout: 10.0),
+                "Networking Link signup Not now button failed to become hittable"
+            )
+            notNowButton.tap()
+        }
     }
 
     var fc_nativeSuccessDoneButton: XCUIElement {
@@ -122,10 +182,48 @@ extension XCUIApplication {
         return secureWebViewCancelButton
     }
 
-    func dismissKeyboard() {
-        let returnKey = keyboards.buttons["return"]
-        if returnKey.exists && returnKey.isHittable {
-            returnKey.tap()
+    var fc_searchBarTextField: XCUIElement {
+        let searchBarTextField = tables
+            .otherElements
+            .textFields["search_bar_text_field"]
+        XCTAssertTrue(searchBarTextField.waitForExistence(timeout: 120.0))
+        return searchBarTextField
+    }
+
+    func fc_nativeFeaturedInstitution(name: String) -> XCUIElement {
+        let featuredTestInstitution = tables.cells.staticTexts[name]
+        XCTAssertTrue(featuredTestInstitution.waitForExistence(timeout: 60.0))
+        return featuredTestInstitution
+    }
+
+    func fc_nativeBankAccount(name: String) -> XCUIElement {
+        let bankAccount = scrollViews.staticTexts[name]
+        XCTAssertTrue(bankAccount.waitForExistence(timeout: 120.0))
+        return bankAccount
+    }
+
+    func fc_nativeBackButton() -> XCUIElement {
+        return navigationBars["fc_navigation_bar"].buttons["Back"]
+    }
+
+    func fc_scrollDown() {
+        swipeUp(velocity: .verySlow)
+    }
+
+    func fc_dismissKeyboard() {
+        let keyboard = keyboards.firstMatch
+
+        // Try the toolbar Done button first (iOS 18 and earlier)
+        let doneButtonByLabel = toolbars.buttons["Done"]
+        if doneButtonByLabel.waitForExistence(timeout: 1) {
+            doneButtonByLabel.tap()
         }
+        // iOS 26 fallback: tap on the title label to dismiss the keyboard
+        otherElements["fc_pane_title_label"].tap()
+
+        XCTAssertTrue(
+            keyboard.wait(until: { !$0.exists }, timeout: 5.0),
+            "Keyboard failed to dismiss"
+        )
     }
 }

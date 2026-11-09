@@ -10,7 +10,7 @@ import Foundation
 import UIKit
 
 /// Dependency-injectable protocol for `AnalyticsClientV2`.
-@_spi(STP) public protocol AnalyticsClientV2Protocol {
+@_spi(InternalOnlyAPI) public protocol AnalyticsClientV2Protocol {
     var clientId: String { get }
 
     func log(eventName: String, parameters: [String: Any])
@@ -19,7 +19,7 @@ import UIKit
 /// Logs analytics to `r.stripe.com`.
 ///
 /// To log analytics to the legacy `q.stripe.com`, use `STPAnalyticsClient`.
-@_spi(STP) public class AnalyticsClientV2: AnalyticsClientV2Protocol {
+@_spi(InternalOnlyAPI) public class AnalyticsClientV2: AnalyticsClientV2Protocol {
 
     static let loggerUrl = URL(string: "https://r.stripe.com/0")!
 
@@ -72,7 +72,7 @@ import UIKit
         line: UInt?
     ) -> [String: Any] {
 
-        var payload = error.serializeForLogging()
+        var payload = error.serializeForV2Logging()
 
         if let filePath = filePath {
             // The full file path can contain the device name, so only include the file name
@@ -90,7 +90,8 @@ import UIKit
         let payload = payload(withEventName: eventName, parameters: parameters)
 
         #if DEBUG
-            NSLog("LOG ANALYTICS: \(payload)")
+        NSLog("V2 LOG ANALYTICS: \(eventName)")
+        STPAnalyticsClient.debugPrintPayload(payload)
         #endif
 
         guard AnalyticsClientV2.shouldCollectAnalytics else {
@@ -129,11 +130,17 @@ extension AnalyticsClientV2Protocol {
         }
         payload["app_name"] = Bundle.stp_applicationName() ?? ""
         payload["app_version"] = Bundle.stp_applicationVersion() ?? ""
+        payload["app_min_os_version"] = Bundle.stp_minimumOSVersion() ?? ""
         payload["plugin_type"] = PluginDetector.shared.pluginType?.rawValue
+        payload["react_native_is_new_architecture"] = ReactNativeAnalytics.isNewArchitecture
+        payload["react_native_version"] = ReactNativeAnalytics.reactNativeVersion
         payload["platform_info"] = [
             "install": InstallMethod.current.rawValue,
             "app_bundle_id": Bundle.stp_applicationBundleId() ?? "",
         ]
+        if let deviceId = UIDevice.current.identifierForVendor?.uuidString {
+            payload["device_id"] = deviceId
+        }
 
         return payload
     }

@@ -6,47 +6,72 @@
 //  Copyright © 2019 Stripe, Inc. All rights reserved.
 //
 
+import AuthenticationServices
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
+import UIKit
 
 #if canImport(Stripe3DS2)
     import Stripe3DS2
 #endif
 
-@_spi(STP) public protocol STPPaymentHandlerActionParams: NSObject {
+/// The states relevant while polling an Intent for an out-of-band action.
+@_spi(InternalOnlyAPI) @frozen public enum STPPaymentHandlerPollingStatus: Equatable {
+    case pending
+    case succeeded
+    case failed
+}
+
+/// A retrieved polling status and the mutation that accepts its Intent as the action's latest value.
+@_spi(InternalOnlyAPI) public struct STPPaymentHandlerPollingResult {
+    @_spi(InternalOnlyAPI) public let status: STPPaymentHandlerPollingStatus
+    private let updateActionIntentBlock: () -> Void
+
+    init(status: STPPaymentHandlerPollingStatus, updateActionIntent: @escaping () -> Void) {
+        self.status = status
+        self.updateActionIntentBlock = updateActionIntent
+    }
+
+    @_spi(InternalOnlyAPI) public func updateActionIntent() {
+        updateActionIntentBlock()
+    }
+}
+
+@_spi(InternalOnlyAPI) public protocol STPPaymentHandlerActionParams: NSObject, ASWebAuthenticationPresentationContextProviding {
     var threeDS2Service: STDSThreeDS2Service? { get }
     var threeDS2Transaction: STDSTransaction? { get set }
     var authenticationContext: STPAuthenticationContext { get }
     var apiClient: STPAPIClient { get }
     var threeDSCustomizationSettings: STPThreeDSCustomizationSettings { get }
     var returnURLString: String? { get }
-    var intentStripeID: String? { get }
+    var intentStripeID: String { get }
     /// Returns the payment or setup intent's next action
     func nextAction() -> STPIntentAction?
+    /// Retrieves the latest Intent and its polling status without mutating the action.
+    func retrievePollingResult(completion: @escaping (STPPaymentHandlerPollingResult?) -> Void)
+    /// Completes the action at most once. Must be called on the main thread.
     func complete(with status: STPPaymentHandlerActionStatus, error: NSError?)
 }
 
-@_spi(STP)
+@_spi(InternalOnlyAPI)
 public class STPPaymentHandlerPaymentIntentActionParams: NSObject, STPPaymentHandlerActionParams {
-
     private var serviceInitialized = false
 
-    @_spi(STP) public let authenticationContext: STPAuthenticationContext
-    @_spi(STP) public let apiClient: STPAPIClient
-    @_spi(STP) public let threeDSCustomizationSettings: STPThreeDSCustomizationSettings
-    @_spi(STP) public let paymentIntentCompletion:
-        STPPaymentHandlerActionPaymentIntentCompletionBlock
-    @_spi(STP) public let returnURLString: String?
-    @_spi(STP) public var paymentIntent: STPPaymentIntent?
-    @_spi(STP) public var threeDS2Transaction: STDSTransaction?
+    @_spi(InternalOnlyAPI) public let authenticationContext: STPAuthenticationContext
+    @_spi(InternalOnlyAPI) public let apiClient: STPAPIClient
+    @_spi(InternalOnlyAPI) public let threeDSCustomizationSettings: STPThreeDSCustomizationSettings
+    private var paymentIntentCompletion: STPPaymentHandlerActionPaymentIntentCompletionBlock?
+    @_spi(InternalOnlyAPI) public let returnURLString: String?
+    @_spi(InternalOnlyAPI) public var paymentIntent: STPPaymentIntent
+    @_spi(InternalOnlyAPI) public var threeDS2Transaction: STDSTransaction?
 
-    @_spi(STP) public var intentStripeID: String? {
-        return paymentIntent?.stripeId
+    @_spi(InternalOnlyAPI) public var intentStripeID: String {
+        return paymentIntent.stripeId
     }
 
     private var _threeDS2Service: STDSThreeDS2Service?
 
-    @_spi(STP) public var threeDS2Service: STDSThreeDS2Service? {
+    @_spi(InternalOnlyAPI) public var threeDS2Service: STDSThreeDS2Service? {
         if !serviceInitialized {
             serviceInitialized = true
             _threeDS2Service = STDSThreeDS2Service()
@@ -54,7 +79,7 @@ public class STPPaymentHandlerPaymentIntentActionParams: NSObject, STPPaymentHan
             STDSSwiftTryCatch.try(
                 {
                     let configParams = STDSConfigParameters()
-                    if !(self.paymentIntent?.livemode ?? true) {
+                    if !self.paymentIntent.livemode {
                         configParams.addParameterNamed(
                             "kInternalStripeTestingConfigParam",
                             withValue: "Y"
@@ -95,12 +120,32 @@ public class STPPaymentHandlerPaymentIntentActionParams: NSObject, STPPaymentHan
         super.init()
     }
 
-    @_spi(STP) public func nextAction() -> STPIntentAction? {
-        return paymentIntent?.nextAction
+    @_spi(InternalOnlyAPI) public func nextAction() -> STPIntentAction? {
+        return paymentIntent.nextAction
     }
 
-    @_spi(STP) public func complete(with status: STPPaymentHandlerActionStatus, error: NSError?) {
-        paymentIntentCompletion(status, paymentIntent, error)
+    @_spi(InternalOnlyAPI) public func retrievePollingResult(completion: @escaping (STPPaymentHandlerPollingResult?) -> Void) {
+        apiClient.retrievePaymentIntent(withClientSecret: paymentIntent.clientSecret) { [weak self] paymentIntent, _ in
+            guard let self, let paymentIntent else {
+                completion(nil)
+                return
+            }
+            completion(STPPaymentHandlerPollingResult(status: paymentIntent.status.paymentHandlerPollingStatus, updateActionIntent: { [weak self] in
+                self?.paymentIntent = paymentIntent
+            }))
+        }
+    }
+
+    @_spi(InternalOnlyAPI) public func complete(with status: STPPaymentHandlerActionStatus, error: NSError?) {
+        // Redirect callbacks can race. Consume the completion before invoking it to also allow reentrancy.
+        let completion = paymentIntentCompletion
+        paymentIntentCompletion = nil
+        completion?(status, paymentIntent, error)
+    }
+
+    // Translate the STPAuthenticationContext to an ASPresentationAnchor if possible
+    public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return authenticationContext.authenticationPresentingViewController().view.window ?? stp_makeFallbackPresentationAnchor()
     }
 }
 
@@ -110,13 +155,13 @@ internal class STPPaymentHandlerSetupIntentActionParams: NSObject, STPPaymentHan
     let authenticationContext: STPAuthenticationContext
     let apiClient: STPAPIClient
     let threeDSCustomizationSettings: STPThreeDSCustomizationSettings
-    let setupIntentCompletion: STPPaymentHandlerActionSetupIntentCompletionBlock
+    private var setupIntentCompletion: STPPaymentHandlerActionSetupIntentCompletionBlock?
     let returnURLString: String?
-    var setupIntent: STPSetupIntent?
+    var setupIntent: STPSetupIntent
     var threeDS2Transaction: STDSTransaction?
 
-    var intentStripeID: String? {
-        return setupIntent?.stripeID
+    var intentStripeID: String {
+        return setupIntent.stripeID
     }
 
     private var _threeDS2Service: STDSThreeDS2Service?
@@ -129,7 +174,7 @@ internal class STPPaymentHandlerSetupIntentActionParams: NSObject, STPPaymentHan
             STDSSwiftTryCatch.try(
                 {
                     let configParams = STDSConfigParameters()
-                    if !(self.setupIntent?.livemode ?? true) {
+                    if !self.setupIntent.livemode {
                         configParams.addParameterNamed(
                             "kInternalStripeTestingConfigParam",
                             withValue: "Y"
@@ -171,10 +216,76 @@ internal class STPPaymentHandlerSetupIntentActionParams: NSObject, STPPaymentHan
     }
 
     func nextAction() -> STPIntentAction? {
-        return setupIntent?.nextAction
+        return setupIntent.nextAction
+    }
+
+    func retrievePollingResult(completion: @escaping (STPPaymentHandlerPollingResult?) -> Void) {
+        apiClient.retrieveSetupIntent(withClientSecret: setupIntent.clientSecret) { [weak self] setupIntent, _ in
+            guard let self, let setupIntent else {
+                completion(nil)
+                return
+            }
+            completion(STPPaymentHandlerPollingResult(status: setupIntent.status.paymentHandlerPollingStatus, updateActionIntent: { [weak self] in
+                self?.setupIntent = setupIntent
+            }))
+        }
     }
 
     func complete(with status: STPPaymentHandlerActionStatus, error: NSError?) {
-        setupIntentCompletion(status, setupIntent, error)
+        // Redirect callbacks can race. Consume the completion before invoking it to also allow reentrancy.
+        let completion = setupIntentCompletion
+        setupIntentCompletion = nil
+        completion?(status, setupIntent, error)
     }
+
+    // Translate the STPAuthenticationContext to an ASPresentationAnchor if possible
+    public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return authenticationContext.authenticationPresentingViewController().view.window ?? stp_makeFallbackPresentationAnchor()
+    }
+}
+
+private extension STPPaymentIntentStatus {
+    var paymentHandlerPollingStatus: STPPaymentHandlerPollingStatus {
+        switch self {
+        case .requiresAction:
+            return .pending
+        case .succeeded:
+            return .succeeded
+        case .unknown, .requiresPaymentMethod, .requiresConfirmation, .processing, .requiresCapture, .canceled:
+            return .failed
+        @unknown default:
+            return .failed
+        }
+    }
+}
+
+private extension STPSetupIntentStatus {
+    var paymentHandlerPollingStatus: STPPaymentHandlerPollingStatus {
+        switch self {
+        case .requiresAction:
+            return .pending
+        case .succeeded:
+            return .succeeded
+        case .unknown, .requiresPaymentMethod, .requiresConfirmation, .processing, .canceled:
+            return .failed
+        @unknown default:
+            return .failed
+        }
+    }
+}
+
+/// Creates a fallback ASPresentationAnchor when no window is available.
+/// On visionOS, UIWindow() without a scene is deprecated, so we find a scene first.
+private func stp_makeFallbackPresentationAnchor() -> ASPresentationAnchor {
+    #if !os(visionOS)
+    return ASPresentationAnchor()
+    #else
+    if let windowScene = UIApplication.shared.connectedScenes
+        .compactMap({ $0 as? UIWindowScene })
+        .first {
+        return UIWindow(windowScene: windowScene)
+    }
+    // No windowScene was available on visionOS, so we need to bail.
+    fatalError()
+    #endif
 }

@@ -7,14 +7,15 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
-@_spi(STP) public struct STPBINRange: Decodable, Equatable {
-    @_spi(STP) public let panLength: UInt
-    @_spi(STP) public let brand: STPCardBrand
-    @_spi(STP) public let accountRangeLow: String
-    @_spi(STP) public let accountRangeHigh: String
-    @_spi(STP) public let country: String?
+@_spi(InternalOnlyAPI) public struct STPBINRange: Decodable, Equatable {
+    @_spi(InternalOnlyAPI) public let panLength: UInt
+    @_spi(InternalOnlyAPI) public let brand: STPCardBrand
+    @_spi(InternalOnlyAPI) public let accountRangeLow: String
+    @_spi(InternalOnlyAPI) public let accountRangeHigh: String
+    @_spi(InternalOnlyAPI) public let country: String?
+    @_spi(InternalOnlyAPI) public let funding: STPCardFundingType
 
     private enum CodingKeys: String, CodingKey {
         case panLength = "pan_length"
@@ -22,9 +23,10 @@ import Foundation
         case accountRangeLow = "account_range_low"
         case accountRangeHigh = "account_range_high"
         case country = "country"
+        case funding = "funding"
     }
 
-    @_spi(STP) public init(
+    @_spi(InternalOnlyAPI) public init(
         from decoder: Decoder
     ) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,26 +36,34 @@ import Foundation
         self.accountRangeLow = try container.decode(String.self, forKey: .accountRangeLow)
         self.accountRangeHigh = try container.decode(String.self, forKey: .accountRangeHigh)
         self.country = try? container.decode(String.self, forKey: .country)
+        if let fundingString = try container.decodeIfPresent(String.self, forKey: .funding) {
+            self.funding = STPCard.funding(from: fundingString)
+        } else {
+            // Fallback to other for funding type if decoding fails
+            self.funding = .other
+        }
         self.isHardcoded = false
     }
 
-    @_spi(STP) public init(
+    @_spi(InternalOnlyAPI) public init(
         panLength: UInt,
         brand: STPCardBrand,
         accountRangeLow: String,
         accountRangeHigh: String,
-        country: String?
+        country: String?,
+        funding: STPCardFundingType = .other
     ) {
         self.panLength = panLength
         self.brand = brand
         self.accountRangeLow = accountRangeLow
         self.accountRangeHigh = accountRangeHigh
         self.country = country
+        self.funding = funding
         self.isHardcoded = true
     }
 
     /// indicates bin range was included in the SDK (rather than downloaded from edge service)
-    @_spi(STP) public var isHardcoded: Bool
+    @_spi(InternalOnlyAPI) public var isHardcoded: Bool
 }
 
 extension STPBINRange {
@@ -126,7 +136,7 @@ extension STPBINRange {
     ///   - payment:     The user's encrypted payment information as returned from a PKPaymentAuthorizationController. Cannot be nil.
     ///   - completion:  The callback to run with the returned Stripe token (and any errors that may have occurred).
     static func retrieve(
-        apiClient: STPAPIClient = .shared,
+        apiClient: STPAPIClient,
         forPrefix binPrefix: String,
         completion: @escaping BINRangeCompletionBlock
     ) {
@@ -140,13 +150,22 @@ extension STPBINRange {
     }
 }
 
-@_spi(STP) public typealias STPRetrieveBINRangesCompletionBlock = (Result<[STPBINRange], Error>) ->
+@_spi(InternalOnlyAPI) public typealias STPRetrieveBINRangesCompletionBlock = (Result<[STPBINRange], Error>) ->
     Void
 
-@_spi(STP) public class STPBINController {
-    @_spi(STP) public static let shared = STPBINController()
+@_spi(InternalOnlyAPI) public class STPBINController {
+    @_spi(InternalOnlyAPI) public static let shared = STPBINController()
 
-    @_spi(STP) public func isLoadingCardMetadata(forPrefix binPrefix: String) -> Bool {
+    @_spi(InternalOnlyAPI) public init() {}
+
+    /// For testing
+    @_spi(InternalOnlyAPI) public func reset() {
+        _performSync {
+            sAllRanges = STPBINController.STPBINRangeInitialRanges
+        }
+    }
+
+    @_spi(InternalOnlyAPI) public func isLoadingCardMetadata(forPrefix binPrefix: String) -> Bool {
         var isLoading = false
         self._retrievalQueue.sync(execute: {
             let binPrefixKey = binPrefix.stp_safeSubstring(to: kPrefixLengthForMetadataRequest)
@@ -155,28 +174,27 @@ extension STPBINRange {
         return isLoading
     }
 
-    @_spi(STP) public func allRanges() -> [STPBINRange] {
+    @_spi(InternalOnlyAPI) public func allRanges() -> [STPBINRange] {
         var ret: [STPBINRange]?
         self._performSync(withAllRangesLock: {
             ret = sAllRanges
         })
-
         return ret ?? []
     }
 
-    @_spi(STP) public func binRanges(forNumber number: String) -> [STPBINRange] {
+    @_spi(InternalOnlyAPI) public func binRanges(forNumber number: String) -> [STPBINRange] {
         return self.allRanges().filter { (binRange) -> Bool in
             binRange.matchesNumber(number)
         }
     }
 
-    @_spi(STP) public func binRanges(for brand: STPCardBrand) -> [STPBINRange] {
+    @_spi(InternalOnlyAPI) public func binRanges(for brand: STPCardBrand) -> [STPBINRange] {
         return self.allRanges().filter { (binRange) -> Bool in
             binRange.brand == brand
         }
     }
 
-    @_spi(STP) public func mostSpecificBINRange(forNumber number: String) -> STPBINRange {
+    @_spi(InternalOnlyAPI) public func mostSpecificBINRange(forNumber number: String) -> STPBINRange {
         let validRanges = self.allRanges().filter { (range) -> Bool in
             range.matchesNumber(number)
         }
@@ -193,12 +211,12 @@ extension STPBINRange {
         }.last!
     }
 
-    @_spi(STP) public func maxCardNumberLength() -> Int {
+    @_spi(InternalOnlyAPI) public func maxCardNumberLength() -> Int {
         return kMaxCardNumberLength
     }
 
     /// Returns the shortest possible card number length for the brand
-    @_spi(STP) public func minCardNumberLength(for brand: STPCardBrand) -> Int {
+    @_spi(InternalOnlyAPI) public func minCardNumberLength(for brand: STPCardBrand) -> Int {
         switch brand {
         case .visa, .amex, .mastercard, .discover, .JCB, .dinersClub, .cartesBancaires:
             return allRanges().reduce(Int.max) { currentMinimum, range in
@@ -215,15 +233,11 @@ extension STPBINRange {
         }
     }
 
-    @_spi(STP) public func minLengthForFullBINRange() -> Int {
-        return kPrefixLengthForMetadataRequest
-    }
-
     /// This is basically a wrapper around:
     ///
     /// 1. Does BIN have variable length pans, i.e. do we need to call the metadata service
     /// 2. If yes, have we already gotten a response from the metadata service
-    @_spi(STP) public func hasBINRanges(forPrefix binPrefix: String) -> Bool {
+    @_spi(InternalOnlyAPI) public func hasBINRanges(forPrefix binPrefix: String) -> Bool {
         if self.isInvalidBINPrefix(binPrefix) {
             return true  // we won't fetch any more info for this prefix
         }
@@ -253,7 +267,8 @@ extension STPBINRange {
     /// If this is disabled, we will *always* fetch and cache BIN information for the passed BIN.
     /// Use caution when disabling this: The BIN length information coming from the service may not be correct, which will
     /// cause issues when validating PAN length.
-    @_spi(STP) public func retrieveBINRanges(
+    @_spi(InternalOnlyAPI) public func retrieveBINRanges(
+        apiClient: STPAPIClient, // TODO: BIN retrieval is broken if you don't use STPAPIClient.shared (https://jira.corp.stripe.com/browse/MOBILESDK-4322)
         forPrefix binPrefix: String,
         recordErrorsAsSuccess: Bool = true,
         onlyFetchForVariableLengthBINs: Bool = true,
@@ -283,6 +298,7 @@ extension STPBINRange {
                 self.sPendingRequests[binPrefixKey] = [completion]
 
                 STPBINRange.retrieve(
+                    apiClient: apiClient,
                     forPrefix: binPrefixKey,
                     completion: { result in
                         self._retrievalQueue.async(execute: {

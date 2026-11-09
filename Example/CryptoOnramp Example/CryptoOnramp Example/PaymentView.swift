@@ -1,0 +1,1274 @@
+//
+//  PaymentView.swift
+//  CryptoOnramp Example
+//
+//  Created by Michael Liberatore on 9/17/25.
+//
+
+import PassKit
+import SwiftUI
+import UIKit
+
+@_spi(CryptoOnrampAlpha)
+import StripeCryptoOnramp
+
+@_spi(InternalOnlyAPI)
+import StripePayments
+
+@_spi(ReactNativeSDK)
+@_spi(AppearanceAPIAdditionsPreview)
+import StripePaymentSheet
+
+@_spi(InternalOnlyAPI)
+import StripePaymentsUI
+
+/// A view that allows input of a specified crypto purchase amount and payment method.
+struct PaymentView: View {
+    private enum KYCStepUpErrorCodes {
+        static let missingMinimumIdentityVerification = "crypto_onramp_missing_minimum_identity_verification"
+        static let missingIdentityVerification = "crypto_onramp_missing_identity_verification"
+        static let missingDocumentVerification = "crypto_onramp_missing_document_verification"
+    }
+
+    /// Sizes and spacing for the standard and compact payment layouts.
+    private struct LayoutMetrics {
+        static let standard = Self(
+            sectionSpacing: 16,
+            contentVerticalPadding: 8,
+            continueVerticalPadding: 16,
+            amountFontSize: 56,
+            paymentDetailsSpacing: 16,
+            paymentControlBottomPadding: 16,
+            settlementSpeedSpacing: 8,
+            keypadBottomPadding: 16,
+            keypadRowSpacing: 12,
+            keypadKeyHeight: 56
+        )
+
+        static let compact = Self(
+            sectionSpacing: 4,
+            contentVerticalPadding: 4,
+            continueVerticalPadding: 8,
+            amountFontSize: 48,
+            paymentDetailsSpacing: 8,
+            paymentControlBottomPadding: 4,
+            settlementSpeedSpacing: 4,
+            keypadBottomPadding: 0,
+            keypadRowSpacing: 8,
+            keypadKeyHeight: 44
+        )
+
+        let sectionSpacing: CGFloat
+        let contentVerticalPadding: CGFloat
+        let continueVerticalPadding: CGFloat
+        let amountFontSize: CGFloat
+        let paymentDetailsSpacing: CGFloat
+        let paymentControlBottomPadding: CGFloat
+        let settlementSpeedSpacing: CGFloat
+        let keypadBottomPadding: CGFloat
+        let keypadRowSpacing: CGFloat
+        let keypadKeyHeight: CGFloat
+    }
+
+    private enum NumberPadKey: String, Identifiable {
+        case zero
+        case one
+        case two
+        case three
+        case four
+        case five
+        case six
+        case seven
+        case eight
+        case nine
+        case decimalSeparator
+        case delete
+
+        // MARK: - Identifiable
+
+        var id: String {
+            rawValue
+        }
+    }
+
+    private enum SelectedPaymentMethod {
+        case applePay
+        case existingPaymentToken(PaymentTokensResponse.PaymentToken)
+        case newPaymentMethod(tokenId: String, displayData: PaymentMethodDisplayData)
+
+        var isBankAccount: Bool {
+            switch self {
+            case let .existingPaymentToken(token):
+                token.usBankAccount != nil
+            case let .newPaymentMethod(_, displayData):
+                switch displayData.paymentMethodType {
+                case .bankAccount:
+                    true
+                case .card, .applePay:
+                    false
+                @unknown default:
+                    false
+                }
+            case .applePay:
+                false
+            }
+        }
+    }
+
+    private enum PaymentMethodIcon {
+        case systemName(String)
+        case image(UIImage)
+    }
+
+    private struct EditCurrencyAlert: Identifiable {
+        let id = UUID()
+    }
+
+    private enum SourceCurrency: String, CaseIterable, Identifiable {
+        case usd
+        case eur
+        case cad
+        case cop
+        case php
+
+        var displayName: String {
+            rawValue.uppercased()
+        }
+
+        var amountPrefix: String {
+            switch self {
+            case .usd:
+                "$"
+            case .eur:
+                "€"
+            case .cad:
+                "CAD "
+            case .cop:
+                "COP "
+            case .php:
+                "PHP "
+            }
+        }
+
+        // MARK: - Identifiable
+
+        var id: String {
+            rawValue
+        }
+    }
+
+    /// The coordinator to use for collecting new payment methods and creating crypto payment tokens.
+    let coordinator: CryptoOnrampCoordinator
+
+    /// The wallet being funded.
+    let wallet: CustomerWalletsResponse.Wallet
+
+    /// Upon success, this closure is called delivering the created onramp session, a description of the selected payment method, and the payment settlement speed, ready for checkout.
+    let onContinue: (
+        CreateOnrampSessionResponse,
+        _ selectedPaymentMethodDescription: String,
+        _ settlementSpeed: CreateOnrampSessionRequest.SettlementSpeed
+    ) -> Void
+
+    /// Creates a new instance of `PaymentView`.
+    /// - Parameters:
+    ///   - coordinator: The coordinator to use for collecting new payment methods and creating crypto payment tokens.
+    ///   - wallet: The wallet being funded.
+    ///   - kycResidence: The user's KYC residence, used to select the initial local source currency.
+    ///   - onContinue: Called with the created onramp session when the user continues.
+    init(
+        coordinator: CryptoOnrampCoordinator,
+        wallet: CustomerWalletsResponse.Wallet,
+        kycResidence: KYCResidence,
+        onContinue: @escaping (
+            CreateOnrampSessionResponse,
+            _ selectedPaymentMethodDescription: String,
+            _ settlementSpeed: CreateOnrampSessionRequest.SettlementSpeed
+        ) -> Void
+    ) {
+        self.coordinator = coordinator
+        self.wallet = wallet
+        self.onContinue = onContinue
+        self._sourceCurrency = State(initialValue: SourceCurrency(rawValue: kycResidence.localCurrencyCode) ?? .usd)
+    }
+
+    @Environment(\.isLoading) private var isLoading
+    @Environment(\.locale) private var locale
+
+    @State private var amountText: String = "0"
+    @State private var shouldShowPaymentMethodSheet: Bool = false
+    @State private var kycRecoveryLevels: KYCRecoveryFlowView.Levels?
+    @State private var paymentTokens: [PaymentTokensResponse.PaymentToken] = []
+    @State private var alert: Alert?
+    @State private var selectedPaymentMethod: SelectedPaymentMethod?
+    @State private var sourceCurrency: SourceCurrency
+    @State private var destinationCurrency: String = "usdc"
+    @State private var editCurrencyAlert: EditCurrencyAlert?
+    @State private var editingCurrencyText: String = ""
+    @State private var achSettlementSpeed: CreateOnrampSessionRequest.SettlementSpeed = .instant
+    @State private var pendingWalletOwnershipVerificationCryptoPaymentTokenId: String?
+    @State private var isPresentingWalletOwnershipVerificationAlert = false
+    @State private var walletOwnershipVerificationSession: WalletOwnershipVerificationSession?
+
+    private var isPresentingAlert: Binding<Bool> {
+        Binding(get: {
+            alert != nil
+        }, set: { newValue in
+            if !newValue {
+                alert = nil
+            }
+        })
+    }
+
+    private var isPresentingEditCurrencyAlert: Binding<Bool> {
+        Binding(get: {
+            editCurrencyAlert != nil
+        }, set: { newValue in
+            if !newValue {
+                editCurrencyAlert = nil
+            }
+        })
+    }
+
+    // This example UI respects the current locale’s decimal separator.
+    //
+    // Additionally, we don’t use a currency number formatter while
+    // editing in order to allow fully typing a dollar and cents amount
+    // without auto-suffixing trailing zeros, which could interrupt
+    // the edits a user is making.
+    private static let decimalSeparator: String = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale.current
+        return formatter.decimalSeparator ?? "."
+    }()
+
+    private static let keys: [NumberPadKey] = [
+        .one,
+        .two,
+        .three,
+        .four,
+        .five,
+        .six,
+        .seven,
+        .eight,
+        .nine,
+        .decimalSeparator,
+        .zero,
+        .delete,
+    ]
+
+    private var shouldDisableContinueButton: Bool {
+        let amount = Double(amountText) ?? 0
+        return isLoading.wrappedValue || selectedPaymentMethod == nil || amount <= 0
+    }
+
+    private var selectPaymentMethodButtonTitle: String {
+        return switch selectedPaymentMethod {
+        case .applePay:
+            "Apple Pay"
+        case let .existingPaymentToken(paymentToken):
+            paymentToken.formattedNameAndLastFourDigits(dotCount: 1)
+        case let .newPaymentMethod(_, displayData):
+            displayData.sublabel ?? displayData.label
+        case nil:
+            "Select a payment method"
+        }
+    }
+
+    @ViewBuilder
+    private var selectPaymentMethodButtonIcon: some View {
+        switch selectedPaymentMethod {
+        case .applePay:
+            makePaymentMethodIcon(systemImageName: "applelogo")
+        case let .existingPaymentToken(paymentToken):
+            if paymentToken.card != nil {
+                makePaymentMethodIcon(systemImageName: "creditcard")
+            } else {
+                makePaymentMethodIcon(systemImageName: "building.columns")
+            }
+        case let .newPaymentMethod(_, displayData):
+            switch displayData.paymentMethodType {
+            case .applePay:
+                makePaymentMethodIcon(systemImageName: "applelogo")
+            case .card:
+                makePaymentMethodIcon(systemImageName: "creditcard")
+            case .bankAccount:
+                makePaymentMethodIcon(systemImageName: "building.columns")
+            @unknown default:
+                makePaymentMethodIcon(systemImageName: "creditcard")
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    // MARK: - View
+
+    var body: some View {
+        GeometryReader { geometry in
+            makePaymentContent(in: geometry)
+        }
+        .navigationTitle("Payment")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $shouldShowPaymentMethodSheet) {
+            PaymentMethodChooser {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if !paymentTokens.isEmpty {
+                        LazyVStack(spacing: 8) {
+                            ForEach(paymentTokens) { token in
+                                makePaymentMethodButton(using: token)
+                            }
+                        }
+                    }
+
+                    HStack {
+                        VStack { Divider() }
+
+                        Text("Add New")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        VStack { Divider() }
+                    }
+
+                    VStack(spacing: 8) {
+                        if StripeAPI.deviceSupportsApplePay() {
+                            makePaymentMethodButton(
+                                title: "Apple Pay",
+                                subtitle: "Instant",
+                                icon: .systemName("applelogo")
+                            ) {
+                                selectedPaymentMethod = .applePay
+                                shouldShowPaymentMethodSheet = false
+                            }
+                        }
+
+                        makePaymentMethodButton(
+                            title: "Add Debit / Credit Card",
+                            subtitle: "1-5 minutes",
+                            icon: .systemName("creditcard")
+                        ) {
+                            presentPaymentMethodSelector(for: .card)
+                        }
+
+                        makePaymentMethodButton(
+                            title: "Add Bank Account",
+                            subtitle: "Free",
+                            icon: .systemName("building.columns"),
+                            highlightSubtitle: true
+                        ) {
+                            presentPaymentMethodSelector(for: .bankAccount)
+                        }
+
+                        makePaymentMethodButton(
+                            title: "Add Card or Bank Account",
+                            icon: .systemName("square.split.2x1.fill")
+                        ) {
+                            presentPaymentMethodSelector(for: .cardAndBankAccount)
+                        }
+                    }
+                }
+                .horizontallyCenteredContent()
+                .padding()
+            }
+        }
+        .sheet(item: $kycRecoveryLevels) { kycRecoveryLevels in
+            KYCRecoveryFlowView(
+                coordinator: coordinator,
+                levels: kycRecoveryLevels
+            ) {
+                alert = Alert(
+                    title: "Verification complete",
+                    message: "Please try the transaction again."
+                )
+            }
+            .environment(\.isLoading, isLoading)
+        }
+        .onAppear {
+            fetchPaymentTokens()
+        }
+        .alert(
+            alert?.title ?? "Error",
+            isPresented: isPresentingAlert,
+            presenting: alert,
+            actions: { _ in
+                Button("OK") {}
+            }, message: { alert in
+                Text(alert.message)
+            }
+        )
+        .alert(
+            "Edit Destination Currency",
+            isPresented: isPresentingEditCurrencyAlert,
+            actions: {
+                TextField("Currency (e.g. usdc)", text: $editingCurrencyText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                Button("Save") {
+                    let trimmed = editingCurrencyText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        destinationCurrency = trimmed
+                    }
+                    editCurrencyAlert = nil
+                }
+
+                Button("Cancel", role: .cancel) {
+                    editCurrencyAlert = nil
+                }
+            },
+            message: {
+                Text("Enter the destination currency code (e.g. usdc, btc, eth)")
+            }
+        )
+        .walletOwnershipVerificationRequiredAlert(
+            isPresented: $isPresentingWalletOwnershipVerificationAlert,
+            onVerify: {
+                verifyWalletOwnershipForPendingCreateOnrampSession()
+            },
+            onCancel: {
+                pendingWalletOwnershipVerificationCryptoPaymentTokenId = nil
+            }
+        )
+        .sheet(item: $walletOwnershipVerificationSession) { session in
+            WalletOwnershipVerificationSheet(
+                session: session,
+                coordinator: coordinator
+            ) {
+                retryPendingCreateOnrampSession()
+            }
+        }
+    }
+
+    // MARK: - PaymentView
+
+    @ViewBuilder
+    private func labelRepresentation(for key: NumberPadKey) -> some View {
+        switch key {
+        case .zero: Text("0")
+        case .one: Text("1")
+        case .two: Text("2")
+        case .three: Text("3")
+        case .four: Text("4")
+        case .five: Text("5")
+        case .six: Text("6")
+        case .seven: Text("7")
+        case .eight: Text("8")
+        case .nine: Text("9")
+        case .decimalSeparator: Text(Self.decimalSeparator)
+        case .delete: Image(systemName: "delete.left")
+        }
+    }
+
+    @ViewBuilder
+    private func makePaymentContent(in geometry: GeometryProxy) -> some View {
+        #if compiler(>=6.4)
+        if #available(iOS 27.1, *), !geometry.reservedRegions(kind: .division).isEmpty {
+            ArrangementView {
+                FoldAvoidingScrollView { _ in
+                    makeSplitPaymentDetails(metrics: .standard)
+                        .horizontallyCenteredContent()
+                        .padding(.horizontal)
+                }
+            } secondary: {
+                FoldAvoidingScrollView(alignment: .bottom) { _ in
+                    makeAmountEntryControls(metrics: .compact)
+                        .horizontallyCenteredContent()
+                        .padding(.horizontal)
+                }
+            }
+            .arrangementViewStyle(.split)
+            .safeAreaInset(edge: .bottom) {
+                paymentContinueButton
+                    .padding()
+                    .avoidingActiveFold()
+            }
+        } else {
+            makeAdaptivePaymentContent(in: geometry)
+        }
+        #else
+        makeAdaptivePaymentContent(in: geometry)
+        #endif
+    }
+
+    private func makeAdaptivePaymentContent(in geometry: GeometryProxy) -> some View {
+        ViewThatFits(in: .vertical) {
+            makeSingleColumnPaymentContent(metrics: .standard)
+            makeSingleColumnPaymentContent(metrics: .compact)
+
+            // Prefer one column whenever it fits. Use extra width only when there's not enough height.
+            if geometry.size.width > geometry.size.height {
+                sideBySidePaymentContent
+            } else {
+                FoldAvoidingScrollView { _ in
+                    makeSingleColumnPaymentContent(metrics: .compact)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func makeSingleColumnPaymentContent(metrics: LayoutMetrics) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: metrics.sectionSpacing) {
+                makePaymentAmount(metrics: metrics)
+                makePaymentMethodControls(metrics: metrics)
+                makeAmountEntryControls(metrics: metrics)
+            }
+            .padding(.vertical, metrics.contentVerticalPadding)
+
+            Spacer(minLength: 0)
+
+            paymentContinueButton
+                .padding(.vertical, metrics.continueVerticalPadding)
+        }
+        .horizontallyCenteredContent()
+        .padding(.horizontal)
+    }
+
+    private var sideBySidePaymentContent: some View {
+        HStack(spacing: 16) {
+            FoldAvoidingScrollView { _ in
+                makeSplitPaymentDetails(metrics: .compact)
+                    .horizontallyCenteredContent()
+                    .padding()
+            }
+
+            ViewThatFits(in: .vertical) {
+                makeAmountEntryControls(metrics: .standard)
+                makeAmountEntryControls(metrics: .compact)
+                FoldAvoidingScrollView { _ in
+                    makeAmountEntryControls(metrics: .compact)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                paymentContinueButton
+                    .padding(.vertical, 8)
+            }
+            .horizontallyCenteredContent()
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var paymentContinueButton: some View {
+        ZStack {
+            if case .applePay = selectedPaymentMethod {
+                PayWithApplePayButton(.plain) {
+                    continueWithApplePay()
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .cornerRadius(8)
+            } else {
+                Button("Continue") {
+                    switch selectedPaymentMethod {
+                    case let .existingPaymentToken(token):
+                        createOnrampSession(withCryptoPaymentTokenId: token.id)
+                    case let .newPaymentMethod(tokenId, _):
+                        createOnrampSession(withCryptoPaymentTokenId: tokenId)
+                    case .applePay: break
+                    case nil: break
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .horizontallyCenteredContent()
+        .disabled(shouldDisableContinueButton)
+        .opacity(shouldDisableContinueButton ? 0.5 : 1)
+    }
+
+    private func makePaymentAmount(metrics: LayoutMetrics) -> some View {
+        VStack(spacing: 8) {
+            GeometryReader { geometry in
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.horizontal) {
+                        Text(sourceCurrency.amountPrefix + (amountText.isEmpty ? "0" : amountText))
+                            .font(.system(size: metrics.amountFontSize, weight: .bold))
+                            .monospacedDigit()
+                            .fixedSize()
+                            .frame(minWidth: geometry.size.width)
+                            .id("amount")
+                    }
+                    .onChange(of: amountText) { _ in
+                        scrollProxy.scrollTo("amount", anchor: .trailing)
+                    }
+                }
+            }
+            .frame(height: UIFont.systemFont(ofSize: metrics.amountFontSize, weight: .bold).lineHeight)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    sourceCurrencyPicker
+                    destinationCurrencyButton
+                }
+                VStack(spacing: 8) {
+                    sourceCurrencyPicker
+                    destinationCurrencyButton
+                }
+            }
+        }
+    }
+
+    private var sourceCurrencyPicker: some View {
+        Picker(selection: $sourceCurrency) {
+            ForEach(SourceCurrency.allCases) { currency in
+                Text(currency.displayName).tag(currency)
+            }
+        } label: {
+            Text(sourceCurrency.displayName)
+                .font(.callout)
+                .foregroundColor(.secondary)
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var destinationCurrencyButton: some View {
+        Button {
+            editingCurrencyText = destinationCurrency
+            editCurrencyAlert = EditCurrencyAlert()
+        } label: {
+            HStack(spacing: 4) {
+                Text("to \(destinationCurrency)")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 8)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var settlementSpeedPicker: some View {
+        Picker("ACH Settlement Speed", selection: $achSettlementSpeed) {
+            Text("Instant").tag(CreateOnrampSessionRequest.SettlementSpeed.instant)
+            Text("Standard").tag(CreateOnrampSessionRequest.SettlementSpeed.standard)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private func makeSplitPaymentDetails(metrics: LayoutMetrics) -> some View {
+        VStack(spacing: metrics.paymentDetailsSpacing) {
+            makePaymentAmount(metrics: metrics)
+            makePaymentMethodControls(metrics: metrics, alignment: .center)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private func makePaymentMethodControls(metrics: LayoutMetrics, alignment: Alignment = .leading) -> some View {
+        VStack(spacing: 0) {
+            makeSelectPaymentMethodButton(alignment: alignment)
+                .padding(.bottom, metrics.paymentControlBottomPadding)
+
+            if let selectedPaymentMethod, selectedPaymentMethod.isBankAccount {
+                VStack(alignment: .leading, spacing: metrics.settlementSpeedSpacing) {
+                    Text("ACH Settlement Speed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    settlementSpeedPicker
+                }
+                .padding(.bottom, metrics.paymentControlBottomPadding)
+            }
+        }
+    }
+
+    private func makeAmountEntryControls(metrics: LayoutMetrics) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                makePresetAmountButton(3)
+                makePresetAmountButton(5)
+                makePresetAmountButton(10)
+            }
+            .padding(.bottom, 8)
+
+            makeKeypad(metrics: metrics)
+                .padding(.bottom, metrics.keypadBottomPadding)
+        }
+    }
+
+    @ViewBuilder
+    private func makeKeypad(metrics: LayoutMetrics) -> some View {
+        let columns: [GridItem] = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+
+        LazyVGrid(columns: columns, spacing: metrics.keypadRowSpacing) {
+            ForEach(Self.keys, id: \.self) { key in
+                Button {
+                    handleKey(key)
+                } label: {
+                    labelRepresentation(for: key)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: metrics.keypadKeyHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func makePaymentMethodButton(
+        title: String,
+        subtitle: String? = nil,
+        icon: PaymentMethodIcon,
+        highlightSubtitle: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                switch icon {
+                case let .systemName(name):
+                    makePaymentMethodIcon(systemImageName: name, useInlineStyle: false)
+                case let .image(image):
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 36, maxHeight: 36)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundColor(highlightSubtitle ? .green : .secondary)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemBackground).opacity(0.7))
+            )
+        }
+        .buttonStyle(.plain)
+        // Fixes an issue in which scrolling the a sheet containing the button can
+        // mistakenly trigger the button action.
+        // https://developer.apple.com/forums/thread/763436?answerId=804853022#804853022
+        .simultaneousGesture(TapGesture())
+    }
+
+    @ViewBuilder
+    private func makePaymentMethodButton(using token: PaymentTokensResponse.PaymentToken) -> some View {
+        let subtitle = token.formattedNameAndLastFourDigits()
+        let action = {
+            selectedPaymentMethod = .existingPaymentToken(token)
+            shouldShowPaymentMethodSheet = false
+        }
+
+        if let card = token.card {
+            let cardBrand = STPCard.brand(from: card.brand)
+            let icon = STPImageLibrary.cardBrandImage(for: cardBrand)
+
+            makePaymentMethodButton(
+                title: "Card",
+                subtitle: subtitle,
+                icon: .image(icon),
+                action: action
+            )
+        } else if let bankAccount = token.usBankAccount {
+            let iconCode = PaymentSheetImageLibrary.bankIconCode(for: bankAccount.bankName)
+            let icon = PaymentSheetImageLibrary.bankIcon(for: iconCode, iconStyle: .filled)
+
+            makePaymentMethodButton(
+                title: "Bank Account",
+                subtitle: subtitle,
+                icon: .image(icon),
+                action: action
+            )
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func makePresetAmountButton(_ amount: Int) -> some View {
+        Button {
+            amountText = "\(amount)"
+        } label: {
+            Text("\(sourceCurrency.amountPrefix)\(amount)")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.primary)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func makeSelectPaymentMethodButton(alignment: Alignment = .leading) -> some View {
+        HStack {
+            Button {
+                shouldShowPaymentMethodSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    if selectedPaymentMethod != nil {
+                        selectPaymentMethodButtonIcon
+                    }
+
+                    Text(selectPaymentMethodButtonTitle)
+                        .font(.callout)
+                        .bold()
+                        .foregroundStyle(.primary)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: alignment)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func makePaymentMethodIcon(systemImageName: String, useInlineStyle: Bool = true) -> some View {
+        let backgroundDimension: CGFloat = useInlineStyle ? 22 : 40
+        let fontSize: CGFloat = useInlineStyle ? 10 : 18
+        let backgroundFillColor: UIColor = useInlineStyle ? .secondarySystemBackground : .systemBackground
+
+        ZStack {
+            Circle()
+                .fill(Color(backgroundFillColor))
+                .frame(width: backgroundDimension, height: backgroundDimension)
+                .offset(y: 1)
+
+            Image(systemName: systemImageName)
+                .font(.system(size: fontSize, weight: .semibold))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    // MARK: - Input Handling
+
+    private func handleKey(_ key: NumberPadKey) {
+        switch key {
+        case .decimalSeparator: insertDecimalSeparator()
+        case .delete: deleteLast()
+        case .zero: insertDigit(0)
+        case .one: insertDigit(1)
+        case .two: insertDigit(2)
+        case .three: insertDigit(3)
+        case .four: insertDigit(4)
+        case .five: insertDigit(5)
+        case .six: insertDigit(6)
+        case .seven: insertDigit(7)
+        case .eight: insertDigit(8)
+        case .nine: insertDigit(9)
+        }
+    }
+
+    private func insertDigit(_ d: Int) {
+        // If currently "0" and we have no separator yet, replace leading zero with non-zero digit.
+        if amountText == "0" && d != 0 && !amountText.contains(Self.decimalSeparator) {
+            amountText = "\(d)"
+            return
+        }
+
+        // Limit to two fractional digits if decimal is present.
+        if let range = amountText.range(of: Self.decimalSeparator) {
+            let fractionalDigitCount = amountText[range.upperBound...].count
+            if fractionalDigitCount >= 2 { return }
+        }
+
+        // Avoid multiple leading zeros without a decimal.
+        if !amountText.contains(Self.decimalSeparator) && amountText == "0" && d == 0 {
+            return
+        }
+
+        amountText.append("\(d)")
+    }
+
+    private func insertDecimalSeparator() {
+        if amountText.isEmpty {
+            amountText = "0" + Self.decimalSeparator
+        } else if !amountText.contains(Self.decimalSeparator) {
+            amountText.append(contentsOf: Self.decimalSeparator)
+        }
+    }
+
+    private func deleteLast() {
+        guard !amountText.isEmpty else {
+            return
+        }
+
+        amountText.removeLast()
+
+        if amountText.isEmpty {
+            amountText = "0"
+        }
+    }
+
+    private func fetchPaymentTokens() {
+        isLoading.wrappedValue = true
+        Task {
+            do {
+                let response = try await APIClient.shared.fetchPaymentTokens()
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    paymentTokens = response.data
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                }
+            }
+        }
+    }
+
+    private func presentPaymentMethodSelector(for type: PaymentMethodType) {
+        guard let viewController = UIApplication.shared.findTopViewController() else {
+            alert = Alert(title: "Error", message: "Unable to find view controller to present from.")
+            return
+        }
+
+        isLoading.wrappedValue = true
+
+        Task {
+            do {
+                let result = try await coordinator.collectPaymentMethod(type: type, from: viewController)
+                switch result {
+                case .canceled:
+                    await MainActor.run {
+                        isLoading.wrappedValue = false
+                    }
+                case let .completed(displayData, _):
+                    await MainActor.run {
+                        shouldShowPaymentMethodSheet = false
+                    }
+
+                    let token = try await coordinator.createCryptoPaymentToken()
+
+                    await MainActor.run {
+                        isLoading.wrappedValue = false
+                        selectedPaymentMethod = .newPaymentMethod(tokenId: token, displayData: displayData)
+                    }
+                @unknown default:
+                    await MainActor.run {
+                        isLoading.wrappedValue = false
+                        alert = Alert(title: "Payment method selection failed", message: "Received an unexpected result while collecting payment method.")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    alert = Alert(title: "Payment method selection failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func continueWithApplePay() {
+        guard let viewController = UIApplication.shared.findTopNavigationController() else {
+            alert = Alert(title: "Error", message: "Unable to find view controller to present from.")
+            return
+        }
+
+        let request = StripeAPI.paymentRequest(
+            withMerchantIdentifier: "merchant.com.stripe.umbrella.test",
+            country: "US",
+            currency: sourceCurrency.displayName
+        )
+        request.paymentSummaryItems = [
+            PKPaymentSummaryItem(
+                label: "\(sourceCurrency.amountPrefix)\(amountText) \(sourceCurrency.rawValue) + fees",
+                amount: .zero,
+                type: .pending
+            ),
+        ]
+
+        isLoading.wrappedValue = true
+
+        Task {
+            do {
+                let result = try await coordinator.collectPaymentMethod(type: .applePay(paymentRequest: request), from: viewController)
+                switch result {
+                case .canceled:
+                    await MainActor.run {
+                        isLoading.wrappedValue = false
+                    }
+                case .completed:
+                    let token = try await coordinator.createCryptoPaymentToken()
+
+                    await MainActor.run {
+                        // intentionally not flipping `isLoading`, since `createOnrampSession` will set it back.
+                        createOnrampSession(withCryptoPaymentTokenId: token)
+                    }
+                @unknown default:
+                    await MainActor.run {
+                        isLoading.wrappedValue = false
+                        alert = Alert(title: "Payment method selection failed", message: "Received an unexpected result while collecting payment method.")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    alert = Alert(title: "Apple Pay failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func createOnrampSession(withCryptoPaymentTokenId cryptoPaymentTokenId: String) {
+        isLoading.wrappedValue = true
+
+        let settlementSpeed = selectedPaymentMethod?.isBankAccount == true ? achSettlementSpeed : .instant
+
+        let request = CreateOnrampSessionRequest(
+            paymentToken: cryptoPaymentTokenId,
+            sourceAmount: Decimal(string: amountText) ?? 0,
+            sourceCurrency: sourceCurrency.rawValue,
+            destinationCurrency: destinationCurrency,
+            destinationNetwork: wallet.network,
+            destinationCurrencies: [destinationCurrency],
+            destinationNetworks: [wallet.network],
+            walletAddress: wallet.walletAddress,
+            customerIpAddress: "39.131.174.122", // <--- hardcoded for demo
+            settlementSpeed: settlementSpeed
+        )
+
+        Task {
+            do {
+                let response = try await APIClient.shared.createOnrampSession(requestObject: request)
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    if response.requiresWalletOwnershipVerification {
+                        pendingWalletOwnershipVerificationCryptoPaymentTokenId = cryptoPaymentTokenId
+                        isPresentingWalletOwnershipVerificationAlert = true
+                    } else {
+                        onContinue(response, selectPaymentMethodButtonTitle, settlementSpeed)
+                    }
+                }
+            } catch {
+                let fallbackErrorTitle = "Failed to create onramp session"
+                var fallbackAlert = Alert(title: fallbackErrorTitle, message: error.localizedDescription)
+
+                if case let .httpError(status, message, code) = error as? APIClient.APIError,
+                   status == 400,
+                   let code,
+                   shouldFetchCustomerInfoForRecovery(forErrorCode: code) {
+                    fallbackAlert = Alert(title: fallbackErrorTitle, message: message)
+
+                    do {
+                        let customerInfo = try await APIClient.shared.fetchCustomerInfo()
+                        let recoveryLevels = recoveryLevels(
+                            forErrorCode: code,
+                            customerInfo: customerInfo
+                        )
+
+                        await MainActor.run {
+                            isLoading.wrappedValue = false
+                            if let recoveryLevels {
+                                // Display the step-up flow.
+                                kycRecoveryLevels = recoveryLevels
+                            } else {
+                                alert = fallbackAlert
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            isLoading.wrappedValue = false
+                            alert = fallbackAlert
+                        }
+                    }
+                    return
+                }
+
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    alert = fallbackAlert
+                }
+            }
+        }
+    }
+
+    private func verifyWalletOwnershipForPendingCreateOnrampSession() {
+        guard let context = WalletOwnershipVerificationContext(wallet: wallet) else {
+            pendingWalletOwnershipVerificationCryptoPaymentTokenId = nil
+            alert = WalletOwnershipVerification.unavailableAlert
+            return
+        }
+
+        WalletOwnershipVerification.requestChallenge(
+            context: context,
+            coordinator: coordinator,
+            isLoading: isLoading,
+            alert: $alert
+        ) { session in
+            walletOwnershipVerificationSession = session
+        }
+    }
+
+    private func retryPendingCreateOnrampSession() {
+        guard let cryptoPaymentTokenId = pendingWalletOwnershipVerificationCryptoPaymentTokenId else {
+            return
+        }
+
+        pendingWalletOwnershipVerificationCryptoPaymentTokenId = nil
+        createOnrampSession(withCryptoPaymentTokenId: cryptoPaymentTokenId)
+    }
+
+    private func shouldFetchCustomerInfoForRecovery(forErrorCode code: String) -> Bool {
+        let code = code.lowercased()
+        return code == KYCStepUpErrorCodes.missingMinimumIdentityVerification
+        || code == KYCStepUpErrorCodes.missingIdentityVerification
+        || code == KYCStepUpErrorCodes.missingDocumentVerification
+    }
+
+    private func recoveryLevels(
+        forErrorCode code: String,
+        customerInfo: CustomerInformationResponse
+    ) -> KYCRecoveryFlowView.Levels? {
+        // Intentionally using only the collected fields for determining KYC level.
+        // Verifications (i.e. from `customerInfo.kycLevel`) can lag and take
+        // more time to change.
+        let currentLevel = customerInfo.kycLevelFromFieldsCollected
+
+        guard currentLevel.includesLevel0 else {
+            // The user attempted to create an onramp session having never completed Level 0 KYC.
+            // This is not a supported flow step-up flow, as they should have been prompted to
+            // enter L0 KYC information after authentication.
+            return nil
+        }
+
+        let code = code.lowercased()
+        if code == KYCStepUpErrorCodes.missingMinimumIdentityVerification {
+            // In this case, the user has L0 fields, but session creation failed, likely due to
+            // a lag in verification status being updated. The user will need to try to check
+            // out again after some time.
+            return nil
+        }
+
+        if code == KYCStepUpErrorCodes.missingIdentityVerification {
+            guard !currentLevel.includesLevel1 else {
+                // We’re being told L1 fields are missing, but customer information
+                // includes L1 fields. This is an unexpected error scenario, and the user
+                // should try again.
+                return nil
+            }
+
+            // Redirect the user to step up to level 1.
+            return .init(currentLevel: currentLevel, requiredLevel: .level1)
+        }
+
+        if code == KYCStepUpErrorCodes.missingDocumentVerification {
+            guard !currentLevel.includesLevel2 else {
+                // We’re being told L2 is required, but identity document verification
+                // is already complete. This is an unexpected error scenario, and the
+                // user should try again.
+                return nil
+            }
+
+            // Redirect the user to step up to level 2.
+            return .init(currentLevel: currentLevel, requiredLevel: .level2)
+        }
+
+        // We didn't hit any expected error scenarios that would lead to a step-up
+        // redirect, so we return `nil` to report the error normally to the user.
+        return nil
+    }
+}
+
+private extension STPCardFundingType {
+    var displayNameWithBrand: String {
+        switch self {
+        case .credit: String.Localized.Funding.credit
+        case .debit: String.Localized.Funding.debit
+        case .prepaid: String.Localized.Funding.prepaid
+        case .other: String.Localized.Funding.default
+        @unknown default: ""
+        }
+    }
+
+    init(_ typeString: String) {
+        self = switch typeString {
+        case "debit": .debit
+        case "credit": .credit
+        case "prepaid": .prepaid
+        default: .other
+        }
+    }
+}
+
+private extension PaymentTokensResponse.PaymentToken {
+    func formattedNameAndLastFourDigits(dotCount: Int = 4) -> String {
+        let dots = String(repeating: "•", count: dotCount)
+        if let card = card {
+            let cardBrand = STPCard.brand(from: card.brand)
+            let brandName = STPCardBrandUtilities.stringFrom(cardBrand)
+            let fundingType = STPCardFundingType(card.funding)
+            let formattedBrandName = String(format: fundingType.displayNameWithBrand, brandName ?? "")
+
+            return "\(formattedBrandName) \(dots) \(card.last4)"
+        } else if let bankAccount = usBankAccount {
+            return "\(bankAccount.bankName) \(dots) \(bankAccount.last4)"
+        } else {
+            return ""
+        }
+    }
+}
+
+#Preview {
+    PreviewWrapperView { coordinator in
+        PaymentView(
+            coordinator: coordinator,
+            wallet: .init(
+                id: "0",
+                object: "",
+                livemode: false,
+                network: "solana",
+                walletAddress: "",
+                verifiedOwnership: false
+            ),
+            kycResidence: .unitedStates,
+            onContinue: { _, _, _ in }
+        )
+    }
+}
+
+private struct PaymentMethodChooser<Content: View>: View {
+    @ViewBuilder var content: Content
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                content
+            }
+            .navigationTitle("Pay with")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}

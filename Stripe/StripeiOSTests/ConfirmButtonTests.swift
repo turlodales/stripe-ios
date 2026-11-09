@@ -8,14 +8,15 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class ConfirmButtonTests: XCTestCase {
 
+    // @iOS26
     func testBuyButtonShouldAutomaticallyAdjustItsForegroundColor() {
         let testCases: [(background: UIColor, foreground: UIColor)] = [
             // Dark backgrounds
@@ -33,7 +34,7 @@ class ConfirmButtonTests: XCTestCase {
         ]
 
         for (backgroundColor, expectedForeground) in testCases {
-            let button = ConfirmButton.BuyButton()
+            let button = ConfirmButton(callToAction: .pay(amount: 900, currency: "usd"), didTap: {})
             button.tintColor = backgroundColor
             button.update(
                 status: .enabled,
@@ -58,14 +59,13 @@ class ConfirmButtonTests: XCTestCase {
 
     func testUpdateShouldCallTheCompletionBlock() {
         let sut = ConfirmButton(
-            style: .stripe,
             callToAction: .pay(amount: 1000, currency: "usd"),
             didTap: {}
         )
 
         let expectation = XCTestExpectation(description: "Should call the completion block")
 
-        sut.update(state: .disabled, animated: false) {
+        sut.update(status: .disabled, animated: false) {
             expectation.fulfill()
         }
 
@@ -74,14 +74,13 @@ class ConfirmButtonTests: XCTestCase {
 
     func testUpdateShouldCallTheCompletionBlockWhenAnimated() {
         let sut = ConfirmButton(
-            style: .stripe,
             callToAction: .pay(amount: 1000, currency: "usd"),
             didTap: {}
         )
 
         let expectation = XCTestExpectation(description: "Should call the completion block")
 
-        sut.update(state: .disabled, animated: true) {
+        sut.update(status: .disabled, animated: true) {
             expectation.fulfill()
         }
 

@@ -1,4 +1,4 @@
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 /// Our high-level goal with this class is to implement the logic needed for our card verify check while
 /// adding minimal UI effects, and for any UI effects that we do add make them easily customized
 /// via overriding functions.
@@ -269,8 +269,7 @@ class VerifyCardViewController: SimpleScanViewController {
 
             self.roiView.layer.borderColor = UIColor.red.cgColor
             self.lastWrongCard = Date()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self = self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 guard let lastWrongCard = self.lastWrongCard else { return }
                 if -lastWrongCard.timeIntervalSinceNow >= 0.5 {
                     self.showNoCard()

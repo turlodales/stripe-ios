@@ -8,8 +8,8 @@
 
 import Foundation
 import iOSSnapshotTestCase
-@_spi(STP) import StripeCameraCore
-@_spi(STP) import StripeCameraCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCameraCore
+@_spi(InternalOnlyAPI) import StripeCameraCoreTestUtils
 import StripeCoreTestUtils
 
 @testable import StripeIdentity
@@ -64,7 +64,7 @@ extension SelfieCaptureViewSnapshotTest {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        view.configure(with: viewModel, analyticsClient: nil)
+        view.configure(with: viewModel, sheetController: nil)
         view.autosizeHeight(width: SnapshotTestMockData.mockDeviceWidth)
         STPSnapshotVerifyView(view, file: file, line: line)
     }

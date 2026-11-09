@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (необязательно)";
+
+"(not accepted)" = "(не принимается)";
 
 "Account number" = "Номер счета";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Номер BSB";
 
-"Billing address is same as shipping" = "Адрес выставления счетов такой же, как адрес доставки";
+"Bank account •••• %@" = "Банковский счет ••••%@";
 
-"Cancel" = "Отмена";
+"Billing address is same as shipping" = "Адрес выставления счетов такой же, как адрес доставки";
 
 "Card brand" = "Бренд карты";
 
@@ -34,7 +38,7 @@
 
 "County" = "Графство";
 
-"Date is empty." = "Дата не указана.";
+"Date of Birth" = "Дата рождения";
 
 "Department" = "Департамент";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Номер телефона введен не полностью";
 
-"Invalid UPI ID" = "Недействительный идентификатор UPI";
-
 "Island" = "Остров";
 
 "Last" = "Фамилия";
@@ -82,21 +84,19 @@
 
 "Parish" = "Приход";
 
-"Phone" = "Телефон";
-
 "Phone number" = "Номер телефона";
 
 "Postal code" = "Почтовый индекс";
 
 "Prefecture" = "Префектура";
 
+"Processing..." = "Обработка…";
+
 "Province" = "Провинция";
 
 "Remove" = "Удалить";
 
-"Remove bank account" = "Удалить банковский счет";
-
-"Remove bank account ending in %@" = "Удалить банковский счет, оканчивающийся на %@";
+"Remove bank account?" = "Удалить банковский счет?";
 
 "Remove card" = "Удалить карту";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Выберите бренд карты (необязательно)";
 
+"Selection is empty." = "Ничего не выбрано.";
+
+"Something went wrong" = "Произошла ошибка";
+
 "Sort code" = "Код банка";
 
 "State" = "Штат";
+
+"Submit" = "Отправить";
 
 "Suburb" = "Пригород";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Город";
 
-"UPI ID" = "Идентификатор UPI";
-
 "Unable to parse phone number" = "Не удается разобрать номер телефона";
 
 "Use rotor to access links" = "Используйте ротор для доступа к ссылкам";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Ваш код BLIK недействителен.";
 
-"Your ZIP is incomplete." = "Почтовый индекс введен не полностью.";
+"Your ZIP code is incomplete." = "Ваш почтовый индекс неполный.";
+
+"Your ZIP code is invalid." = "Ваш почтовый индекс недействителен.";
 
 "Your email is invalid." = "Недействительный адрес эл. почты.";
 
 "Your payment information will not be saved." = "Ваши платежные реквизиты не будут сохранены.";
 
 "Your postal code is incomplete." = "Введенный почтовый индекс неполон.";
+
+"Your postal code is invalid." = "Введенный почтовый индекс недействителен.";
 
 "ZIP" = "Почтовый индекс";

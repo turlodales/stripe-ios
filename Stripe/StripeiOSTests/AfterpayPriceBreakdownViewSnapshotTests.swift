@@ -9,11 +9,11 @@
 import iOSSnapshotTestCase
 import StripeCoreTestUtils
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class AfterpayPriceBreakdownViewSnapshotTests: STPSnapshotTestCase {
     func embedInRenderableView(
@@ -36,7 +36,7 @@ class AfterpayPriceBreakdownViewSnapshotTests: STPSnapshotTestCase {
 
     func testClearpayInMultiRow() {
         NSLocale.stp_withLocale(as: NSLocale(localeIdentifier: "en_GB")) { [self] in
-            let priceBreakdownView = AfterpayPriceBreakdownView(amount: 1000, currency: "GBP")
+            let priceBreakdownView = AfterpayPriceBreakdownView(currency: "gbp")
             let containingView = embedInRenderableView(priceBreakdownView, width: 320, height: 50)
 
             STPSnapshotVerifyView(containingView)
@@ -44,9 +44,24 @@ class AfterpayPriceBreakdownViewSnapshotTests: STPSnapshotTestCase {
     }
 
     func testAfterpayInSingleRow() {
-        let priceBreakdownView = AfterpayPriceBreakdownView(amount: 1000, currency: "USD")
+        let priceBreakdownView = AfterpayPriceBreakdownView(currency: "eur")
         let containingView = embedInRenderableView(priceBreakdownView, width: 500, height: 30)
 
         STPSnapshotVerifyView(containingView)
+    }
+
+    func testCashAppAfterpayInSingleRow() {
+        let priceBreakdownView = AfterpayPriceBreakdownView(currency: "usd")
+        let containingView = embedInRenderableView(priceBreakdownView, width: 500, height: 30)
+
+        STPSnapshotVerifyView(containingView)
+    }
+
+    func testCustomAppearance() {
+        var appearance = PaymentSheet.Appearance()
+        appearance.colors.text = UIColor.red
+        appearance.colors.icon = UIColor.purple
+        appearance.font.base = UIFont(name: "AmericanTypewriter", size: 20)!
+        let priceBreakdownView = AfterpayPriceBreakdownView(currency: "usd", appearance: appearance)
     }
 }

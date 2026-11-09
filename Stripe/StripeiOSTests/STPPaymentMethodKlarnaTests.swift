@@ -7,15 +7,16 @@
 //
 
 import StripeCoreTestUtils
+import StripePaymentsTestUtils
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
-class STPPaymentMethodKlarnaTests: XCTestCase {
+class STPPaymentMethodKlarnaTests: STPNetworkStubbingTestCase {
 
     static let klarnaPaymentIntentClientSecret =
         "pi_3Jn3kUFY0qyl6XeW0mCp95UD_secret_28aNjjd1zsySFWvGoSzgcR5Qw"

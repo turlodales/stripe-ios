@@ -9,20 +9,19 @@ import Foundation
 import XCTest
 
 // swift-format-ignore
-@_spi(STP) @testable import StripeCore
+@_spi(InternalOnlyAPI) @testable import StripeCore
 
 // swift-format-ignore
-@_spi(STP) @testable import StripePayments
+@_spi(InternalOnlyAPI) @testable import StripePayments
 
 // swift-format-ignore
-@_spi(STP) @testable import StripePaymentsUI
+@_spi(InternalOnlyAPI) @testable import StripePaymentsUI
 
-class STPAnalyticsClientPaymentsUITest: XCTestCase {
+class STPAnalyticsClientPaymentsUITests: XCTestCase {
     func testPaymentsUISDKVariantPayload() throws {
         // setup
         let analytic = GenericPaymentAnalytic(
             event: .paymentMethodCreation,
-            paymentConfiguration: nil,
             additionalParams: [:]
         )
         let client = STPAnalyticsClient()

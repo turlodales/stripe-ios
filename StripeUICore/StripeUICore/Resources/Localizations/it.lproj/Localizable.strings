@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (campo facoltativo)";
+
+"(not accepted)" = "(non accettata)";
 
 "Account number" = "Numero conto";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Numero BSB";
 
-"Billing address is same as shipping" = "L'indirizzo di fatturazione è uguale all'indirizzo di spedizione";
+"Bank account •••• %@" = "Conto bancario •••• %@";
 
-"Cancel" = "Annulla";
+"Billing address is same as shipping" = "L'indirizzo di fatturazione è uguale all'indirizzo di spedizione";
 
 "Card brand" = "Circuito carta";
 
@@ -34,7 +38,7 @@
 
 "County" = "Contea";
 
-"Date is empty." = "Il campo della data è vuoto.";
+"Date of Birth" = "Data di nascita";
 
 "Department" = "Dipartimento";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Numero di telefono incompleto";
 
-"Invalid UPI ID" = "ID UPI non valido";
-
 "Island" = "Isola";
 
 "Last" = "Cognome";
@@ -82,21 +84,19 @@
 
 "Parish" = "Contea";
 
-"Phone" = "Telefono";
-
 "Phone number" = "Numero di telefono";
 
 "Postal code" = "Codice postale";
 
 "Prefecture" = "Prefettura";
 
+"Processing..." = "Elaborazione in corso...";
+
 "Province" = "Provincia";
 
 "Remove" = "Rimuovi";
 
-"Remove bank account" = "Rimuovi conto bancario";
-
-"Remove bank account ending in %@" = "Rimuovi conto bancario che termina con %@";
+"Remove bank account?" = "Desideri rimuovere il conto bancario?";
 
 "Remove card" = "Rimuovi la carta";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Seleziona il circuito della carta (facoltativo)";
 
+"Selection is empty." = "La selezione è vuota.";
+
+"Something went wrong" = "Si è verificato un problema";
+
 "Sort code" = "Sort code";
 
 "State" = "Stato";
+
+"Submit" = "Invia";
 
 "Suburb" = "Località";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Città";
 
-"UPI ID" = "ID UPI";
-
 "Unable to parse phone number" = "Impossibile analizzare il numero di telefono";
 
 "Use rotor to access links" = "Utilizza l'ingranaggio per accedere ai link";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Il codice BLIK non è valido.";
 
-"Your ZIP is incomplete." = "Il CAP è incompleto.";
+"Your ZIP code is incomplete." = "Il tuo codice postale è incompleto.";
+
+"Your ZIP code is invalid." = "Il tuo CAP non è valido.";
 
 "Your email is invalid." = "Indirizzo email non valido.";
 
 "Your payment information will not be saved." = "I dati di pagamento non verranno salvati.";
 
 "Your postal code is incomplete." = "Il codice postale è incompleto.";
+
+"Your postal code is invalid." = "Il codice postale non è valido.";
 
 "ZIP" = "ZIP";

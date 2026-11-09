@@ -6,8 +6,8 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class IdentityFlowViewController: UIViewController {
@@ -16,6 +16,7 @@ class IdentityFlowViewController: UIViewController {
     private let flowView = IdentityFlowView()
 
     private var navBarBackgroundColor: UIColor?
+    private var previousScreenNameForScreenAppearedAnalytic: IdentityAnalyticsClient.ScreenName?
 
     let analyticsScreenName: IdentityAnalyticsClient.ScreenName
 
@@ -39,8 +40,7 @@ class IdentityFlowViewController: UIViewController {
 
         if shouldShowCancelButton {
             navigationItem.rightBarButtonItem = UIBarButtonItem(
-                title: String.Localized.cancel,
-                style: .plain,
+                barButtonSystemItem: .close,
                 target: self,
                 action: #selector(didTapCancelButton)
             )
@@ -71,6 +71,9 @@ class IdentityFlowViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        previousScreenNameForScreenAppearedAnalytic = (
+            transitionCoordinator?.viewController(forKey: .from) as? IdentityFlowViewController
+        )?.analyticsScreenName
         navigationController?.setNavigationBarBackgroundColor(with: navBarBackgroundColor)
     }
 
@@ -79,11 +82,15 @@ class IdentityFlowViewController: UIViewController {
         guard let sheetController = sheetController else {
             return
         }
+        let previousScreenName = previousScreenNameForScreenAppearedAnalytic
+        previousScreenNameForScreenAppearedAnalytic = nil
         sheetController.analyticsClient.stopTrackingTimeToScreenAndLogIfNeeded(
-            to: analyticsScreenName
+            to: analyticsScreenName,
+            sheetController: sheetController
         )
         sheetController.analyticsClient.logScreenAppeared(
             screenName: analyticsScreenName,
+            previousScreenName: previousScreenName,
             sheetController: sheetController
         )
     }
@@ -96,9 +103,22 @@ class IdentityFlowViewController: UIViewController {
         ) {
         navigationItem.backButtonTitle = backButtonTitle
         do {
-            try flowView.configure(with: viewModel)
+            try flowView.configure(
+                with: viewModel,
+                primaryButtonStyle: sheetController?.flowController.primaryButtonStyle ?? .default,
+                secondaryButtonStyle: sheetController?.flowController.secondaryButtonStyle ?? .default
+            )
         } catch {
-            sheetController?.analyticsClient.logGenericError(error: error)
+            if let sheetController = sheetController {
+                sheetController.analyticsClient.logGenericError(
+                    error: error,
+                    additionalMetadata: [
+                        "error_context": "flow_view_configure",
+                        "screen_name": analyticsScreenName.rawValue,
+                    ],
+                    sheetController: sheetController
+                )
+            }
         }
         navBarBackgroundColor = viewModel.headerViewModel?.backgroundColor
 
@@ -163,7 +183,16 @@ extension URL {
 // MARK: - Bottomsheet helpers
 extension IdentityFlowViewController {
     fileprivate func logBottomsheetError(_ errorContent: String) {
-        self.sheetController?.analyticsClient.logGenericError(error: BottomSheetError(loggableType: errorContent))
+        if let sheetController = self.sheetController {
+            sheetController.analyticsClient.logGenericError(
+                error: BottomSheetError(loggableType: errorContent),
+                additionalMetadata: [
+                    "error_context": "bottomsheet",
+                    "screen_name": analyticsScreenName.rawValue,
+                ],
+                sheetController: sheetController
+            )
+        }
     }
 
     func presentBottomsheet(withUrl bottomSheetUrl: URL) {
@@ -199,11 +228,10 @@ extension IdentityFlowViewController {
     func presentBottomsheet(
         withContent content: BottomSheetViewController.BottomSheetContent
     ) throws {
-        let consentBottomSheetViewController = try BottomSheetViewController(
-            content: content
+        let bottomSheetViewController = try BottomSheetViewController.makeForPresentation(
+            content: content,
+            primaryButtonStyle: sheetController?.flowController.primaryButtonStyle ?? .default
         )
-        consentBottomSheetViewController.modalTransitionStyle = .coverVertical
-        consentBottomSheetViewController.modalPresentationStyle = .pageSheet
-        self.present(consentBottomSheetViewController, animated: true, completion: nil)
+        self.present(bottomSheetViewController, animated: true, completion: nil)
     }
 }

@@ -10,11 +10,11 @@ import iOSSnapshotTestCase
 import StripeCoreTestUtils
 import UIKit
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class PayWithLinkButtonSnapshotTests: STPSnapshotTestCase {
 
@@ -64,8 +64,15 @@ class PayWithLinkButtonSnapshotTests: STPSnapshotTestCase {
     }
 
     func testRegistered_withLongEmailAddress() {
-        let sut = PayWithLinkButton()
+        let sut = makeSUT()
         sut.linkAccount = makeAccountStub(email: longEmailAddress, isRegistered: true)
+        verify(sut)
+    }
+
+    func testAddThenRemoveAccount() {
+        let sut = makeSUT()
+        sut.linkAccount = makeAccountStub(email: longEmailAddress, isRegistered: true)
+        sut.linkAccount = nil
         verify(sut)
     }
 
@@ -86,12 +93,20 @@ extension PayWithLinkButtonSnapshotTests {
     fileprivate struct LinkAccountStub: PaymentSheetLinkAccountInfoProtocol {
         let email: String
         let isRegistered: Bool
+        var redactedPhoneNumber: String?
+        let sessionState: PaymentSheetLinkAccount.SessionState
+        let consumerSessionClientSecret: String?
+        let linkSessionKey: String?
     }
 
     fileprivate func makeAccountStub(email: String, isRegistered: Bool) -> LinkAccountStub {
         return LinkAccountStub(
             email: email,
-            isRegistered: isRegistered
+            isRegistered: isRegistered,
+            redactedPhoneNumber: "+1********55",
+            sessionState: .verified,
+            consumerSessionClientSecret: nil,
+            linkSessionKey: nil
         )
     }
 

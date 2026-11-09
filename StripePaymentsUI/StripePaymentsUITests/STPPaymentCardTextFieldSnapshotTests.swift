@@ -6,11 +6,11 @@
 //
 
 import iOSSnapshotTestCase
-@_spi(STP)@testable import StripeCore
+@_spi(InternalOnlyAPI)@testable import StripeCore
 import StripeCoreTestUtils
 import StripePaymentsTestUtils
-@_spi(STP)@testable import StripePaymentsUI
-@_spi(STP)@testable import StripeUICore
+@_spi(InternalOnlyAPI)@testable import StripePaymentsUI
+@_spi(InternalOnlyAPI)@testable import StripeUICore
 
 class STPPaymentCardTextFieldSnapshotTests: STPSnapshotTestCase {
 
@@ -37,7 +37,7 @@ class STPPaymentCardTextFieldSnapshotTests: STPSnapshotTestCase {
     }
 
     func testPaymentCardTextFieldCBC() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
+        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey // swiftlint:disable:this no_shared_api_client_mutation_in_tests
         let pctf = paymentCardTextField
         pctf.cbcEnabledOverride = true
         let card = STPPaymentMethodCardParams()
@@ -53,6 +53,7 @@ class STPPaymentCardTextFieldSnapshotTests: STPSnapshotTestCase {
             exp.fulfill()
         }
         waitForExpectations(timeout: 3.0)
+        STPAPIClient.shared.publishableKey = nil // swiftlint:disable:this no_shared_api_client_mutation_in_tests
     }
 
 }

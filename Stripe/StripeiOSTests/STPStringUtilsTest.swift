@@ -7,9 +7,9 @@
 
 import Foundation
 
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPStringUtilsTest: XCTestCase {
     func testParseRangeSingleTagSuccess1() {
@@ -92,6 +92,38 @@ class STPStringUtilsTest: XCTestCase {
         }
         waitForExpectations(timeout: 1)
     }
+    func testParseRangeWithOverlappingRanges() {
+        let exp = self.expectation(description: "Parsed")
+        STPStringUtils.parseRanges(
+            from: "<a>Test <b>string</b></a>",
+            withTags: Set(["a", "b"])
+        ) { string, tagMap in
+            XCTAssertEqual(string, "Test string")
+            XCTAssertTrue(tagMap.isEmpty)
+            exp.fulfill()
+        }
+        waitForExpectations(timeout: 1)
+    }
+    func testHasOverlappingRanges_singleItem() {
+        let ranges: [NSValue: String] = [
+            NSValue(range: NSRange(location: 0, length: 2)): "a",
+        ]
+        XCTAssertFalse(STPStringUtils.hasOverlappingRanges(ranges: ranges))
+    }
+    func testHasOverlappingRanges_nonOverlapping() {
+        let ranges: [NSValue: String] = [
+            NSValue(range: NSRange(location: 0, length: 2)): "a",
+            NSValue(range: NSRange(location: 2, length: 1)): "b",
+        ]
+        XCTAssertFalse(STPStringUtils.hasOverlappingRanges(ranges: ranges))
+    }
+    func testHasOverlappingRanges_overlapping() {
+        let ranges: [NSValue: String] = [
+            NSValue(range: NSRange(location: 0, length: 2)): "a",
+            NSValue(range: NSRange(location: 1, length: 1)): "b",
+        ]
+        XCTAssert(STPStringUtils.hasOverlappingRanges(ranges: ranges))
+    }
 
     func testExpirationDateStrings() {
         XCTAssertEqual(STPStringUtils.expirationDateString(from: "12/1995"), "12/95")
@@ -106,5 +138,60 @@ class STPStringUtilsTest: XCTestCase {
         XCTAssertEqual(STPStringUtils.expirationDateString(from: ""), "")
         XCTAssertEqual(STPStringUtils.expirationDateString(from: " "), " ")
         XCTAssertEqual(STPStringUtils.expirationDateString(from: "12/"), "12/")
+    }
+
+    func testSanitizedExpirationDateFromOCRString() {
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("12/1995"), "1295")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("12/95"), "1295")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("Security Code 123 Valid Thru 01/35"), "0135")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("BankCo Logo Is Copyright 1995 BankCo Call us at 888-555-5555 Expiration date 01/35 Security Code 123"), "0135")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("Made with 10% recycled plastic, 45% organic matter. Expiration date 01/35"), "0135")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("Expiration date 01/35, card produced 01/23"), "0135")
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("Expiration date 01 35"), nil)
+        XCTAssertEqual(STPStringUtils.sanitizedExpirationDateFromOCRString("AA/BB"), nil)
+    }
+
+    func testAttributedStringFromMarkdownLinks_noLink() {
+        let result = STPStringUtils.attributedStringFromMarkdownLinks(in: "Plain text with no links.")
+        XCTAssertEqual(result.string, "Plain text with no links.")
+        XCTAssertNil(result.attribute(.link, at: 0, effectiveRange: nil))
+    }
+
+    func testAttributedStringFromMarkdownLinks_singleLink() {
+        let result = STPStringUtils.attributedStringFromMarkdownLinks(
+            in: "Acme can access your data. [Learn more](https://stripe.com/learn-more)."
+        )
+        XCTAssertEqual(result.string, "Acme can access your data. Learn more.")
+
+        let linkRange = (result.string as NSString).range(of: "Learn more")
+        XCTAssertEqual(
+            result.attribute(.link, at: linkRange.location, effectiveRange: nil) as? URL,
+            URL(string: "https://stripe.com/learn-more")
+        )
+    }
+
+    func testAttributedStringFromMarkdownLinks_multipleLinks() {
+        let result = STPStringUtils.attributedStringFromMarkdownLinks(
+            in: "See [these terms](https://stripe.com/terms) and [this policy](https://stripe.com/policy)."
+        )
+        XCTAssertEqual(result.string, "See these terms and this policy.")
+
+        let termsRange = (result.string as NSString).range(of: "these terms")
+        XCTAssertEqual(
+            result.attribute(.link, at: termsRange.location, effectiveRange: nil) as? URL,
+            URL(string: "https://stripe.com/terms")
+        )
+
+        let policyRange = (result.string as NSString).range(of: "this policy")
+        XCTAssertEqual(
+            result.attribute(.link, at: policyRange.location, effectiveRange: nil) as? URL,
+            URL(string: "https://stripe.com/policy")
+        )
+    }
+
+    func testAttributedStringFromMarkdownLinks_malformedURL() {
+        let result = STPStringUtils.attributedStringFromMarkdownLinks(in: "Broken [link]().")
+        XCTAssertEqual(result.string, "Broken link.")
+        XCTAssertNil(result.attribute(.link, at: 0, effectiveRange: nil))
     }
 }

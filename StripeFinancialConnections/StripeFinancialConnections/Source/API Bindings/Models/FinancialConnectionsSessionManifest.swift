@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 struct FinancialConnectionsSessionManifest: Decodable {
@@ -20,6 +20,7 @@ struct FinancialConnectionsSessionManifest: Decodable {
         case authOptions = "auth_options"
         case bankAuthRepair = "bank_auth_repair"
         case consent = "consent"
+        case idConsentContent = "id_consent_content"
         case institutionPicker = "institution_picker"
         case linkAccountPicker = "link_account_picker"
         case linkConsent = "link_consent"
@@ -28,7 +29,6 @@ struct FinancialConnectionsSessionManifest: Decodable {
         case manualEntrySuccess = "manual_entry_success"
         case networkingLinkLoginWarmup = "networking_link_login_warmup"
         case networkingLinkSignupPane = "networking_link_signup_pane"
-        case networkingLinkStepUpVerification = "networking_link_step_up_verification"
         case networkingLinkVerification = "networking_link_verification"
         case networkingSaveToLinkVerification = "networking_save_to_link_verification"
         case partnerAuth = "partner_auth"
@@ -37,6 +37,7 @@ struct FinancialConnectionsSessionManifest: Decodable {
         case unparsable
 
         // client-side only panes
+        case genericError = "generic_error"
         case resetFlow = "reset_flow"
         case terminalError = "terminal_error"
     }
@@ -63,42 +64,77 @@ struct FinancialConnectionsSessionManifest: Decodable {
         }
     }
 
+    enum Theme: String, SafeEnumCodable, Equatable {
+        case light = "light"
+        case dashboardLight = "dashboard_light"
+        case linkLight = "link_light"
+        case unparsable
+    }
+
     // MARK: - Properties
 
+    let accountholderCustomerEmailAddress: String?
     let accountholderIsLinkConsumer: Bool?
+    let accountholderPhoneNumber: String?
+    let accountholderToken: String?
+    let accountDisconnectionMethod: AccountDisconnectionMethod?
+    let activeAuthSession: FinancialConnectionsAuthSession?
     let activeInstitution: FinancialConnectionsInstitution?
     let allowManualEntry: Bool
+    let appVerificationEnabled: Bool?
+    let assignmentEventId: String?
+    let linkBrand: LinkBrand?
     let businessName: String?
+    let cancelUrl: String?
+    let consentAcquiredAt: String?
     let consentRequired: Bool
     let customManualEntryHandling: Bool
     let disableLinkMoreAccounts: Bool
+    let displayText: DisplayText?
+    let experimentAssignments: [String: String]?
+    let features: [String: Bool]?
     let hostedAuthUrl: String?
-    let successUrl: String?
-    let cancelUrl: String?
-    let activeAuthSession: FinancialConnectionsAuthSession?
+    let id: String
     let initialInstitution: FinancialConnectionsInstitution?
     let instantVerificationDisabled: Bool
     let institutionSearchDisabled: Bool
+    let isEndUserFacing: Bool?
     let isLinkWithStripe: Bool?
     let isNetworkingUserFlow: Bool?
     let isStripeDirect: Bool?
     let livemode: Bool
+    let manualEntryMode: ManualEntryMode
     let manualEntryUsesMicrodeposits: Bool
     let nextPane: NextPane
-    let permissions: [StripeAPI.FinancialConnectionsAccount.Permissions]
-    let singleAccount: Bool
     let paymentMethodType: FinancialConnectionsPaymentMethodType?
-    let accountDisconnectionMethod: AccountDisconnectionMethod?
-    let isEndUserFacing: Bool?
+    let permissions: [StripeAPI.FinancialConnectionsAccount.Permissions]
     let product: String
-    let accountholderToken: String?
-    let features: [String: Bool]?
-    let experimentAssignments: [String: String]?
-    let assignmentEventId: String?
+    let singleAccount: Bool
     let skipSuccessPane: Bool?
-    let manualEntryMode: ManualEntryMode
-    let accountholderCustomerEmailAddress: String?
-    let accountholderPhoneNumber: String?
-    let stepUpAuthenticationRequired: Bool?
-    let displayText: DisplayText?
+    let successUrl: String?
+    let theme: Theme?
+
+    var appearance: FinancialConnectionsAppearance {
+        FinancialConnectionsAppearance(theme: theme, linkBrand: linkBrand)
+    }
+
+    var shouldAttachLinkedPaymentMethod: Bool {
+        return (paymentMethodType != nil)
+    }
+
+    var isProductInstantDebits: Bool {
+        return (product == "instant_debits")
+    }
+
+    var isTestMode: Bool {
+        !livemode
+    }
+
+    var verified: Bool {
+        appVerificationEnabled ?? false
+    }
+
+    var consentAcquired: Bool {
+        !consentRequired || consentAcquiredAt != nil
+    }
 }

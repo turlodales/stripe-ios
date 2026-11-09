@@ -8,12 +8,12 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
-@testable@_spi(STP) import StripeUICore
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import StripeUICore
 
 class TextFieldElementIBANTest: XCTestCase {
     typealias IBANError = TextFieldElement.IBANError
@@ -21,7 +21,7 @@ class TextFieldElementIBANTest: XCTestCase {
 
     func testValidation() throws {
         let testcases: [String: TextFieldElement.ValidationState] = [
-            "": .invalid(Error.empty),
+            "": .invalid(Error.empty(localizedDescription: "The account number you entered is incomplete.")),
             "G": .invalid(IBANError.incomplete),
             "GB": .invalid(IBANError.incomplete),
             "GB1": .invalid(IBANError.incomplete),

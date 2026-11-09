@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol PhoneTextFieldDelegate: AnyObject {
@@ -21,8 +21,9 @@ final class PhoneTextField: UIView {
 
     fileprivate lazy var textField: RoundedTextField = {
         let textField = RoundedTextField(
-            placeholder: STPLocalizedString("Phone number", "The title of a user-input-field that appears when a user is signing up to Link (a payment service). It instructs user to type a phone number."),
-            showDoneToolbar: true
+            placeholder: String.Localized.phoneNumber,
+            showDoneToolbar: true,
+            appearance: appearance
         )
         textField.textField.keyboardType = .phonePad
         textField.textField.textContentType = .telephoneNumber
@@ -43,6 +44,7 @@ final class PhoneTextField: UIView {
         return textField
     }()
     private let countryCodeSelectorView: PhoneCountryCodeSelectorView
+    private let appearance: FinancialConnectionsAppearance
     // we will only start validating as user
     // types once editing ends
     fileprivate var didEndEditingOnce = false
@@ -74,7 +76,7 @@ final class PhoneTextField: UIView {
 
     weak var delegate: PhoneTextFieldDelegate?
 
-    init(defaultPhoneNumber: String?) {
+    init(defaultPhoneNumber: String?, appearance: FinancialConnectionsAppearance) {
         var defaultPhoneNumber = defaultPhoneNumber
         var defaultCountryCode: String?
         if let _defaultPhoneNumber = defaultPhoneNumber, let e164PhoneNumber = PhoneNumber.fromE164(_defaultPhoneNumber) {
@@ -82,8 +84,10 @@ final class PhoneTextField: UIView {
             defaultCountryCode = e164PhoneNumber.countryCode
         }
         self.countryCodeSelectorView = PhoneCountryCodeSelectorView(
-            defaultCountryCode: defaultCountryCode
+            defaultCountryCode: defaultCountryCode,
+            appearance: appearance
         )
+        self.appearance = appearance
         super.init(frame: .zero)
         countryCodeSelectorView.delegate = self
         addAndPinSubview(textField)
@@ -215,7 +219,7 @@ private struct PhoneTextFieldUIViewRepresentable: UIViewRepresentable {
     let defaultPhoneNumber: String
 
     func makeUIView(context: Context) -> PhoneTextField {
-        PhoneTextField(defaultPhoneNumber: defaultPhoneNumber)
+        PhoneTextField(defaultPhoneNumber: defaultPhoneNumber, appearance: .stripe)
     }
 
     func updateUIView(
@@ -233,33 +237,31 @@ private struct PhoneTextFieldUIViewRepresentable: UIViewRepresentable {
 
 struct PhoneTextField_Previews: PreviewProvider {
     static var previews: some View {
-        if #available(iOS 14.0, *) {
-            VStack(spacing: 16) {
-                PhoneTextFieldUIViewRepresentable(
-                    defaultPhoneNumber: ""
-                ).frame(height: 56)
+        VStack(spacing: 16) {
+            PhoneTextFieldUIViewRepresentable(
+                defaultPhoneNumber: ""
+            ).frame(height: 56)
 
-                PhoneTextFieldUIViewRepresentable(
-                    defaultPhoneNumber: "4015006000"
-                ).frame(height: 56)
+            PhoneTextFieldUIViewRepresentable(
+                defaultPhoneNumber: "4015006000"
+            ).frame(height: 56)
 
-                PhoneTextFieldUIViewRepresentable(
-                    defaultPhoneNumber: "401500600"
-                ).frame(height: 56)
+            PhoneTextFieldUIViewRepresentable(
+                defaultPhoneNumber: "401500600"
+            ).frame(height: 56)
 
-                PhoneTextFieldUIViewRepresentable(
-                    defaultPhoneNumber: "40150060003435"
-                ).frame(height: 56)
+            PhoneTextFieldUIViewRepresentable(
+                defaultPhoneNumber: "40150060003435"
+            ).frame(height: 56)
 
-                PhoneTextFieldUIViewRepresentable(
-                    defaultPhoneNumber: "+442079460321"
-                ).frame(height: 56)
+            PhoneTextFieldUIViewRepresentable(
+                defaultPhoneNumber: "+442079460321"
+            ).frame(height: 56)
 
-                Spacer()
-            }
-            .padding()
-            .background(Color(UIColor.customBackgroundColor))
+            Spacer()
         }
+        .padding()
+        .background(Color(FinancialConnectionsAppearance.Colors.background))
     }
 }
 

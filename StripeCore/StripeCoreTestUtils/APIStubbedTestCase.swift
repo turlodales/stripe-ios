@@ -11,17 +11,18 @@ import OHHTTPStubs
 import OHHTTPStubsSwift
 import XCTest
 
-@testable@_spi(STP) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripeCore
 
 /// A test case offering a custom STPAPIClient with manual JSON stubbing.
+/// To automatically record requests, try STPNetworkStubbingTestCase instead.
 open class APIStubbedTestCase: XCTestCase {
     open override func setUp() {
         super.setUp()
         APIStubbedTestCase.stubAllOutgoingRequests()
     }
     public override func tearDown() {
-        super.tearDown()
         HTTPStubs.removeAllStubs()
+        super.tearDown()
     }
 
     public func stubbedAPIClient(configuration: URLSessionConfiguration? = nil) -> STPAPIClient {

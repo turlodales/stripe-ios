@@ -5,11 +5,11 @@
 //  Created by Cameron Sabol on 7/15/19.
 //  Copyright © 2019 Stripe, Inc. All rights reserved.
 //
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) @_spi(KlarnaSDKPrivatePreview) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPSetupIntentConfirmParamsTest: XCTestCase {
     func testInit() {
@@ -23,9 +23,12 @@ class STPSetupIntentConfirmParamsTest: XCTestCase {
             XCTAssertNotNil(params.additionalAPIParameters)
             XCTAssertEqual(params.additionalAPIParameters.count, 0)
             XCTAssertNil(params.paymentMethodID)
+            XCTAssertNil(params.paymentMethodOptions)
             XCTAssertNil(params.returnURL)
+            XCTAssertNil(params.setAsDefaultPM)
             XCTAssertNil(params.useStripeSDK)
             XCTAssertNil(params.mandateData)
+            XCTAssertNil(params.confirmationToken)
         }
     }
 
@@ -46,7 +49,7 @@ class STPSetupIntentConfirmParamsTest: XCTestCase {
         // card type should have no default mandateData
         XCTAssertNil(params.mandateData)
 
-        for type in ["sepa_debit", "au_becs_debit", "bacs_debit", "bancontact", "ideal", "eps", "sofort", "link", "us_bank_account", "cashapp", "paypal", "revolut_pay", "klarna"] {
+        for type in ["sepa_debit", "au_becs_debit", "bacs_debit", "bancontact", "ideal", "eps", "link", "us_bank_account", "cashapp", "paypal", "revolut_pay", "klarna", "alipay"] {
             params.mandateData = nil
             params.paymentMethodParams?.rawTypeString = type
             // Mandate-required type should have mandateData
@@ -93,8 +96,12 @@ class STPSetupIntentConfirmParamsTest: XCTestCase {
         let params = STPSetupIntentConfirmParams(clientSecret: "test_client_secret")
         params.paymentMethodParams = STPPaymentMethodParams()
         params.paymentMethodID = "test_payment_method_id"
+        params.paymentMethodOptions = STPConfirmPaymentMethodOptions(
+            klarnaOptions: STPConfirmKlarnaOptions(interoperabilityToken: "interoperability_token")
+        )
         params.returnURL = "fake://testing_only"
-        params.useStripeSDK = NSNumber(value: true)
+        params.setAsDefaultPM = true
+        params.useStripeSDK = true
         params.mandateData = STPMandateDataParams(
             customerAcceptance: STPMandateCustomerAcceptanceParams(
                 type: .offline,
@@ -104,6 +111,7 @@ class STPSetupIntentConfirmParamsTest: XCTestCase {
         params.additionalAPIParameters = [
             "other_param": "other_value"
         ]
+        params.confirmationToken = "ctoken_test_123"
 
         let paramsCopy = params.copy() as! STPSetupIntentConfirmParams
         XCTAssertEqual(params.clientSecret, paramsCopy.clientSecret)
@@ -111,15 +119,78 @@ class STPSetupIntentConfirmParamsTest: XCTestCase {
 
         // assert equal, not equal objects, because this is a shallow copy
         XCTAssertEqual(params.paymentMethodParams, paramsCopy.paymentMethodParams)
+        XCTAssertTrue(params.paymentMethodOptions === paramsCopy.paymentMethodOptions)
         XCTAssertEqual(params.mandateData, paramsCopy.mandateData)
 
         XCTAssertEqual(params.returnURL, paramsCopy.returnURL)
+        XCTAssertEqual(params.setAsDefaultPM, paramsCopy.setAsDefaultPM)
         XCTAssertEqual(params.useStripeSDK, paramsCopy.useStripeSDK)
         XCTAssertEqual(
             params.additionalAPIParameters as NSDictionary,
             paramsCopy.additionalAPIParameters as NSDictionary
         )
+        XCTAssertEqual(params.confirmationToken, paramsCopy.confirmationToken)
 
+    }
+
+    func testPaymentMethodOptionsFormEncoding() throws {
+        let params = STPSetupIntentConfirmParams()
+        params.paymentMethodOptions = STPConfirmPaymentMethodOptions(
+            klarnaOptions: STPConfirmKlarnaOptions(interoperabilityToken: "interoperability_token")
+        )
+
+        let encoded = STPFormEncoder.dictionary(forObject: params)
+        let paymentMethodOptions = try XCTUnwrap(encoded["payment_method_options"] as? [String: Any])
+        let klarnaOptions = try XCTUnwrap(paymentMethodOptions["klarna"] as? [String: Any])
+
+        XCTAssertEqual(klarnaOptions["interoperability_token"] as? String, "interoperability_token")
+        XCTAssertNil(klarnaOptions["partner_confirmation_token"])
+    }
+
+    func testFormFieldMappingIncludesPaymentMethodOptions() {
+        let mapping = STPSetupIntentConfirmParams.propertyNamesToFormFieldNamesMapping()
+        XCTAssertEqual(
+            mapping[NSStringFromSelector(#selector(getter: STPSetupIntentConfirmParams.paymentMethodOptions))],
+            "payment_method_options"
+        )
+    }
+
+    func testConfirmationTokenProperty() {
+        let params = STPSetupIntentConfirmParams()
+
+        XCTAssertNil(params.confirmationToken)
+
+        params.confirmationToken = "ctoken_test_123"
+        XCTAssertEqual(params.confirmationToken, "ctoken_test_123")
+
+        params.confirmationToken = ""
+        XCTAssertEqual(params.confirmationToken, "")
+
+        params.confirmationToken = nil
+        XCTAssertNil(params.confirmationToken)
+    }
+
+    func testFormFieldMappingIncludesConfirmationToken() {
+        let mapping = STPSetupIntentConfirmParams.propertyNamesToFormFieldNamesMapping()
+        XCTAssertEqual(mapping[NSStringFromSelector(#selector(getter: STPSetupIntentConfirmParams.confirmationToken))], "confirmation_token")
+    }
+
+    func testFormEncodingIncludesAlipayOptions() {
+        // Given
+        let params = STPSetupIntentConfirmParams(clientSecret: "seti_123_secret_456")
+        let alipayOptions = STPConfirmAlipayOptions()
+        alipayOptions.currency = "usd"
+        let paymentMethodOptions = STPConfirmPaymentMethodOptions()
+        paymentMethodOptions.alipayOptions = alipayOptions
+        params.paymentMethodOptions = paymentMethodOptions
+
+        // When
+        let encoded = STPFormEncoder.dictionary(forObject: params)
+
+        // Then
+        let encodedPaymentMethodOptions = encoded["payment_method_options"] as? [String: Any]
+        let alipay = encodedPaymentMethodOptions?["alipay"] as? [String: Any]
+        XCTAssertEqual(alipay?["currency"] as? String, "usd")
     }
 
     func testClientSecretValidation() {

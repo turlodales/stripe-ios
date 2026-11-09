@@ -1,34 +1,30 @@
 # Stripe iOS SDK
 
-[![CocoaPods](https://img.shields.io/cocoapods/v/Stripe.svg?style=flat)](http://cocoapods.org/?q=author%3Astripe%20name%3Astripe)
-[![Carthage compatible](https://img.shields.io/badge/Carthage-compatible-4BC51D.svg?style=flat)](https://github.com/Carthage/Carthage)
-[![License](https://img.shields.io/cocoapods/l/Stripe.svg?style=flat)](https://github.com/stripe/stripe-ios/blob/master/LICENSE)
-[![Platform](https://img.shields.io/cocoapods/p/Stripe.svg?style=flat)](https://github.com/stripe/stripe-ios#)
+> [!TIP]
+> Want to chat live with Stripe engineers? Join us on our [Discord server](https://stripe.com/go/developer-chat).
 
 The Stripe iOS SDK makes it quick and easy to build an excellent payment experience in your iOS app. We provide powerful and customizable UI screens and elements that can be used out-of-the-box to collect your users' payment details. We also expose the low-level APIs that power those UIs so that you can build fully custom experiences.
 
-Get started with our [📚 integration guides](https://stripe.com/docs/payments/accept-a-payment?platform=ios) and [example projects](#examples), or [📘 browse the SDK reference](https://stripe.dev/stripe-ios/docs/index.html).
-
-Learn about our [Stripe Identity iOS SDK](StripeIdentity/README.md) to verify the identity of your users on iOS.
+Get started with our [📚 integration guides](https://stripe.com/docs/payments/accept-a-payment?platform=ios) and [example projects](#Examples), or [📘 browse the SDK reference](https://stripe.dev/stripe-ios/docs/index.html).
 
 > Updating to a newer version of the SDK? See our [migration guide](https://github.com/stripe/stripe-ios/blob/master/MIGRATING.md) and [changelog](https://github.com/stripe/stripe-ios/blob/master/CHANGELOG.md).
 
 Table of contents
 =================
-
+<!-- NOTE: Use case-sensitive anchor links for docc compatibility -->
 <!--ts-->
-   * [Features](#features)
-   * [Releases](#releases)
-   * [Requirements](#requirements)
-   * [Getting started](#getting-started)
-      * [Integration](#integration)
-      * [Examples](#examples)
-      * [Building from source](#building-from-source)
-   * [Card scanning](#card-scanning)
-   * [Contributing](#contributing)
-   * [Migrating](#migrating-from-older-versions)
-   * [Code Stye](#code-style)
-   * [Licenses](#licenses)
+   * [Features](#Features)
+   * [Releases](#Releases)
+   * [Requirements](#Requirements)
+   * [Getting started](#Getting-started)
+      * [Integration](#Integration)
+      * [Examples](#Examples)
+      * [Building from source](#Building-from-source)
+   * [Card scanning](#Card-scanning)
+   * [Contributing](#Contributing)
+   * [Migrating](#Migrating-from-older-versions)
+   * [Code Style](#Code-style)
+   * [Licenses](#Licenses)
 
 <!--te-->
 
@@ -46,11 +42,11 @@ Table of contents
 
 **Stripe API**: [StripePayments](StripePayments/README.md) provides [low-level APIs](https://stripe.dev/stripe-ios/docs/Classes/STPAPIClient.html) that correspond to objects and methods in the Stripe API. You can build your own entirely custom UI on top of this layer, while still taking advantage of utilities like [STPCardValidator](https://stripe.dev/stripe-ios/docs/Classes/STPCardValidator.html) to validate your user’s input.
 
-**Card scanning**: We support card scanning on iOS 13 and higher. See our [Card scanning](#card-scanning) section.
-
 **App Clips**: The `StripeApplePay` module provides a [lightweight SDK for offering Apple Pay in an App Clip](https://stripe.com/docs/apple-pay#app-clips).
 
-**Localized**: We support the following localizations: Bulgarian, Catalan, Chinese (Hong Kong), Chinese (Simplified), Chinese (Traditional), Croatian, Czech, Danish, Dutch, English (US), English (United Kingdom), Estonian, Filipino, Finnish, French, French (Canada), German, Greek, Hungarian, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Maltese, Norwegian Bokmål, Norwegian Nynorsk (Norway), Polish, Portuguese, Portuguese (Brazil), Romanian, Russian, Slovak, Slovenian, Spanish, Spanish (Latin America), Swedish, Turkish, Thai and Vietnamese.
+**Localized**: We support the following localizations: Arabic (Saudi Arabia), Bulgarian, Catalan, Chinese (Hong Kong), Chinese (Simplified), Chinese (Traditional), Croatian, Czech, Danish, Dutch, English (US), English (United Kingdom), Estonian, Filipino, Finnish, French, French (Canada), German, Greek, Hungarian, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Maltese, Norwegian Bokmål, Norwegian Nynorsk (Norway), Polish, Portuguese, Portuguese (Brazil), Romanian, Russian, Slovak, Slovenian, Spanish, Spanish (Latin America), Swedish, Turkish, Thai, Vietnamese and Welsh.
+
+**Identity**: Learn about our [Stripe Identity iOS SDK](StripeIdentity/README.md) to verify the identity of your users.
 
 #### Recommended usage
 
@@ -63,17 +59,21 @@ The Stripe iOS SDK collects data to help us improve our products and prevent fra
 For help with Apple's App Privacy Details form in App Store Connect, visit [Stripe iOS SDK Privacy Details](https://support.stripe.com/questions/stripe-ios-sdk-privacy-details).
 
 ## Modules
-|Module|Description|Compressed|Uncompressed|
-|------|-----------|----------|------------|
-|StripePaymentSheet|Stripe's [prebuilt payment UI](https://stripe.com/docs/payments/accept-a-payment?platform=ios&ui=payment-sheet).|2.7MB|6.3MB|
-|Stripe|Contains all the below frameworks, plus [Issuing](https://stripe.com/docs/issuing/cards/digital-wallets?platform=iOS) and [Basic Integration](https://stripe.com/docs/mobile/ios/basic).|2.3MB|5.1MB|
-|StripeApplePay|[Apple Pay support](/docs/apple-pay), including `STPApplePayContext`.|0.4MB|1.0MB|
-|StripePayments|Bindings for the Stripe Payments API.|1.0MB|2.6MB|
-|StripePaymentsUI|Bindings for the Stripe Payments API, [STPPaymentCardTextField](https://stripe.com/docs/payments/accept-a-payment?platform=ios&ui=custom), STPCardFormView, and other UI elements.|1.7MB|3.9MB|
+
+| Module | Description |
+|--------|-------------|
+| [StripePaymentSheet](StripePaymentSheet) | Stripe's [prebuilt payment UI](https://stripe.com/docs/payments/accept-a-payment?platform=ios&ui=payment-sheet). |
+| [StripeConnect](StripeConnect) | Connect embedded components to add connected account dashboard functionality to your app. |
+| [StripeIdentity](StripeIdentity) | Securely capture ID documents and selfies on iOS for use with [Stripe's Identity API](https://docs.stripe.com/identity) to confirm the identity of global users. |
+| [StripeFinancialConnections](StripeFinancialConnections) | Securely connect financial accounts to Stripe's merchant account with [Stripe Financial Connections](https://docs.stripe.com/financial-connections). |
+| Stripe | Contains all the below frameworks, plus [Issuing](https://stripe.com/docs/issuing/cards/digital-wallets?platform=iOS). |
+| [StripeApplePay](StripeApplePay) | [Apple Pay support](/docs/apple-pay), including `STPApplePayContext`. |
+| [StripePayments](StripePayments) | Bindings for the Stripe Payments API. |
+| [StripePaymentsUI](StripePaymentsUI) | Bindings for the Stripe Payments API, [STPPaymentCardTextField](https://stripe.com/docs/payments/accept-a-payment?platform=ios&ui=custom), STPCardFormView, and other UI elements. |
 
 ## Releases
 
-We support Cocoapods, Carthage, and Swift Package Manager.
+We recommend Swift Package Manager. In Xcode, select **File > Add Packages…** and enter `https://github.com/stripe/stripe-ios-spm` as the repository URL.
 
 If you link the library manually, use a version from our [releases](https://github.com/stripe/stripe-ios/releases) page and make sure to embed <ins>all</ins> of the required frameworks.
 
@@ -83,23 +83,28 @@ For the `Stripe` module, link the following frameworks:
 - `StripeApplePay.xcframework`
 - `StripePayments.xcframework`
 - `StripePaymentsUI.xcframework`
+- `StripeFinancialConnectionsLite.xcframework`
+- `StripeIssuing.xcframework`
 - `StripeCore.xcframework`
 - `StripeUICore.xcframework`
 
 For other modules, follow the instructions below:
+- [StripeApplePay](StripeApplePay/README.md#manual-linking)
+- [StripeConnect](StripeConnect/README.md#manual-linking)
+- [StripeFinancialConnections](StripeFinancialConnections/README.md#manual-linking)
+- [StripeIdentity](StripeIdentity/README.md#manual-linking)
+- [StripeIssuing](StripeIssuing/README.md#manual-linking)
 - [StripePaymentSheet](StripePaymentSheet/README.md#manual-linking)
 - [StripePayments](StripePayments/README.md#manual-linking)
 - [StripePaymentsUI](StripePaymentsUI/README.md#manual-linking)
-- [StripeApplePay](StripeApplePay/README.md#manual-linking)
-- [StripeIdentity](StripeIdentity/README.md#manual-linking)
 
 If you're reading this on GitHub.com, please make sure you are looking at the [tagged version](https://github.com/stripe/stripe-ios/tags) that corresponds to the release you have installed. Otherwise, the instructions and example code may be mismatched with your copy.
 
 ## Requirements
 
-The Stripe iOS SDK requires Xcode 15 or later and is compatible with apps targeting iOS 13 or above. We support Catalyst on macOS 11 or later.
+The Stripe iOS SDK supports all [Apple supported Xcode versions](https://developer.apple.com/news/upcoming-requirements/) and is compatible with apps targeting iOS 15 or above. We support Catalyst on macOS 12 or later.
 
-For iOS 12 support, please use [v22.8.4](https://github.com/stripe/stripe-ios/tree/v22.8.4). For iOS 11 support, please use [v21.13.0](https://github.com/stripe/stripe-ios/tree/v21.13.0). For iOS 10, please use [v19.4.0](https://github.com/stripe/stripe-ios/tree/v19.4.0). If you need to support iOS 9, use [v17.0.2](https://github.com/stripe/stripe-ios/tree/v17.0.2).
+For iOS 13 and 14 support, please use [25.17.0](https://github.com/stripe/stripe-ios/tree/v25.17.0).
 
 ## Getting started
 
@@ -117,7 +122,7 @@ Get started with our [📚 integration guides](https://stripe.com/docs/payments/
 
 ## Card scanning
 
-[PaymentSheet](https://stripe.com/docs/payments/accept-a-payment?platform=ios) offers built-in card scanning. To enable card scanning, you'll need to set `NSCameraUsageDescription` in your application's plist, and provide a reason for accessing the camera (e.g. "To scan cards"). Card scanning is supported on devices with iOS 13 or higher.
+[PaymentSheet](https://stripe.com/docs/payments/accept-a-payment?platform=ios) offers built-in card scanning. To enable card scanning, you'll need to set `NSCameraUsageDescription` in your application's plist, and provide a reason for accessing the camera (e.g. "To scan cards").
 
 You can demo this feature in our [PaymentSheet example app](Example/PaymentSheet%20Example). When you run the example app on a device, you'll see a "Scan Card" button when adding a new card.
 
@@ -127,20 +132,20 @@ We welcome contributions of any kind including new features, bug fixes, and docu
 
 ### Running tests
 
-1. Install Carthage 0.37 or later (if you have homebrew installed, `brew install carthage`)
-2. From the root of the repo, run `bundle install && bundle exec fastlane stripeios_tests`. This will install the test dependencies and run the tests.
-3. Once you have run this once, you can also run the tests in Xcode from the `StripeiOS` target in `Stripe.xcworkspace`.
+1. From the root of the repo, run `bundle install && bundle exec fastlane stripeios_tests`. This will install the test dependencies and run the tests.
+2. Once you have run this once, you can also run the tests in Xcode from the `StripeiOS` target in `Stripe.xcworkspace`.
 
 To re-record snapshot tests, use the `bundle exec ruby ci_scripts/snapshots.rb --record`.
 
 ## Migrating from older versions
 
-See [MIGRATING.md](https://github.com/stripe/stripe-ios/blob/master/MIGRATING.md)
+* To migrate from an old SDK version, see [MIGRATING.md](https://github.com/stripe/stripe-ios/blob/master/MIGRATING.md).
+* To migrate from CocoaPods, see [MIGRATING-COCOAPODS.md](https://github.com/stripe/stripe-ios/blob/master/MIGRATING-COCOAPODS.md).
 
 ## Code style
 We use [swiftlint](https://github.com/realm/SwiftLint) to enforce code style.
 
-To install it, run `brew install swiftlint`
+The lint and formatting scripts automatically use the version pinned in `.swiftlint-version`, downloading it to a local cache if necessary. No separate installation is required.
 
 To lint your code before pushing you can run `ci_scripts/lint_modified_files.sh`
 

@@ -7,18 +7,16 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 // MARK: - Creation
 extension STPAnalyticsClient {
     func logTokenCreationAttempt(
-        with configuration: NSObject?,
         tokenType: String?
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .tokenCreation,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "token_type": tokenType ?? "unknown",
                 ]
@@ -27,13 +25,11 @@ extension STPAnalyticsClient {
     }
 
     func logSourceCreationAttempt(
-        with configuration: NSObject?,
         sourceType: String?
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .sourceCreation,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "source_type": sourceType ?? "unknown",
                 ]
@@ -42,14 +38,12 @@ extension STPAnalyticsClient {
     }
 
     func logPaymentMethodCreationAttempt(
-        with configuration: NSObject?,
         paymentMethodType: String?,
         apiClient: STPAPIClient
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .paymentMethodCreation,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "source_type": paymentMethodType ?? "unknown",
                 ]
@@ -64,7 +58,15 @@ extension STPAnalyticsClient {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .paymentMethodUpdate,
-                paymentConfiguration: configuration,
+                additionalParams: [:]
+            )
+        )
+    }
+
+    func logConfirmationTokenCreationAttempt() {
+        log(
+            analytic: GenericPaymentAnalytic(
+                event: .confirmationTokenCreation,
                 additionalParams: [:]
             )
         )
@@ -74,14 +76,12 @@ extension STPAnalyticsClient {
 // MARK: - Confirmation
 extension STPAnalyticsClient {
     func logPaymentIntentConfirmationAttempt(
-        with configuration: NSObject?,
         paymentMethodType: String?,
         apiClient: STPAPIClient
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .paymentMethodIntentCreation,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "source_type": paymentMethodType ?? "unknown",
                 ]
@@ -91,14 +91,12 @@ extension STPAnalyticsClient {
     }
 
     func logSetupIntentConfirmationAttempt(
-        with configuration: NSObject?,
         paymentMethodType: String?,
         apiClient: STPAPIClient
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .setupIntentConfirmationAttempt,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "source_type": paymentMethodType ?? "unknown",
                 ]
@@ -111,14 +109,12 @@ extension STPAnalyticsClient {
 // MARK: - 3DS2 Flow
 extension STPAnalyticsClient {
     func log3DS2AuthenticationRequestParamsFailed(
-        with configuration: NSObject?,
         intentID: String,
         error: NSError
     ) {
         log(
             analytic: GenericPaymentErrorAnalytic(
                 event: ._3DS2AuthenticationRequestParamsFailed,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                 ],
@@ -128,13 +124,11 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2AuthenticateAttempt(
-        with configuration: NSObject?,
         intentID: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2AuthenticationAttempt,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                 ]
@@ -143,28 +137,11 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2FrictionlessFlow(
-        with configuration: NSObject?,
         intentID: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2FrictionlessFlow,
-                paymentConfiguration: configuration,
-                additionalParams: [
-                    "intent_id": intentID,
-                ]
-            )
-        )
-    }
-
-    func logURLRedirectNextAction(
-        with configuration: NSObject?,
-        intentID: String
-    ) {
-        log(
-            analytic: GenericPaymentAnalytic(
-                event: .urlRedirectNextAction,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                 ]
@@ -173,14 +150,12 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2ChallengeFlowPresented(
-        with configuration: NSObject?,
         intentID: String,
         uiType: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2ChallengeFlowPresented,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                     "3ds2_ui_type": uiType,
@@ -190,14 +165,12 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2ChallengeFlowTimedOut(
-        with configuration: NSObject?,
         intentID: String,
         uiType: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2ChallengeFlowTimedOut,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                     "3ds2_ui_type": uiType,
@@ -207,14 +180,12 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2ChallengeFlowUserCanceled(
-        with configuration: NSObject?,
         intentID: String,
         uiType: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2ChallengeFlowUserCanceled,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                     "3ds2_ui_type": uiType,
@@ -224,13 +195,11 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2RedirectUserCanceled(
-        with configuration: NSObject?,
         intentID: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2RedirectUserCanceled,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                 ]
@@ -239,14 +208,12 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2ChallengeFlowCompleted(
-        with configuration: NSObject?,
         intentID: String,
         uiType: String
     ) {
         log(
             analytic: GenericPaymentAnalytic(
                 event: ._3DS2ChallengeFlowCompleted,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                     "3ds2_ui_type": uiType,
@@ -256,14 +223,12 @@ extension STPAnalyticsClient {
     }
 
     func log3DS2ChallengeFlowErrored(
-        with configuration: NSObject?,
         intentID: String,
         error: NSError
     ) {
         log(
             analytic: GenericPaymentErrorAnalytic(
                 event: ._3DS2ChallengeFlowErrored,
-                paymentConfiguration: configuration,
                 additionalParams: [
                     "intent_id": intentID,
                 ],
@@ -275,11 +240,10 @@ extension STPAnalyticsClient {
 
 // MARK: - Card Metadata
 extension STPAnalyticsClient {
-    @_spi(STP) public func logUserEnteredCompletePANBeforeMetadataLoaded() {
+    @_spi(InternalOnlyAPI) public func logUserEnteredCompletePANBeforeMetadataLoaded() {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .cardMetadataLoadedTooSlow,
-                paymentConfiguration: nil,
                 additionalParams: [:]
             )
         )
@@ -289,7 +253,6 @@ extension STPAnalyticsClient {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .cardMetadataResponseFailure,
-                paymentConfiguration: nil,
                 additionalParams: [:]
             )
         )
@@ -299,7 +262,6 @@ extension STPAnalyticsClient {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .cardMetadataMissingRange,
-                paymentConfiguration: nil,
                 additionalParams: [:]
             )
         )
@@ -308,7 +270,7 @@ extension STPAnalyticsClient {
 
 // MARK: - Card Scanning
 extension STPAnalyticsClient {
-    @_spi(STP) public func logCardScanSucceeded(withDuration duration: TimeInterval) {
+    @_spi(InternalOnlyAPI) public func logCardScanSucceeded(withDuration duration: TimeInterval) {
         log(
             analytic: GenericAnalytic(
                 event: .cardScanSucceeded,
@@ -319,7 +281,7 @@ extension STPAnalyticsClient {
         )
     }
 
-    @_spi(STP) public func logCardScanCancelled(withDuration duration: TimeInterval) {
+    @_spi(InternalOnlyAPI) public func logCardScanCancelled(withDuration duration: TimeInterval) {
         log(
             analytic: GenericAnalytic(
                 event: .cardScanCancelled,
@@ -333,11 +295,10 @@ extension STPAnalyticsClient {
 
 // MARK: - Card Element Config
 extension STPAnalyticsClient {
-    @_spi(STP) public func logCardElementConfigLoadFailed() {
+    @_spi(InternalOnlyAPI) public func logCardElementConfigLoadFailed() {
         log(
             analytic: GenericPaymentAnalytic(
                 event: .cardElementConfigLoadFailure,
-                paymentConfiguration: nil,
                 additionalParams: [:]
             )
         )
@@ -346,11 +307,11 @@ extension STPAnalyticsClient {
 
 /// An analytic specific to payments that serializes payment-specific
 /// information into its params.
-@_spi(STP) public protocol PaymentAnalytic: Analytic {
+@_spi(InternalOnlyAPI) public protocol PaymentAnalytic: Analytic {
     var additionalParams: [String: Any] { get }
 }
 
-@_spi(STP) extension PaymentAnalytic {
+@_spi(InternalOnlyAPI) extension PaymentAnalytic {
     public var params: [String: Any] {
         var params = additionalParams
 

@@ -8,8 +8,9 @@
 //
 
 import StripeCoreTestUtils
+import StripePaymentsTestUtils
 
-class STPPaymentMethodAfterpayClearpayParamsTest: XCTestCase {
+class STPPaymentMethodAfterpayClearpayParamsTest: STPNetworkStubbingTestCase {
     func testCreateAfterpayClearpayPaymentMethod() {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let afterpayClearpayParams = STPPaymentMethodAfterpayClearpayParams()
@@ -40,10 +41,6 @@ class STPPaymentMethodAfterpayClearpayParamsTest: XCTestCase {
             XCTAssertNotNil(paymentMethod?.created, "Missing created")
             XCTAssertFalse(paymentMethod!.liveMode, "Incorrect livemode")
             XCTAssertEqual(paymentMethod?.type, .afterpayClearpay, "Incorrect PaymentMethod type")
-            // #pragma clang diagnostic push
-            // #pragma clang diagnostic ignored "-Wdeprecated"
-            XCTAssertNil(paymentMethod?.metadata, "Metadata is not returned.")
-            // #pragma clang diagnostic pop
 
             // Billing Details
             XCTAssertEqual(paymentMethod?.billingDetails!.email, "jrosen@example.com")

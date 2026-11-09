@@ -9,14 +9,18 @@
 import UIKit
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
 @testable import StripeCoreTestUtils
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPCardValidatorTest: XCTestCase {
+    override class func setUp() {
+        STPBINController.shared.reset()
+    }
+
     static let cardData: [(STPCardBrand, String, STPCardValidationState)] = {
         return [
             (
@@ -274,10 +278,14 @@ class STPCardValidatorTest: XCTestCase {
             ("8", "15", .valid),
             ("9", "15", .valid),
             ("11", "16", .valid),
-            ("11", "99", .valid),
-            ("01", "99", .valid),
-            ("1", "99", .valid),
+            ("11", "99", .invalid),
+            ("01", "99", .invalid),
+            ("11", "50", .valid),
+            ("01", "50", .valid),
+            ("1", "50", .valid),
+            ("1", "99", .invalid),
             ("00", "99", .invalid),
+            ("00", "50", .invalid),
             ("12", "14", .invalid),
             ("7", "15", .invalid),
             ("12", "00", .invalid),
@@ -294,7 +302,7 @@ class STPCardValidatorTest: XCTestCase {
                 inCurrentYear: 15,
                 currentMonth: 8
             )
-            XCTAssertEqual(state, test.2)
+            XCTAssertEqual(state, test.2, "Failed to validate \(test.0)/\(test.1)")
         }
     }
 
@@ -430,7 +438,10 @@ class STPCardValidatorTest: XCTestCase {
     }
 
     func testCBCFetch() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
+        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+        defer {
+            STPAPIClient.shared.publishableKey = nil // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+        }
         let mcExp = expectation(description: "Mastercard/CBC")
         let visaExp = expectation(description: "Visa/CBC")
         let justVisaExp = expectation(description: "Visa Only")

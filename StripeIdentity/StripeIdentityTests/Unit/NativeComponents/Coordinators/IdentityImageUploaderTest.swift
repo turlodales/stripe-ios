@@ -7,11 +7,11 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCoreTestUtils
 import XCTest
 
 // swift-format-ignore
-@testable @_spi(STP) import StripeCore
+@testable @_spi(InternalOnlyAPI) import StripeCore
 
 @testable import StripeIdentity
 
@@ -40,10 +40,12 @@ final class IdentityImageUploaderTest: XCTestCase {
         mockAnalyticsClient = MockAnalyticsClientV2()
         uploader = IdentityImageUploader(
             configuration: IdentityImageUploaderTest.mockConfig,
-            apiClient: mockAPIClient,
-            analyticsClient: IdentityAnalyticsClient(
-                verificationSessionId: "",
-                analyticsClient: mockAnalyticsClient
+            sheetController: VerificationSheetControllerMock(
+                apiClient: mockAPIClient,
+                analyticsClient: IdentityAnalyticsClient(
+                    verificationSessionId: "",
+                    analyticsClient: mockAnalyticsClient
+                )
             )
         )
     }

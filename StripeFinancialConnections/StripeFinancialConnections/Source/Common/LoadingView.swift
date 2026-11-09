@@ -5,24 +5,23 @@
 //  Created by Vardges Avetisyan on 6/3/22.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class LoadingView: UIView {
+
+    private let appearance: FinancialConnectionsAppearance?
 
     // MARK: - Subview Properties
 
     private lazy var errorLabel: UILabel = {
         let label = UILabel()
-        label.text = STPLocalizedString(
-            "Failed to connect",
-            "Error message that displays when we're unable to connect to the server."
-        )
+        label.text = String.Localized.failed_to_connect
         label.textAlignment = .center
         label.numberOfLines = 0
         label.font = Styling.errorLabelFont
-        label.textColor = .textDefault
+        label.textColor = FinancialConnectionsAppearance.Colors.textDefault
         return label
     }()
 
@@ -44,11 +43,14 @@ class LoadingView: UIView {
         return stackView
     }()
 
-    private let spinnerView = SpinnerView(shouldStartAnimating: false)
+    private lazy var spinnerView = {
+        SpinnerView(appearance: appearance, shouldStartAnimating: false)
+    }()
 
     // MARK: - Init
 
-    override init(frame: CGRect) {
+    init(frame: CGRect, appearance: FinancialConnectionsAppearance?) {
+        self.appearance = appearance
         super.init(frame: frame)
 
         errorView.addArrangedSubview(errorLabel)

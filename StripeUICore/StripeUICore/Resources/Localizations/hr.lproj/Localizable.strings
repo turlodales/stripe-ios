@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (neobavezno)";
+
+"(not accepted)" = "(nije prihvaćena)";
 
 "Account number" = "Broj računa";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB broj";
 
-"Billing address is same as shipping" = "Adresa računa jednaka je adresi dostave";
+"Bank account •••• %@" = "Bankovni račun •••• %@";
 
-"Cancel" = "Otkaži";
+"Billing address is same as shipping" = "Adresa računa jednaka je adresi dostave";
 
 "Card brand" = "Robna marka kartice";
 
@@ -34,7 +38,7 @@
 
 "County" = "Grofovija";
 
-"Date is empty." = "Datum je prazan.";
+"Date of Birth" = "Datum rođenja";
 
 "Department" = "Administrativna jedinica";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Nepotpuni telefonski broj";
 
-"Invalid UPI ID" = "Nevažeći UPI ID";
-
 "Island" = "Otok";
 
 "Last" = "Prezime";
@@ -82,21 +84,19 @@
 
 "Parish" = "Župa";
 
-"Phone" = "Telefon";
-
 "Phone number" = "Telefonski broj";
 
 "Postal code" = "Poštanski broj";
 
 "Prefecture" = "Prefektura";
 
+"Processing..." = "Obrada…";
+
 "Province" = "Provincija";
 
 "Remove" = "Ukloni";
 
-"Remove bank account" = "Ukloni bankovni račun";
-
-"Remove bank account ending in %@" = "Ukloni bankovni račun koji završava na %@";
+"Remove bank account?" = "Ukloniti bankovni račun?";
 
 "Remove card" = "Ukloni karticu";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Odaberite marku kartice (nije obavezno)";
 
+"Selection is empty." = "Odabir je prazan.";
+
+"Something went wrong" = "Došlo je do pogreške";
+
 "Sort code" = "Bankovni kod za razvrstavanje (UK)";
 
 "State" = "Država";
+
+"Submit" = "Pošalji";
 
 "Suburb" = "Predgrađe";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Gradić ili grad";
 
-"UPI ID" = "UPI ID";
-
 "Unable to parse phone number" = "Broj telefona nije moguće pročitati";
 
 "Use rotor to access links" = "Upotrijebite rotor za pristup poveznicama";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Vaš BLIK kod je nevažeći.";
 
-"Your ZIP is incomplete." = "Vaš ZIP broj nije kompletan.";
+"Your ZIP code is incomplete." = "Vaš poštanski broj nepotpun je.";
+
+"Your ZIP code is invalid." = "Vaš poštanski broj nije valjan.";
 
 "Your email is invalid." = "Vaš e-mail je neispravan.";
 
 "Your payment information will not be saved." = "Vaši podaci o plaćanju neće biti spremljeni.";
 
 "Your postal code is incomplete." = "Vaš poštanski broj nije kompletan.";
+
+"Your postal code is invalid." = "Vaš poštanski broj nije valjan.";
 
 "ZIP" = "ZIP";

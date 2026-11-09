@@ -7,8 +7,8 @@
 //
 import Foundation
 import SafariServices
-@_spi(STP) import StripePaymentsUI
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 @objc(STP_Internal_AUBECSLegalTermsView)
@@ -19,7 +19,7 @@ final class AUBECSLegalTermsView: UIView {
     ]
     private let configuration: PaymentSheetFormFactoryConfig
 
-    private var theme: ElementsUITheme {
+    private var theme: ElementsAppearance {
         return configuration.appearance.asElementsTheme
     }
 
@@ -27,10 +27,8 @@ final class AUBECSLegalTermsView: UIView {
         let textView = UITextView()
         textView.isScrollEnabled = false
         textView.isEditable = false
-        textView.font = theme.fonts.caption
         textView.backgroundColor = .clear
         textView.attributedText = formattedLegalText()
-        textView.textColor = theme.colors.secondaryText
         textView.linkTextAttributes = [.foregroundColor: theme.colors.primary]
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
@@ -38,7 +36,7 @@ final class AUBECSLegalTermsView: UIView {
         return textView
     }()
 
-    init(configuration: PaymentSheetFormFactoryConfig, textAlignment: NSTextAlignment = .left) {
+    init(configuration: PaymentSheetFormFactoryConfig, textAlignment: NSTextAlignment = .natural) {
         self.configuration = configuration
         super.init(frame: .zero)
         self.textView.textAlignment = textAlignment
@@ -49,10 +47,10 @@ final class AUBECSLegalTermsView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        textView.font = .preferredFont(forTextStyle: .caption1)
+        textView.font = theme.fonts.caption
     }
 #endif
 
@@ -62,24 +60,14 @@ final class AUBECSLegalTermsView: UIView {
             "Legal text shown when using AUBECS."
         )
         let string = String(format: template, configuration.merchantDisplayName)
-
-        let formattedString = NSMutableAttributedString()
-
-        STPStringUtils.parseRanges(from: string, withTags: Set<String>(links.keys)) { string, matches in
-            formattedString.append(NSAttributedString(string: string))
-
-            for (tag, range) in matches {
-                guard range.rangeValue.location != NSNotFound else {
-                    assertionFailure("Tag '<\(tag)>' not found")
-                    continue
-                }
-
-                if let url = links[tag] {
-                    formattedString.addAttributes([.link: url], range: range.rangeValue)
-                }
-            }
-        }
-
+        let formattedString = STPStringUtils.applyLinksToString(template: string, links: links)
+        formattedString.addAttributes(
+            [
+                .font: theme.fonts.caption,
+                .foregroundColor: theme.colors.secondaryText,
+            ],
+            range: formattedString.extent
+        )
         return formattedString
     }
 

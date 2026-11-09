@@ -13,6 +13,12 @@ public struct CustomerSheetTestPlaygroundSettings: Codable, Equatable {
         case returning
         case customID
     }
+    enum CustomerKeyType: String, PickerEnum {
+        static var enumName: String { "CustomerKeyType" }
+
+        case legacy
+        case customerSession = "customer_session"
+    }
     enum PaymentMethodMode: String, PickerEnum {
         static var enumName: String { "PaymentMethodMode" }
 
@@ -76,6 +82,7 @@ public struct CustomerSheetTestPlaygroundSettings: Codable, Equatable {
 
         case US
         case FR
+        case custom
     }
     enum PreferredNetworksEnabled: String, PickerEnum {
         static let enumName: String = "Preferred Networks (CBC)"
@@ -98,9 +105,66 @@ public struct CustomerSheetTestPlaygroundSettings: Codable, Equatable {
         case on
         case off
     }
+    enum PaymentMethodRemove: String, PickerEnum {
+        static let enumName: String = "PaymentMethodRemove"
+
+        case enabled
+        case disabled
+    }
+    enum PaymentMethodRemoveLast: String, PickerEnum {
+        static let enumName: String = "PaymentMethodRemoveLast"
+
+        case enabled
+        case disabled
+    }
+    enum PaymentMethodAllowRedisplayFilters: String, PickerEnum {
+        static var enumName: String { "PaymentMethodRedisplayFilters" }
+
+        case always
+        case limited
+        case unspecified
+        case unspecified_limited_always
+        case notSet
+
+        func arrayValue() -> [String]? {
+            switch self {
+            case .always:
+                return ["always"]
+            case .limited:
+                return ["limited"]
+            case .unspecified:
+                return ["unspecified"]
+            case .unspecified_limited_always:
+                return ["unspecified", "limited", "always"]
+            case .notSet:
+                return nil
+            }
+        }
+    }
+
+    enum PaymentMethodSyncDefault: String, PickerEnum {
+        static let enumName: String = "PaymentMethodSyncDefault"
+
+        case enabled
+        case disabled
+    }
+
+    enum CardBrandAcceptance: String, PickerEnum {
+        static let enumName: String = "cardBrandAcceptance"
+        case all
+        case blockAmEx
+        case allowVisa
+    }
+
+    enum OpensCardScannerAutomatically: String, PickerEnum {
+        static let enumName: String = "opensCardScannerAutomatically"
+        case on
+        case off
+    }
 
     var customerMode: CustomerMode
     var customerId: String?
+    var customerKeyType: CustomerKeyType
     var paymentMethodMode: PaymentMethodMode
     var applePay: ApplePay
     var headerTextForSelectionScreen: String?
@@ -115,10 +179,21 @@ public struct CustomerSheetTestPlaygroundSettings: Codable, Equatable {
     var merchantCountryCode: MerchantCountry
     var preferredNetworksEnabled: PreferredNetworksEnabled
     var allowsRemovalOfLastSavedPaymentMethod: AllowsRemovalOfLastSavedPaymentMethod
+    var paymentMethodRemove: PaymentMethodRemove
+    var paymentMethodRemoveLast: PaymentMethodRemoveLast
+    var paymentMethodAllowRedisplayFilters: PaymentMethodAllowRedisplayFilters
+    var paymentMethodSyncDefault: PaymentMethodSyncDefault
+    var cardBrandAcceptance: CardBrandAcceptance
+    var opensCardScannerAutomatically: OpensCardScannerAutomatically
+
+    // For testing purposes only; keys should typically not be defined on the client
+    var customSecretKey: String?
+    var customPublishableKey: String?
 
     static func defaultValues() -> CustomerSheetTestPlaygroundSettings {
         return CustomerSheetTestPlaygroundSettings(customerMode: .new,
                                                    customerId: nil,
+                                                   customerKeyType: .customerSession,
                                                    paymentMethodMode: .setupIntent,
                                                    applePay: .on,
                                                    headerTextForSelectionScreen: nil,
@@ -131,12 +206,21 @@ public struct CustomerSheetTestPlaygroundSettings: Codable, Equatable {
                                                    collectAddress: .automatic,
                                                    merchantCountryCode: .US,
                                                    preferredNetworksEnabled: .off,
-                                                   allowsRemovalOfLastSavedPaymentMethod: .on)
+                                                   allowsRemovalOfLastSavedPaymentMethod: .on,
+                                                   paymentMethodRemove: .enabled,
+                                                   paymentMethodRemoveLast: .enabled,
+                                                   paymentMethodAllowRedisplayFilters: .always,
+                                                   paymentMethodSyncDefault: .disabled,
+                                                   cardBrandAcceptance: .all,
+                                                   opensCardScannerAutomatically: .off,
+                                                   customSecretKey: nil,
+                                                   customPublishableKey: nil)
     }
 
     var base64Data: String {
         let jsonData = try! JSONEncoder().encode(self)
-        return jsonData.base64EncodedString()
+        let compressedData = try! (jsonData as NSData).compressed(using: .lzfse) as Data
+        return compressedData.base64EncodedString()
     }
 
     static let nsUserDefaultsKey = "CustomerSheetPlaygroundSettings"

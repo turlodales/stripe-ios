@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (valfritt)";
+
+"(not accepted)" = "(accepteras inte)";
 
 "Account number" = "Kontonummer";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB-nummer";
 
-"Billing address is same as shipping" = "Faktureringsadress är samma som leveransadress";
+"Bank account •••• %@" = "Bankkonto •••• %@";
 
-"Cancel" = "Avbryt";
+"Billing address is same as shipping" = "Faktureringsadress är samma som leveransadress";
 
 "Card brand" = "Kortmärke";
 
@@ -34,7 +38,7 @@
 
 "County" = "Landskap";
 
-"Date is empty." = "Datumfältet är tomt.";
+"Date of Birth" = "Födelsedatum";
 
 "Department" = "Departement";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Ofullständigt telefonnummer";
 
-"Invalid UPI ID" = "Ogiltigt UPI ID";
-
 "Island" = "Ö";
 
 "Last" = "Efternamn";
@@ -82,21 +84,19 @@
 
 "Parish" = "Parish";
 
-"Phone" = "Telefonnummer";
-
 "Phone number" = "Telefonnummer";
 
 "Postal code" = "Postnummer";
 
 "Prefecture" = "Prefektur";
 
+"Processing..." = "Behandlar …";
+
 "Province" = "Provins";
 
 "Remove" = "Ta bort";
 
-"Remove bank account" = "Ta bort bankkonto";
-
-"Remove bank account ending in %@" = "Ta bort bankkonto som slutar på %@";
+"Remove bank account?" = "Ta bort bankkonto?";
 
 "Remove card" = "Ta bort kort";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Välj korttyp (valfritt)";
 
+"Selection is empty." = "Urvalet är tomt.";
+
+"Something went wrong" = "Någonting gick fel";
+
 "Sort code" = "Clearingnummer";
 
 "State" = "Delstat";
+
+"Submit" = "Skicka";
 
 "Suburb" = "Förort";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Stad";
 
-"UPI ID" = "UPI ID";
-
 "Unable to parse phone number" = "Det gick inte att analysera telefonnumret";
 
 "Use rotor to access links" = "Använd rotorn för att komma åt länkar";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Din BLIK-kod är ogiltig.";
 
-"Your ZIP is incomplete." = "Ditt postnummer är ofullständigt.";
+"Your ZIP code is incomplete." = "Ditt postnummer är ofullständigt.";
+
+"Your ZIP code is invalid." = "Ditt postnummer är ogiltigt.";
 
 "Your email is invalid." = "Din e-postadress är ogiltig.";
 
 "Your payment information will not be saved." = "Din betalningsinformation kommer inte att sparas.";
 
 "Your postal code is incomplete." = "Ditt postnummer är ofullständigt.";
+
+"Your postal code is invalid." = "Ditt postnummer är ogiltigt.";
 
 "ZIP" = "Postkod";

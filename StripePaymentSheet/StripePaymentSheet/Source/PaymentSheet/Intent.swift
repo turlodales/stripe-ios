@@ -11,36 +11,30 @@
 import Foundation
 import UIKit
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 // MARK: - Intent
 
-/// An internal type representing either a PaymentIntent, SetupIntent, or a "deferred Intent"
+/// An internal type representing either a PaymentIntent, SetupIntent, a "deferred Intent", or a Checkout Session
 enum Intent {
-    case paymentIntent(elementsSession: STPElementsSession, paymentIntent: STPPaymentIntent)
-    case setupIntent(elementsSession: STPElementsSession, setupIntent: STPSetupIntent)
-    case deferredIntent(elementsSession: STPElementsSession, intentConfig: PaymentSheet.IntentConfiguration)
+    case paymentIntent(STPPaymentIntent)
+    case setupIntent(STPSetupIntent)
+    case deferredIntent(intentConfig: PaymentSheet.IntentConfiguration)
+    case checkout(CheckoutElementsController.Session)
 
-    var elementsSession: STPElementsSession {
+    var checkoutSessionID: String? {
+        guard case .checkout(let session) = self else { return nil }
+        return session.id
+    }
+
+    var stripeId: String? {
         switch self {
-        case .paymentIntent(let elementsSession, _):
-            return elementsSession
-        case .setupIntent(let elementsSession, _):
-            return elementsSession
-        case .deferredIntent(let elementsSession, _):
-            return elementsSession
+        case .paymentIntent(let intent): intent.stripeId
+        case .setupIntent(let intent): intent.stripeID
+        case .deferredIntent: nil
+        case .checkout(let session): session.id
         }
-    }
-
-    var unactivatedPaymentMethodTypes: [STPPaymentMethodType] {
-        return elementsSession.unactivatedPaymentMethodTypes
-    }
-
-    /// A sorted list of payment method types supported by the Intent and PaymentSheet, ordered from most recommended to least recommended.
-    var recommendedPaymentMethodTypes: [STPPaymentMethodType] {
-        return elementsSession.orderedPaymentMethodTypes
     }
 
     var isPaymentIntent: Bool {
@@ -49,90 +43,175 @@ enum Intent {
             return true
         case .setupIntent:
             return false
-        case .deferredIntent(_, let intentConfig):
+        case .deferredIntent(let intentConfig):
             switch intentConfig.mode {
             case .payment:
                 return true
             case .setup:
                 return false
             }
+        case .checkout(let session):
+            return !session.noPaymentRequired
         }
+    }
+
+    var isDeferredIntent: Bool {
+        switch self {
+        case .paymentIntent:
+            return false
+        case .setupIntent:
+            return false
+        case .deferredIntent:
+            return true
+        case .checkout:
+            return false
+        }
+    }
+
+    var collectsTaxFromBillingAddress: Bool {
+        guard case .checkout(let checkout) = self else {
+            return false
+        }
+        return checkout.collectsTaxFromBillingAddress
     }
 
     var intentConfig: PaymentSheet.IntentConfiguration? {
         switch self {
-        case .deferredIntent(_, let intentConfig):
+        case .deferredIntent(let intentConfig):
             return intentConfig
-        default:
+        case .paymentIntent, .setupIntent, .checkout:
             return nil
         }
     }
 
     var cvcRecollectionEnabled: Bool {
         switch self {
-        case .deferredIntent(_, let intentConfig):
-            return intentConfig.isCVCRecollectionEnabledCallback()
-        case .paymentIntent(_, let paymentIntent):
+        case .deferredIntent(let intentConfig):
+            return intentConfig.requireCVCRecollection
+        case .paymentIntent(let paymentIntent):
             return paymentIntent.paymentMethodOptions?.card?.requireCvcRecollection ?? false
-        case .setupIntent:
+        case .setupIntent, .checkout:
+            // CheckoutSession does not yet support CVC recollection
             return false
         }
     }
 
     var currency: String? {
         switch self {
-        case .paymentIntent(_, let pi):
+        case .paymentIntent(let pi):
             return pi.currency
         case .setupIntent:
             return nil
-        case .deferredIntent(_, let intentConfig):
+        case .deferredIntent(let intentConfig):
             switch intentConfig.mode {
-            case .payment(_, let currency, _, _):
+            case .payment(_, let currency, _, _, _):
                 return currency
             case .setup(let currency, _):
                 return currency
             }
+        case .checkout(let session):
+            return session.activePresentmentCurrency
         }
     }
 
     var amount: Int? {
         switch self {
-        case .paymentIntent(_, let pi):
+        case .paymentIntent(let pi):
             return pi.amount
         case .setupIntent:
             return nil
-        case .deferredIntent(_, let intentConfig):
+        case .deferredIntent(let intentConfig):
             switch intentConfig.mode {
-            case .payment(let amount, _, _, _):
+            case .payment(let amount, _, _, _, _):
                 return amount
             case .setup:
                 return nil
             }
+        case .checkout(let session):
+            return session.amount
         }
     }
 
-    /// True if this is a PaymentIntent with sfu not equal to none or a SetupIntent
-    var isSettingUp: Bool {
+    var setupFutureUsageString: String? {
         switch self {
-        case .paymentIntent(_, let paymentIntent):
-            return paymentIntent.setupFutureUsage != .none
+        case .paymentIntent(let paymentIntent):
+            return paymentIntent.setupFutureUsage.stringValue
+        case .deferredIntent(let intentConfig):
+            if case .payment(_, _, let setupFutureUsage, _, _) = intentConfig.mode {
+                return setupFutureUsage?.rawValue
+            }
+            return nil
+        case .checkout:
+            // CheckoutClient only exposes resolved SFU per payment method, so the global analytics value is unavailable.
+            // Saving behavior uses isSetupFutureUsageSet(for:) to read the per-method map.
+            return nil
+        case .setupIntent:
+            return nil
+        }
+    }
+
+    var isPaymentMethodOptionsSetupFutureUsageSet: Bool? {
+        switch self {
+        case .paymentIntent(let paymentIntent):
+            return paymentIntent.paymentMethodOptions?.isSetupFutureUsageSet ?? false
+        case .deferredIntent(let intentConfig):
+            if case .payment(_, _, _, _, let paymentMethodOptions) = intentConfig.mode {
+                guard let setupFutureUsageValues = paymentMethodOptions?.setupFutureUsageValues else {
+                    return false
+                }
+                return !setupFutureUsageValues.isEmpty
+            }
+            return nil
+        case .checkout(let session):
+            return session.isPaymentMethodOptionsSetupFutureUsageSet
+        case .setupIntent:
+            return nil
+        }
+    }
+
+    /// Whether the intent has setup for future usage set for a payment method type.
+    func isSetupFutureUsageSet(for paymentMethodType: STPPaymentMethodType) -> Bool {
+        switch self {
+        case .paymentIntent(let paymentIntent):
+            return paymentIntent.isSetupFutureUsageSet(for: paymentMethodType)
         case .setupIntent:
             return true
-        case .deferredIntent(_, let intentConfig):
+        case .deferredIntent(intentConfig: let intentConfig):
             switch intentConfig.mode {
-            case .payment(_, _, let setupFutureUsage, _):
+            case .payment(_, _, let setupFutureUsage, _, let paymentMethodOptions):
+                // if pmo sfu is non-nil, it overrides the top level sfu
+                if let paymentMethodOptionsSetupFutureUsage = paymentMethodOptions?.setupFutureUsageValues?[paymentMethodType] {
+                    return paymentMethodOptionsSetupFutureUsage != .none
+                }
                 return setupFutureUsage != nil
             case .setup:
                 return true
             }
+        case .checkout(let session):
+            guard !session.noPaymentRequired else { return true }
+            guard let setupFutureUsage = session.setupFutureUsage(for: paymentMethodType) else {
+                return false
+            }
+            return setupFutureUsage != "none"
         }
     }
 
-    var cardBrandChoiceEligible: Bool {
-        return elementsSession.cardBrandChoice?.eligible ?? false
+    func allowsPaymentMethodRemoval(elementsSession: STPElementsSession) -> Bool {
+        switch self {
+        case .checkout(let session):
+            return session.canDetachPaymentMethod
+        case .paymentIntent, .setupIntent, .deferredIntent:
+            return elementsSession.allowsRemovalOfPaymentMethodsForPaymentSheet()
+        }
     }
 
-    var isApplePayEnabled: Bool {
-        return elementsSession.isApplePayEnabled
+    func allowsPaymentMethodUpdate(elementsSession: STPElementsSession) -> Bool {
+        switch self {
+        case .checkout:
+            // Checkout sessions always support PM updates
+            return true
+        case .paymentIntent, .setupIntent, .deferredIntent:
+            return elementsSession.paymentMethodUpdateForPaymentSheet
+        }
     }
 }

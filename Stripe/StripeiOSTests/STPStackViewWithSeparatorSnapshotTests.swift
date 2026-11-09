@@ -8,13 +8,13 @@
 
 import iOSSnapshotTestCase
 import StripeCoreTestUtils
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPStackViewWithSeparatorSnapshotTests: STPSnapshotTestCase {
 
@@ -133,6 +133,7 @@ class STPStackViewWithSeparatorSnapshotTests: STPSnapshotTestCase {
         stackView.axis = .horizontal
         stackView.distribution = .fillEqually
         stackView.spacing = 1
+        stackView.borderWidth = 1
         stackView.separatorColor = .lightGray
         stackView.drawBorder = true
         stackView.isUserInteractionEnabled = false
@@ -151,6 +152,7 @@ class STPStackViewWithSeparatorSnapshotTests: STPSnapshotTestCase {
         stackView.axis = .horizontal
         stackView.distribution = .fillEqually
         stackView.spacing = 1
+        stackView.borderWidth = 1
         stackView.separatorColor = .lightGray
         stackView.drawBorder = true
         stackView.customBackgroundColor = .green
@@ -169,6 +171,7 @@ class STPStackViewWithSeparatorSnapshotTests: STPSnapshotTestCase {
         stackView.axis = .horizontal
         stackView.distribution = .fillEqually
         stackView.spacing = 1
+        stackView.borderWidth = 1
         stackView.separatorColor = .lightGray
         stackView.customBackgroundDisabledColor = .green
         stackView.drawBorder = true

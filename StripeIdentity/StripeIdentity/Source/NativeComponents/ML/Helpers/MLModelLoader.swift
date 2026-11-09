@@ -8,7 +8,7 @@
 
 import CoreML
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import Vision
 
 /// Loads and compiles CoreML models from a remote URL. The compiled model is saved
@@ -43,9 +43,20 @@ final class MLModelLoader {
     private func cache(compiledModel: URL, downloadedFrom remoteURL: URL) -> URL? {
         let destinationURL = getCachedLocation(forRemoteURL: remoteURL)
         do {
-            try FileManager.default.moveItem(at: compiledModel, to: destinationURL)
+            let fileManager = FileManager.default
+
+            // Remove any previously cached entry to avoid a failure when moving into place
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+
+            try fileManager.moveItem(at: compiledModel, to: destinationURL)
             return destinationURL
         } catch {
+            Self.logModelLoadingError(
+                error,
+                stage: "cache_compiled_model"
+            )
             return nil
         }
     }
@@ -71,23 +82,30 @@ final class MLModelLoader {
 
             // Check if we've already started downloading the model
             if let cachedPromise = self.loadPromiseCache[remoteURL] {
-                return cachedPromise.observe { returnedPromise.fullfill(with: $0) }
+                return cachedPromise.observe(on: loadPromiseCacheQueue) { returnedPromise.fullfill(with: $0) }
             }
 
             // Check if model is already cached to file system
             let cachedModel = self.getCachedLocation(forRemoteURL: remoteURL)
-            if let mlModel = try? MLModel(contentsOf: cachedModel) {
+            do {
+                let mlModel = try MLModel(contentsOf: cachedModel)
                 return returnedPromise.resolve(with: mlModel)
+            } catch {
+                if FileManager.default.fileExists(atPath: cachedModel.path) {
+                    Self.logModelLoadingError(
+                        error,
+                        stage: "load_cached_model"
+                    )
+
+                    // If the model failed to load because it was corrupted, delete the artifact
+                    try? FileManager.default.removeItem(at: cachedModel)
+                }
             }
 
-            self.fileDownloader.downloadFileTemporarily(from: remoteURL).chained {
+            self.fileDownloader.downloadFileTemporarily(from: remoteURL).chained(on: loadPromiseCacheQueue) {
                 [weak self] tmpFileURL -> Promise<MLModel> in
                 let compilePromise = Promise<MLModel>()
                 compilePromise.fulfill { [weak self] in
-                    // Note: The model must be compiled synchronously immediately
-                    // after the file is downloaded, otherwise the system will
-                    // delete the temporary file url before we've had a chance to
-                    // compile it.
                     let tmpCompiledURL = try MLModel.compileModel(at: tmpFileURL)
                     let compiledURL =
                         self?.cache(
@@ -97,7 +115,7 @@ final class MLModelLoader {
                     return try MLModel(contentsOf: compiledURL)
                 }
                 return compilePromise
-            }.observe { [weak self] result in
+            }.observe(on: loadPromiseCacheQueue) { [weak self] result in
                 returnedPromise.fullfill(with: result)
 
                 // Remove from promise cache
@@ -126,12 +144,31 @@ final class MLModelLoader {
     func loadVisionModel(
         fromRemote remoteURL: URL
     ) -> Future<VNCoreMLModel> {
-        return loadModel(fromRemote: remoteURL).chained { mlModel in
+        return loadModel(fromRemote: remoteURL).chained(on: loadPromiseCacheQueue) { mlModel in
             let promise = Promise<VNCoreMLModel>()
             promise.fulfill {
                 return try VNCoreMLModel(for: mlModel)
             }
             return promise
         }
+    }
+}
+
+private extension MLModelLoader {
+    static func logModelLoadingError(
+        _ error: Error,
+        stage: String,
+        filePath: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        IdentityAnalyticsClient.logUnscopedGenericError(
+            error,
+            context: "ml_model_load",
+            additionalMetadata: [
+                "ml_model_stage": stage,
+            ],
+            filePath: filePath,
+            line: line
+        )
     }
 }

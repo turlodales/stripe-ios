@@ -1,5 +1,15 @@
 {
+  "originHash" : "76bd9d3f54ac707238b12d858d7274122336b844ce0b531febdc1fde00f0660c",
   "pins" : [
+    {
+      "identity" : "identity-ios-mediapipe",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stripe/identity-ios-mediapipe",
+      "state" : {
+        "revision" : "66147f847d308460cb4827fc1f05fa99fc201836",
+        "version" : "1.0.0"
+      }
+    },
     {
       "identity" : "ios-snapshot-test-case",
       "kind" : "remoteSourceControl",
@@ -14,19 +24,36 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/erikdoe/ocmock",
       "state" : {
-        "branch" : "master",
-        "revision" : "05cbc9d934e84ad32530fa53fd7d29c7966d5828"
+        "revision" : "2c0bfd373289f4a7716db5d6db471640f91a6507"
       }
     },
     {
       "identity" : "ohhttpstubs",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eurias-stripe/OHHTTPStubs",
+      "location" : "https://github.com/davidme-stripe/OHHTTPStubs",
       "state" : {
-        "branch" : "master",
-        "revision" : "94cf8e1d9e38b0edd580ddc699dda23a7bf66515"
+        "branch" : "stripe-mock",
+        "revision" : "5e90dfd42873ab8de026735d0725ad618b8ca7dd"
+      }
+    },
+    {
+      "identity" : "swift-custom-dump",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-custom-dump",
+      "state" : {
+        "revision" : "82645ec760917961cfa08c9c0c7104a57a0fa4b1",
+        "version" : "1.3.3"
+      }
+    },
+    {
+      "identity" : "xctest-dynamic-overlay",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
+      "state" : {
+        "revision" : "b2ed9eabefe56202ee4939dd9fc46b6241c88317",
+        "version" : "1.6.1"
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

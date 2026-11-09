@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 public extension StripeAPI {
 
@@ -35,15 +35,23 @@ public extension StripeAPI {
             }
         }
 
-        @_spi(STP) public enum PaymentAccount: Decodable {
+        @_spi(InternalOnlyAPI) public enum PaymentAccount: Decodable {
 
             // MARK: - Types
 
-            @_spi(STP) public struct BankAccount: Decodable {
+            @_spi(InternalOnlyAPI) public struct BankAccount: Decodable {
                 public let bankName: String?
                 public let id: String
                 public let last4: String
                 public let routingNumber: String?
+
+                /// Whether the account should be considered instantly verified. This field isn't part of the API response 
+                /// and is being set later on.
+                public var instantlyVerified: Bool = false
+
+                private enum CodingKeys: String, CodingKey {
+                    case bankName, id, last4, routingNumber
+                }
             }
 
             case linkedAccount(StripeAPI.FinancialConnectionsAccount)
@@ -60,8 +68,7 @@ public extension StripeAPI {
                 let container = try decoder.singleValueContainer()
                 if let value = try? container.decode(FinancialConnectionsAccount.self) {
                     self = .linkedAccount(value)
-                } else if let value = try? container.decode(FinancialConnectionsSession.PaymentAccount.BankAccount.self)
-                {
+                } else if let value = try? container.decode(FinancialConnectionsSession.PaymentAccount.BankAccount.self) {
                     self = .bankAccount(value)
                 } else {
                     self = .unparsable
@@ -97,8 +104,8 @@ public extension StripeAPI {
         public let id: String
         public let accounts: FinancialConnectionsSession.AccountList
         public let livemode: Bool
-        @_spi(STP) public let paymentAccount: PaymentAccount?
-        @_spi(STP) public let bankAccountToken: BankAccountToken?
+        @_spi(InternalOnlyAPI) public let paymentAccount: PaymentAccount?
+        @_spi(InternalOnlyAPI) public let bankAccountToken: BankAccountToken?
         let status: Status?
         let statusDetails: StatusDetails?
 
@@ -162,5 +169,5 @@ public extension StripeAPI {
 
 // MARK: - Decodable
 
-@_spi(STP) extension StripeAPI.FinancialConnectionsSession: Decodable {}
-@_spi(STP) extension StripeAPI.FinancialConnectionsSession.AccountList: Decodable {}
+@_spi(InternalOnlyAPI) extension StripeAPI.FinancialConnectionsSession: Decodable {}
+@_spi(InternalOnlyAPI) extension StripeAPI.FinancialConnectionsSession.AccountList: Decodable {}

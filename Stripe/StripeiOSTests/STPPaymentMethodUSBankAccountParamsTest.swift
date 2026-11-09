@@ -6,22 +6,23 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import StripeCoreTestUtils
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+import StripePaymentsTestUtils
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
-class STPPaymentMethodUSBankAccountParamsTest: XCTestCase {
+class STPPaymentMethodUSBankAccountParamsTest: STPNetworkStubbingTestCase {
 
-    let apiClient: STPAPIClient = {
-        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
-        return client
-    }()
+    var apiClient: STPAPIClient!
+    override func setUp() {
+        super.setUp()
+        apiClient = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+    }
 
     func testCreateUSBankAccountPaymentMethod_checking_individual() {
         let usBankAccountParams = STPPaymentMethodUSBankAccountParams()
@@ -41,6 +42,7 @@ class STPPaymentMethodUSBankAccountParamsTest: XCTestCase {
             billingDetails: billingDetails,
             metadata: nil
         )
+        params.radarOptions = STPRadarOptions(hcaptchaToken: "hcaptcha_token")
 
         let exp = expectation(description: "Payment Method US Bank Account create")
 

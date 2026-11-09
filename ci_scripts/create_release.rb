@@ -1,12 +1,13 @@
 #!/usr/bin/env ruby
 
 require_relative 'release_common'
+require_relative 'validate_version_number'
 
 # Get argument of new version number
 @version = @specified_version
 
 # If no argument, exit
-abort("Specify a version number. (e.g. `#{__FILE__} --version 21.0.0`)") if @version.nil?
+abort("Specify a version number or increment flag. (e.g. `#{__FILE__} --version 21.0.0` or `#{__FILE__} --patch/minor/major`)") if @version.nil?
 
 # Make sure version is a valid version number
 unless @version.match(/^[0-9]+\.[0-9]+\.[0-9]+$/)
@@ -15,14 +16,24 @@ end
 
 puts "Proposing version: #{@version}".red
 
+# Ensure there are no unstaged changes before starting
+unstaged_changes = `git diff --name-only`.strip
+unless @is_dry_run || unstaged_changes.empty?
+  abort('You have unstaged changes. Please commit or stash them before creating a release.')
+end
+
 # Create a new branch for the release, e.g. bg/release-9.0.0
 @branchname = "releases/#{@version}"
 
 def create_branch
+  return if @is_dry_run
+
   run_command("git checkout -b #{@branchname}")
 end
 
 def update_version
+  return if @is_dry_run
+
   # Overwrite the VERSION file with version
   File.open('VERSION', 'w') do |f|
     f.write(@version)
@@ -33,12 +44,16 @@ def update_version
 end
 
 def update_placeholders
+  return if @is_dry_run
+
   # Replace placeholder version in CHANGELOG.md with this version and date
   update_placeholder(@version, 'CHANGELOG.md')
   update_placeholder(@version, 'MIGRATING.md')
 end
 
 def commit_changes
+  return if @is_dry_run
+
   # Commit and push the changes
   run_command("git add -u &&
     git commit -m \"Update version to #{@version}\"")
@@ -46,6 +61,26 @@ end
 
 def push_changes
   run_command("git push origin #{@branchname}") unless @is_dry_run
+end
+
+def expected_bump_marker
+  return 'MAJOR' if @increment_major
+  return 'MINOR' if @increment_minor
+  return 'PATCH' if @increment_patch
+
+  ChangelogUtils.infer_bump_marker(version_from_file, @version)
+end
+
+def validate_changelog_bump
+  return if @is_dry_run
+
+  ChangelogUtils.validate_metadata!
+
+  actual_marker = ChangelogUtils.bump_marker
+  expected_marker = expected_bump_marker
+  return if actual_marker == expected_marker
+
+  raise "CHANGELOG.md line 2 must be #{expected_marker} before creating release #{@version}. Found #{actual_marker}."
 end
 
 def run_download_localized_strings
@@ -56,15 +91,24 @@ end
 def create_pr
   # Create a new pull request from the branch
   pr_body = %{
-  - [ ] Verify CHANGELOG is updated with any new features or breaking changes (be thorough when reviewing commit history)
+  - [ ] Verify CHANGELOG
+    - [ ] Ensure notes for this release are not empty
+    - [ ] Release date correct?
+    - [ ] Version number looks correct?
   - [ ] Verify MIGRATING is updated (if necessary).
   - [ ] Verify the following files are updated to use the new version string:
     - [ ] Version.xcconfig
     - [ ] All *.podspec files
     - [ ] StripeAPIConfiguration+Version.swift
-  - [ ] Verify any new localized strings.
+  - [ ] Verify changes to localized strings seem sane (e.g. No major removal of langauges or large removal of strings)
   - [ ] If new directories were added, verify they have been added to the appropriate `*.podspec` "files" section.
-  }
+}
+
+  # Add React Native compatibility check if versions match
+  if should_test_react_native?(@version)
+    rn_version = get_stripe_react_native_stripe_ios_version
+    pr_body += "  - [ ] stripe-react-native is pinned to #{rn_version}.x and will use the proposed SDK version #{@version}. A stripe-react-native CI run has been kicked off that uses this branch [here](https://app.bitrise.io/app/cf3f9f9d-0fa5-484a-a09b-5649a1512f6b). Ensure that it passes.\n"
+  end
 
   return if @is_dry_run
 
@@ -75,19 +119,6 @@ def create_pr
     "Release version #{@version}",
     pr_body
   )
-end
-
-def check_for_missing_localizations
-  # Check for missing localizations (we do this last to batch all the interactive parts to the end)
-  missing_localizations = `ci_scripts/l10n/check_for_missing_localizations.rb`
-  # Output the result of the check
-  if $?.exitstatus != 0
-    puts missing_localizations
-    rputs 'Please file a ticket for these missing localizations at https://go/ask/mobile-sdks'
-    notify_user
-  else
-    rputs 'No missing localizations.'
-  end
 end
 
 def propose_release
@@ -111,6 +142,8 @@ def propose_release
 end
 
 steps = [
+  method(:validate_version_number),
+  method(:validate_changelog_bump),
   method(:create_branch),
   method(:update_version),
   method(:update_placeholders),
@@ -118,7 +151,6 @@ steps = [
   method(:commit_changes),
   method(:push_changes),
   method(:create_pr),
-  method(:check_for_missing_localizations),
   method(:propose_release)
 ]
 execute_steps(steps, @step_index)

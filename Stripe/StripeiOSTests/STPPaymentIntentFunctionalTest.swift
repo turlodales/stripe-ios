@@ -6,14 +6,15 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
 import StripeCoreTestUtils
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) @_spi(KlarnaSDKPrivatePreview) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+import StripePaymentsTestUtils
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
-class STPPaymentIntentFunctionalTest: XCTestCase {
+class STPPaymentIntentFunctionalTest: STPNetworkStubbingTestCase {
     func testCreatePaymentIntentWithTestingServer() {
         let expectation = self.expectation(description: "PaymentIntent create.")
         STPTestingAPIClient.shared.createPaymentIntent(
@@ -56,9 +57,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
             XCTAssertNil(paymentIntent?.paymentMethodId)
                 XCTAssertEqual(paymentIntent?.status, .canceled)
                 XCTAssertEqual(paymentIntent?.setupFutureUsage, STPPaymentIntentSetupFutureUsage.none)
-            // #pragma clang diagnostic push
-            // #pragma clang diagnostic ignored "-Wdeprecated"
-            XCTAssertNil(paymentIntent?.nextSourceAction)
+            XCTAssertNil(paymentIntent?.perform(NSSelectorFromString("nextSourceAction")))
             // #pragma clang diagnostic pop
             XCTAssertNil(paymentIntent!.nextAction)
 
@@ -66,6 +65,22 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         }
 
         waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    func testRetrievePreviousCreatedPaymentIntent() async throws {
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+
+        let paymentIntent = try await client.retrievePaymentIntent(withClientSecret: "pi_1GGCGfFY0qyl6XeWbSAsh2hn_secret_jbhwsI0DGWhKreJs3CCrluUGe")
+        XCTAssertEqual(paymentIntent.stripeId, "pi_1GGCGfFY0qyl6XeWbSAsh2hn")
+        XCTAssertEqual(paymentIntent.amount, 100)
+        XCTAssertEqual(paymentIntent.currency, "usd")
+        XCTAssertFalse(paymentIntent.livemode)
+        XCTAssertNil(paymentIntent.sourceId)
+        XCTAssertNil(paymentIntent.paymentMethodId)
+        XCTAssertEqual(paymentIntent.status, .canceled)
+        XCTAssertEqual(paymentIntent.setupFutureUsage, STPPaymentIntentSetupFutureUsage.none)
+        XCTAssertNil(paymentIntent.perform(NSSelectorFromString("nextSourceAction")))
+        XCTAssertNil(paymentIntent.nextAction)
     }
 
     func testRetrieveWithWrongSecret() {
@@ -117,7 +132,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: "pi_1GGCGfFY0qyl6XeWbSAsh2hn_secret_jbhwsI0DGWhKreJs3CCrluUGe")
+        let params = STPPaymentIntentConfirmParams(clientSecret: "pi_1GGCGfFY0qyl6XeWbSAsh2hn_secret_jbhwsI0DGWhKreJs3CCrluUGe")
         params.sourceParams = cardSourceParams()
         client.confirmPaymentIntent(
             with: params) { paymentIntent, error in
@@ -152,7 +167,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         params.sourceParams = cardSourceParams()
         // returnURL must be passed in while confirming (not creation time)
         params.returnURL = "example-app-scheme://authorized"
@@ -176,9 +191,9 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
             // Test deprecated property still works too
             // #pragma clang diagnostic push
             // #pragma clang diagnostic ignored "-Wdeprecated"
-                XCTAssertNotNil(paymentIntent?.nextSourceAction?.authorizeWithURL?.returnURL)
+                XCTAssertNotNil(paymentIntent?.nextAction?.redirectToURL?.returnURL)
             XCTAssertEqual(
-                paymentIntent?.nextSourceAction?.authorizeWithURL?.returnURL,
+                paymentIntent?.nextAction?.redirectToURL?.returnURL,
                 URL(string: "example-app-scheme://authorized"))
             // #pragma clang diagnostic pop
 
@@ -186,6 +201,19 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         }
 
         waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    func testConfirmPaymentIntentAsync() async throws {
+        let clientSecret = try await STPTestingAPIClient.shared.createPaymentIntent(withParams: nil)
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+
+        let params = STPPaymentIntentParams(clientSecret: clientSecret)
+        params.sourceParams = cardSourceParams()
+        params.returnURL = "example-app-scheme://authorized"
+
+        let paymentIntent = try await client.confirmPaymentIntent(with: params)
+        XCTAssertEqual(paymentIntent.stripeId, params.stripeId)
+        XCTAssertEqual(paymentIntent.status, .requiresAction)
     }
 
     func testConfirmPaymentIntentWith3DSCardPaymentMethodSucceeds() {
@@ -204,11 +232,12 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let cardParams = STPPaymentMethodCardParams()
         cardParams.number = "4000000000003220"
         cardParams.expMonth = NSNumber(value: 7)
-        cardParams.expYear = NSNumber(value: Calendar.current.component(.year, from: Date()) + 5)
+        cardParams.expYear = 2040
+        cardParams.cvc = "123"
 
         let billingDetails = STPPaymentMethodBillingDetails()
 
@@ -260,11 +289,12 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
         XCTAssertNotNil(clientSecret)
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let cardParams = STPPaymentMethodCardParams()
         cardParams.number = "4242424242424242"
         cardParams.expMonth = NSNumber(value: 7)
-        cardParams.expYear = NSNumber(value: Calendar.current.component(.year, from: Date()) + 5)
+        cardParams.expYear = 2040
+        cardParams.cvc = "123"
 
         let billingDetails = STPPaymentMethodBillingDetails()
 
@@ -329,11 +359,12 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let cardParams = STPPaymentMethodCardParams()
         cardParams.number = "4242424242424242"
         cardParams.expMonth = NSNumber(value: 7)
-        cardParams.expYear = NSNumber(value: Calendar.current.component(.year, from: Date()) + 5)
+        cardParams.expYear = 2040
+        cardParams.cvc = "123"
 
         let billingDetails = STPPaymentMethodBillingDetails()
 
@@ -374,11 +405,12 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let cardParams = STPPaymentMethodCardParams()
         cardParams.number = "4242424242424242"
         cardParams.expMonth = NSNumber(value: 7)
-        cardParams.expYear = NSNumber(value: Calendar.current.component(.year, from: Date()) + 5)
+        cardParams.expYear = 2040
+        cardParams.cvc = "123"
 
         let billingDetails = STPPaymentMethodBillingDetails()
 
@@ -425,11 +457,11 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let params = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let params = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let cardParams = STPPaymentMethodCardParams()
         cardParams.number = "4242424242424242"
         cardParams.expMonth = NSNumber(value: 7)
-        cardParams.expYear = NSNumber(value: Calendar.current.component(.year, from: Date()) + 5)
+        cardParams.expYear = 2040
 
         let billingDetails = STPPaymentMethodBillingDetails()
 
@@ -449,64 +481,6 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
             XCTAssertNotNil(error, "Confirming with invalid network should result in an error")
 
             XCTAssertNil(paymentIntent)
-
-            expectation.fulfill()
-        }
-
-        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
-    }
-
-    // MARK: - giropay
-
-    func testConfirmPaymentIntentWithGiropay() {
-        var clientSecret: String?
-        let createExpectation = self.expectation(description: "Create PaymentIntent.")
-        STPTestingAPIClient.shared.createPaymentIntent(
-            withParams: [
-                "payment_method_types": ["giropay"],
-                "currency": "eur",
-            ]) { createdClientSecret, creationError in
-            XCTAssertNotNil(createdClientSecret)
-            XCTAssertNil(creationError)
-            createExpectation.fulfill()
-            clientSecret = createdClientSecret
-        }
-        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
-        XCTAssertNotNil(clientSecret)
-
-        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
-        let expectation = self.expectation(description: "Payment Intent confirm")
-
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
-        let giropayParams = STPPaymentMethodGiropayParams()
-
-        let billingDetails = STPPaymentMethodBillingDetails()
-        billingDetails.name = "Jenny Rosen"
-
-        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
-            giropay: giropayParams,
-            billingDetails: billingDetails,
-            metadata: [
-                "test_key": "test_value",
-            ])
-        paymentIntentParams.returnURL = "example-app-scheme://authorized"
-
-        client.confirmPaymentIntent(
-            with: paymentIntentParams) { paymentIntent, error in
-            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
-
-            XCTAssertNotNil(paymentIntent)
-            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
-
-            XCTAssertFalse(paymentIntent!.livemode)
-            XCTAssertNotNil(paymentIntent?.paymentMethodId)
-
-            // giropay requires a redirect
-            XCTAssertEqual(paymentIntent?.status, .requiresAction)
-            XCTAssertNotNil(paymentIntent!.nextAction!.redirectToURL!.returnURL)
-            XCTAssertEqual(
-                paymentIntent!.nextAction!.redirectToURL!.returnURL,
-                URL(string: "example-app-scheme://authorized"))
 
             expectation.fulfill()
         }
@@ -550,7 +524,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
                 "test_key": "test_value",
             ])
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         paymentIntentParams.paymentMethodParams = params
 
         let client = STPAPIClient(publishableKey: STPTestingAUPublishableKey)
@@ -594,7 +568,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let przelewy24Params = STPPaymentMethodPrzelewy24Params()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -650,7 +624,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let bancontact = STPPaymentMethodBancontactParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -708,7 +682,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingMEXPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let oxxo = STPPaymentMethodOXXOParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -762,7 +736,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let epsParams = STPPaymentMethodEPSParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -819,7 +793,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         XCTAssertNotNil(clientSecret)
 
         let params = STPPaymentMethodParams(alipay: STPPaymentMethodAlipayParams(), billingDetails: nil, metadata: nil)
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         paymentIntentParams.paymentMethodParams = params
         paymentIntentParams.returnURL = "foo://bar"
         paymentIntentParams.paymentMethodOptions = STPConfirmPaymentMethodOptions()
@@ -868,7 +842,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingSGPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let grabpay = STPPaymentMethodGrabPayParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -925,7 +899,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingBEPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let payPal = STPPaymentMethodPayPalParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -983,7 +957,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingBEPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let blik = STPPaymentMethodBLIKParams()
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -1040,7 +1014,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         let affirm = STPPaymentMethodAffirmParams()
 
         paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
@@ -1101,7 +1075,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingFRPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
             mobilePay: STPPaymentMethodMobilePayParams(),
             billingDetails: nil,
@@ -1153,7 +1127,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
         let expectation = self.expectation(description: "Payment Intent confirm")
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret!)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
         paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
             amazonPay: STPPaymentMethodAmazonPayParams(),
             billingDetails: nil,
@@ -1181,34 +1155,372 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
         waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
     }
 
+    // MARK: - Alma
+
+    func testConfirmPaymentIntentWithAlma() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["alma"],
+                "currency": "eur",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "fr"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingFRPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            alma: STPPaymentMethodAlmaParams(),
+            billingDetails: nil,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Sunbit
+
+    func testConfirmPaymentIntentWithSunbit() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["sunbit"],
+                "currency": "usd",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "us"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            sunbit: STPPaymentMethodSunbitParams(),
+            billingDetails: nil,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Billie
+
+    func testConfirmPaymentIntentWithBillie() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["billie"],
+                "currency": "eur",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "de"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingDEPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            billie: STPPaymentMethodBillieParams(),
+            billingDetails: nil,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Satispay
+
+    func testConfirmPaymentIntentWithSatispay() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["satispay"],
+                "currency": "eur",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "it"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingITPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            satispay: STPPaymentMethodSatispayParams(),
+            billingDetails: nil,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Crypto
+
+    func testConfirmPaymentIntentWithCrypto() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["crypto"],
+                "currency": "usd",
+                "amount": NSNumber(value: 100),
+            ],
+            account: "us"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            crypto: STPPaymentMethodCryptoParams(),
+            billingDetails: nil,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Multibanco
+
+    func testConfirmPaymentIntentWithMultibanco() throws {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["multibanco"],
+                "currency": "eur",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "us"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            clientSecret = createdClientSecret
+            createExpectation.fulfill()
+        }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: try XCTUnwrap(clientSecret))
+
+        let billingDetails = STPPaymentMethodBillingDetails()
+        billingDetails.email = "tester@example.com"
+
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            multibanco: STPPaymentMethodMultibancoParams(),
+            billingDetails: billingDetails,
+            metadata: [
+                "test_key": "test_value",
+            ]
+        )
+
+        let options = STPConfirmPaymentMethodOptions()
+        paymentIntentParams.paymentMethodOptions = options
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(with: paymentIntentParams) { paymentIntent, error in
+            guard let paymentIntent = paymentIntent else {
+                XCTFail()
+                return
+            }
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+            XCTAssertEqual(paymentIntent.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent.livemode)
+            XCTAssertNotNil(paymentIntent.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent.status, .requiresAction)
+            XCTAssertEqual(paymentIntent.nextAction?.type, .multibancoDisplayDetails)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+    }
+
+    // MARK: - Klarna
+
+    func testConfirmKlarnaPaymentIntentWithInteroperabilityToken() async throws {
+        // Given a Klarna SDK interoperability token...
+        let interoperabilityToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        let options = STPConfirmKlarnaOptions(interoperabilityToken: interoperabilityToken)
+
+        // When confirming a Klarna PaymentIntent with the token...
+        let paymentIntent = try await confirmKlarnaPaymentIntent(options: options)
+
+        // Then the API accepts the token and starts the Klarna authorization flow.
+        XCTAssertEqual(paymentIntent.status, .requiresAction)
+        XCTAssertEqual(paymentIntent.nextAction?.type, .redirectToURL)
+    }
+
+    func testConfirmKlarnaPaymentIntentWithPartnerConfirmationToken() async throws {
+        // Given an invalid Klarna SDK partner confirmation token...
+        let options = STPConfirmKlarnaOptions(
+            partnerConfirmationToken: "test"
+        )
+
+        // When confirming a Klarna PaymentIntent with the token...
+        do {
+            _ = try await confirmKlarnaPaymentIntent(options: options)
+            XCTFail("Expected confirmation to reject the invalid partner confirmation token")
+        } catch {
+            // Then the Klarna-specific error proves the API accepted and processed the option.
+            let error = error as NSError
+            XCTAssertEqual(
+                error.userInfo[STPError.stripeErrorCodeKey] as? String,
+                "payment_intent_invalid_parameter"
+            )
+            XCTAssertEqual(
+                error.userInfo[STPError.errorMessageKey] as? String,
+                "The parameter provided in payment_method_options[partner_confirmation_token] is invalid or expired."
+            )
+        }
+    }
+
     // MARK: - US Bank Account
     func createAndConfirmPaymentIntentWithUSBankAccount(
-        paymentMethodOptions: STPConfirmUSBankAccountOptions? = nil,
-        completion: @escaping (String?) -> Void
-    ) {
+        paymentMethodOptions: STPConfirmUSBankAccountOptions? = nil
+    ) async throws -> String {
         let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
 
-        var clientSecret: String?
-        let createPIExpectation = expectation(description: "Create PaymentIntent")
-        STPTestingAPIClient.shared.createPaymentIntent(
+        let clientSecret = try await STPTestingAPIClient.shared.createPaymentIntent(
             withParams: [
                 "payment_method_types": ["us_bank_account"],
                 "currency": "usd",
                 "amount": 1000,
             ],
             account: nil
-        ) { intentClientSecret, error in
-            XCTAssertNil(error)
-            XCTAssertNotNil(intentClientSecret)
-            clientSecret = intentClientSecret
-            createPIExpectation.fulfill()
-        }
-        waitForExpectations(timeout: STPTestingNetworkRequestTimeout)
-        guard let clientSecret = clientSecret else {
-            XCTFail("Failed to create PaymentIntent")
-            return
-        }
-
+        )
         let usBankAccountParams = STPPaymentMethodUSBankAccountParams()
         usBankAccountParams.accountType = .checking
         usBankAccountParams.accountHolderType = .individual
@@ -1225,7 +1537,7 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
             metadata: nil
         )
 
-        let paymentIntentParams = STPPaymentIntentParams(clientSecret: clientSecret)
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret)
         paymentIntentParams.paymentMethodParams = paymentMethodParams
         if let paymentMethodOptions = paymentMethodOptions {
             let pmo = STPConfirmPaymentMethodOptions()
@@ -1233,93 +1545,183 @@ class STPPaymentIntentFunctionalTest: XCTestCase {
             paymentIntentParams.paymentMethodOptions = pmo
         }
 
-        let confirmPIExpectation = expectation(description: "Confirm PaymentIntent")
-        client.confirmPaymentIntent(with: paymentIntentParams, expand: ["payment_method"]) {
-            paymentIntent,
-            error in
+        let paymentIntent = try await client.confirmPaymentIntent(with: paymentIntentParams, expand: ["payment_method"])
+        XCTAssertNotNil(paymentIntent.paymentMethod)
+        XCTAssertNotNil(paymentIntent.paymentMethod?.usBankAccount)
+        XCTAssertEqual(paymentIntent.paymentMethod?.usBankAccount?.last4, "6789")
+        XCTAssertEqual(paymentIntent.status, .requiresAction)
+        XCTAssertEqual(paymentIntent.nextAction?.type, .verifyWithMicrodeposits)
+        if let paymentMethodOptions = paymentMethodOptions {
+            XCTAssertEqual(
+                paymentIntent.paymentMethodOptions?.usBankAccount?.setupFutureUsage,
+                paymentMethodOptions.setupFutureUsage
+            )
+        }
+        return clientSecret
+    }
+
+    func testConfirmPaymentIntentWithUSBankAccount_verifyWithAmounts() async throws {
+        let clientSecret = try await createAndConfirmPaymentIntentWithUSBankAccount()
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+
+        let verificationExpectation = expectation(description: "Verify with microdeposits")
+        client.verifyPaymentIntentWithMicrodeposits(
+            clientSecret: clientSecret,
+            firstAmount: 32,
+            secondAmount: 45
+        ) { paymentIntent, error in
             XCTAssertNil(error)
             XCTAssertNotNil(paymentIntent)
-            XCTAssertNotNil(paymentIntent?.paymentMethod)
-            XCTAssertNotNil(paymentIntent?.paymentMethod?.usBankAccount)
-            XCTAssertEqual(paymentIntent?.paymentMethod?.usBankAccount?.last4, "6789")
-            XCTAssertEqual(paymentIntent?.status, .requiresAction)
-            XCTAssertEqual(paymentIntent?.nextAction?.type, .verifyWithMicrodeposits)
-            if let paymentMethodOptions = paymentMethodOptions {
-                XCTAssertEqual(
-                    paymentIntent?.paymentMethodOptions?.usBankAccount?.setupFutureUsage,
-                    paymentMethodOptions.setupFutureUsage
-                )
-            }
-            confirmPIExpectation.fulfill()
+            XCTAssertEqual(paymentIntent?.status, .processing)
+            verificationExpectation.fulfill()
         }
-
-        waitForExpectations(timeout: STPTestingNetworkRequestTimeout)
-        completion(clientSecret)
+        await fulfillment(of: [verificationExpectation], timeout: STPTestingNetworkRequestTimeout)
     }
 
-    func testConfirmPaymentIntentWithUSBankAccount_verifyWithAmounts() {
-        createAndConfirmPaymentIntentWithUSBankAccount { [self] clientSecret in
-            guard let clientSecret = clientSecret else {
-                XCTFail("Failed to create PaymentIntent")
-                return
-            }
-
-            let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
-
-            let verificationExpectation = expectation(description: "Verify with microdeposits")
-            client.verifyPaymentIntentWithMicrodeposits(
-                clientSecret: clientSecret,
-                firstAmount: 32,
-                secondAmount: 45
-            ) { paymentIntent, error in
-                XCTAssertNil(error)
-                XCTAssertNotNil(paymentIntent)
-                XCTAssertEqual(paymentIntent?.status, .processing)
-                verificationExpectation.fulfill()
-            }
-            waitForExpectations(timeout: STPTestingNetworkRequestTimeout)
-        }
+    func testConfirmPaymentIntentWithUSBankAccount_verifyWithAmountsAsync() async throws {
+        let clientSecret = try await createAndConfirmPaymentIntentWithUSBankAccount()
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+        let paymentIntent = try await client.verifyPaymentIntentWithMicrodeposits(clientSecret: clientSecret, firstAmount: 32, secondAmount: 45)
+        XCTAssertEqual(paymentIntent.status, .processing)
     }
 
-    func testConfirmPaymentIntentWithUSBankAccount_verifyWithDescriptorCode() {
-        createAndConfirmPaymentIntentWithUSBankAccount { [self] clientSecret in
-            guard let clientSecret = clientSecret else {
-                XCTFail("Failed to create PaymentIntent")
-                return
-            }
+    func testConfirmPaymentIntentWithUSBankAccount_verifyWithDescriptorCode() async throws {
+        let clientSecret = try await createAndConfirmPaymentIntentWithUSBankAccount()
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
 
-            let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
-
-            let verificationExpectation = expectation(description: "Verify with microdeposits")
-            client.verifyPaymentIntentWithMicrodeposits(
-                clientSecret: clientSecret,
-                descriptorCode: "SM11AA"
-            ) { paymentIntent, error in
-                XCTAssertNil(error)
-                XCTAssertNotNil(paymentIntent)
-                XCTAssertEqual(paymentIntent?.status, .processing)
-                verificationExpectation.fulfill()
-            }
-            waitForExpectations(timeout: STPTestingNetworkRequestTimeout)
+        let verificationExpectation = expectation(description: "Verify with microdeposits")
+        client.verifyPaymentIntentWithMicrodeposits(
+            clientSecret: clientSecret,
+            descriptorCode: "SM11AA"
+        ) { paymentIntent, error in
+            XCTAssertNil(error)
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.status, .processing)
+            verificationExpectation.fulfill()
         }
+        await fulfillment(of: [verificationExpectation], timeout: STPTestingNetworkRequestTimeout)
     }
 
-    func testConfirmUSBankAccountWithPaymentMethodOptions() {
-        createAndConfirmPaymentIntentWithUSBankAccount(
+    func testConfirmPaymentIntentWithUSBankAccount_verifyWithDescriptorCodeAsync() async throws {
+        let clientSecret = try await createAndConfirmPaymentIntentWithUSBankAccount()
+        let client = STPAPIClient(publishableKey: STPTestingDefaultPublishableKey)
+        let paymentIntent = try await client.verifyPaymentIntentWithMicrodeposits(clientSecret: clientSecret, descriptorCode: "SM11AA")
+        XCTAssertEqual(paymentIntent.status, .processing)
+    }
+
+    func testConfirmUSBankAccountWithPaymentMethodOptions() async throws {
+        _ = try await createAndConfirmPaymentIntentWithUSBankAccount(
             paymentMethodOptions: STPConfirmUSBankAccountOptions(setupFutureUsage: .offSession)
-        ) { clientSecret in
-            XCTAssertNotNil(clientSecret)
+        )
+    }
+
+    // MARK: - PayPay
+
+    func testConfirmPaymentIntentWithPayPay() {
+        var clientSecret: String?
+        let createExpectation = self.expectation(description: "Create PaymentIntent.")
+        STPTestingAPIClient.shared.createPaymentIntent(
+            withParams: [
+                "payment_method_types": ["paypay"],
+                "currency": "jpy",
+                "amount": NSNumber(value: 6000),
+            ],
+            account: "jp"
+        ) { createdClientSecret, creationError in
+            XCTAssertNotNil(createdClientSecret)
+            XCTAssertNil(creationError)
+            createExpectation.fulfill()
+            clientSecret = createdClientSecret
         }
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
+        XCTAssertNotNil(clientSecret)
+
+        let client = STPAPIClient(publishableKey: STPTestingJPPublishableKey)
+        let expectation = self.expectation(description: "Payment Intent confirm")
+
+        let paymentIntentParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret!)
+        let paypay = STPPaymentMethodPayPayParams()
+
+        paymentIntentParams.paymentMethodParams = STPPaymentMethodParams(
+            payPay: paypay,
+            metadata: [
+                "test_key": "test_value",
+            ])
+
+        paymentIntentParams.returnURL = "example-app-scheme://unused"
+        client.confirmPaymentIntent(
+            with: paymentIntentParams) { paymentIntent, error in
+            XCTAssertNil(error, "With valid key + secret, should be able to confirm the intent")
+
+            XCTAssertNotNil(paymentIntent)
+            XCTAssertEqual(paymentIntent?.stripeId, paymentIntentParams.stripeId)
+            XCTAssertFalse(paymentIntent!.livemode)
+            XCTAssertNotNil(paymentIntent?.paymentMethodId)
+
+            XCTAssertEqual(paymentIntent?.status, .requiresAction)
+            XCTAssertEqual(paymentIntent!.nextAction?.type, .redirectToURL)
+            expectation.fulfill()
+        }
+
+        waitForExpectations(timeout: STPTestingNetworkRequestTimeout, handler: nil)
     }
 
     // MARK: - Helpers
+
+    private func confirmKlarnaPaymentIntent(
+        options: STPConfirmKlarnaOptions
+    ) async throws -> STPPaymentIntent {
+        let playgroundCheckoutURL = try XCTUnwrap(
+            URL(string: "https://stp-mobile-playground-backend-v7.stripedemos.com/checkout")
+        )
+        var request = URLRequest(url: playgroundCheckoutURL)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "customer": "guest",
+            "currency": "usd",
+            "amount": 1000,
+            "merchant_country_code": "US",
+            "mode": "payment",
+            "automatic_payment_methods": false,
+            "supported_payment_methods": ["klarna"],
+        ])
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let session = URLSession(configuration: STPTestingAPIClient.shared.sessionConfig)
+        let (data, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+
+        let playgroundResponse = try JSONDecoder().decode([String: String].self, from: data)
+        let clientSecret = try XCTUnwrap(playgroundResponse["intentClientSecret"])
+        let publishableKey = try XCTUnwrap(playgroundResponse["publishableKey"])
+
+        let address = STPPaymentMethodAddress()
+        address.country = "US"
+        let billingDetails = STPPaymentMethodBillingDetails()
+        billingDetails.email = "test@stripe.com"
+        billingDetails.address = address
+
+        let paymentMethodParams = STPPaymentMethodParams(
+            klarna: STPPaymentMethodKlarnaParams(),
+            billingDetails: billingDetails,
+            metadata: nil
+        )
+        let confirmParams = STPPaymentIntentConfirmParams(clientSecret: clientSecret)
+        confirmParams.paymentMethodParams = paymentMethodParams
+        confirmParams.paymentMethodOptions = STPConfirmPaymentMethodOptions(klarnaOptions: options)
+        confirmParams.returnURL = "example-app-scheme://authorized"
+
+        let client = STPAPIClient(publishableKey: publishableKey)
+        return try await client.confirmPaymentIntent(with: confirmParams)
+    }
 
     func cardSourceParams() -> STPSourceParams {
         let card = STPCardParams()
         card.number = "4000 0000 0000 3220" // Test 3DS required card
         card.expMonth = 7
-        card.expYear = UInt(Calendar.current.component(.year, from: Date()) + 5)
+        card.expYear = 2040
         card.currency = "usd"
+        card.cvc = "123"
 
         return .cardParams(withCard: card)
     }

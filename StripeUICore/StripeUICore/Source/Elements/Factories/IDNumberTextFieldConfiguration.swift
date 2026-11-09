@@ -7,9 +7,9 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
-@_spi(STP) public struct IDNumberTextFieldConfiguration: TextFieldElementConfiguration {
+@_spi(InternalOnlyAPI) public struct IDNumberTextFieldConfiguration: TextFieldElementConfiguration {
 
     // TODO(mludowise|IDPROD-2596): Check if these are the formats needed to support IDV.
     // When finalized, change enum to String type so we can configure allowed formats from our backend response.
@@ -22,15 +22,17 @@ import Foundation
 
     let type: IDNumberType?
     public let label: String
+    public let defaultValue: String?
 
     /**
      - Parameters:
        - type: The type of ID number that should be validated in this input field. If the ID type is unknown, passing `nil` will produce a configuration with no restrictions on the input.
        - label: The label of the field
      */
-    public init(type: IDNumberType?, label: String) {
+    public init(type: IDNumberType?, label: String, defaultValue: String?) {
         self.type = type
         self.label = label
+        self.defaultValue = defaultValue
     }
 
     public var disallowedCharacters: CharacterSet {
@@ -83,7 +85,7 @@ import Foundation
 
     public func validate(text: String, isOptional: Bool) -> TextFieldElement.ValidationState {
         guard !text.isEmpty else {
-            return isOptional ? .valid : .invalid(TextFieldElement.Error.empty)
+            return isOptional ? .valid : .invalid(TextFieldElement.Error.empty(localizedDescription: ""))
         }
 
         switch type {

@@ -8,7 +8,7 @@
 
 import iOSSnapshotTestCase
 import StripeCoreTestUtils
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 
 @testable import StripeIdentity
 
@@ -49,7 +49,7 @@ final class ListViewSnapshotTest: STPSnapshotTestCase {
             accessibilityLabel: nil,
             accessory: .button(
                 title: buttonText,
-                onTap: {}
+                onTap: { _ in }
             ),
             onTap: nil
         ),

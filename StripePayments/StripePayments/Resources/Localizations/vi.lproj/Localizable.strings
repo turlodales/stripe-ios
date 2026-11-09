@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Ngân hàng";
-
 "Boleto" = "Boleto";
 
 "Card" = "Thẻ";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "Ghi nợ SEPA";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Đã hết thời gian xác thực phương thức thanh toán -- hãy thử lại sau";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "Tài khoản ngân hàng Mỹ";
+"US bank account" = "Tài khoản ngân hàng Hoa Kỳ";
 
 "Unknown" = "Không biết";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

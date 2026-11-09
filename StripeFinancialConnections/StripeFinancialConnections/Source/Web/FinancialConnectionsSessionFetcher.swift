@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 protocol FinancialConnectionsSessionFetcher {
     func fetchSession() -> Future<StripeAPI.FinancialConnectionsSession>
@@ -16,14 +16,14 @@ class FinancialConnectionsSessionAPIFetcher: FinancialConnectionsSessionFetcher 
 
     // MARK: - Properties
 
-    private let api: FinancialConnectionsAPIClient
+    private let api: FinancialConnectionsAPI
     private let clientSecret: String
     private let accountFetcher: FinancialConnectionsAccountFetcher
 
     // MARK: - Init
 
     init(
-        api: FinancialConnectionsAPIClient,
+        api: FinancialConnectionsAPI,
         clientSecret: String,
         accountFetcher: FinancialConnectionsAccountFetcher
     ) {

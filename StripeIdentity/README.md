@@ -5,14 +5,14 @@ The Stripe Identity iOS SDK makes it quick and easy to verify your user's identi
 > To get access to the Identity iOS SDK, visit the [Identity Settings](https://dashboard.stripe.com/settings/identity) page and click **Enable**.
 
 ## Table of contents
-
+<!-- NOTE: Use case-sensitive anchor links for docc compatibility -->
 <!--ts-->
-* [Features](#features)
-* [Requirements](#requirements)
-* [Getting started](#getting-started)
-   * [Integration](#integration)
-   * [Example](#example)
-* [Manual linking](#manual-linking)
+* [Features](#Features)
+* [Requirements](#Requirements)
+* [Getting started](#Getting-started)
+   * [Integration](#Integration)
+   * [Example](#Example)
+* [Manual linking](#Manual-linking)
 
 <!--te-->
 
@@ -32,7 +32,9 @@ The Stripe Identity iOS SDK makes it quick and easy to verify your user's identi
 
 ## Requirements
 
-The Stripe Identity iOS SDK is compatible with apps targeting iOS 13.0 or above.
+The Stripe Identity iOS SDK is compatible with apps targeting iOS 15.0 or above.
+
+Simulator builds that include MediaPipe, including the prebuilt release frameworks and Swift Package Manager integrations with the `Identity` trait enabled, require an arm64 destination on Apple silicon.
 
 If you intend to use this SDK with Stripe's Identity service, you must not modify this SDK. Using a modified version of this SDK with Stripe's Identity service, without Stripe's written authorization, is a breach of your agreement with Stripe and may result in your Stripe account being shut down.
 

@@ -1,0 +1,190 @@
+//
+//  CheckoutPlaygroundView.swift
+//  PaymentSheet Example
+//
+//  Created by Nick Porter on 2/24/26.
+
+import SwiftUI
+
+struct CheckoutPlaygroundView: View {
+    @StateObject private var viewModel: CheckoutPlayground.ViewModel
+    @State private var showCurrencySelectorAppearance = false
+
+    init(settings: CheckoutPlayground.Settings? = nil) {
+        _viewModel = StateObject(wrappedValue: CheckoutPlayground.ViewModel(settings: settings))
+    }
+
+    var body: some View {
+        Group {
+            ZStack(alignment: .bottom) {
+                Color(uiColor: .systemGroupedBackground)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if let error = viewModel.errorMessage {
+                            CheckoutPlayground.ErrorBanner(message: error) {
+                                viewModel.errorMessage = nil
+                            }
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+
+                        CheckoutPlaygroundConfigurationSection(
+                            uiFramework: $viewModel.uiFramework,
+                            integrationType: $viewModel.integrationType,
+                            currency: $viewModel.currency,
+                            customerType: $viewModel.customerType,
+                            checkoutEndpointOption: $viewModel.checkoutEndpointOption,
+                            checkoutEndpoint: $viewModel.checkoutEndpoint,
+                            delayCheckoutClientRequests: $viewModel.delayCheckoutClientRequests,
+                            onReset: viewModel.reset
+                        )
+
+                        CheckoutPlaygroundEmailSection(viewModel: viewModel)
+
+                        CheckoutPlaygroundLineItemsSection(
+                            cartScenario: $viewModel.cartScenario,
+                            currency: viewModel.currency
+                        )
+
+                        CheckoutPlaygroundFeaturesSection(
+                            customerType: viewModel.customerType,
+                            shippingAddressCollection: $viewModel.shippingAddressCollection,
+                            defaultShippingAddressOption: $viewModel.defaultShippingAddressOption,
+                            customDefaultShippingAddress: $viewModel.customDefaultShippingAddress,
+                            billingAddressCollection: $viewModel.billingAddressCollection,
+                            defaultBillingAddressOption: $viewModel.defaultBillingAddressOption,
+                            customDefaultBillingAddress: $viewModel.customDefaultBillingAddress,
+                            automaticTax: $viewModel.automaticTax,
+                            checkoutSessionPaymentMethodSave: $viewModel.checkoutSessionPaymentMethodSave,
+                            checkoutSessionPaymentMethodRemove: $viewModel.checkoutSessionPaymentMethodRemove,
+                            automaticPaymentMethods: $viewModel.automaticPaymentMethods,
+                            linkMode: $viewModel.linkMode,
+                            applePayEnabled: $viewModel.applePayEnabled,
+                            paymentElementApplePayDisplay: $viewModel.paymentElementApplePayDisplay
+                        )
+
+                        CheckoutPlaygroundExpressCheckoutElementSection(
+                            showExpressCheckoutElement: $viewModel.expressCheckoutElement.isEnabled,
+                            applePayButtonType: $viewModel.expressCheckoutElement.applePayButtonType,
+                            linkDisplay: $viewModel.expressCheckoutElement.linkDisplay,
+                            appearance: $viewModel.expressCheckoutElement.appearance
+                        )
+
+                        currencySelectorAppearanceSection
+
+                        if !viewModel.automaticPaymentMethods {
+                            CheckoutPlaygroundPaymentMethodSection(
+                                selectedMethods: $viewModel.paymentMethodTypes,
+                                availableMethods: CheckoutPlayground.ViewModel.availablePaymentMethods
+                            )
+                        }
+
+                        Spacer().frame(height: 100)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                }
+                .disabled(viewModel.isCreating)
+
+                CheckoutPlayground.CreateButtonBar(
+                    isCreating: viewModel.isCreating,
+                    isDisabled: viewModel.isButtonDisabled
+                ) {
+                    Task {
+                        await viewModel.createSession()
+                    }
+                }
+            }
+            .navigationTitle("Checkout Playground")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $viewModel.navigateToCheckout) {
+                if let clientSecret = viewModel.clientSecret {
+                    switch viewModel.uiFramework {
+                    case .swiftUI:
+                        CheckoutCartView(
+                            clientSecret: clientSecret,
+                            emailSettings: viewModel.resolvedEmail,
+                            shippingAddressCollection: viewModel.shippingAddressCollection,
+                            defaultShippingAddress: viewModel.defaultShippingAddress,
+                            defaultBillingAddress: viewModel.defaultBillingAddress,
+                            adaptivePricing: true,
+                            integrationType: viewModel.integrationType,
+                            expressCheckoutElementSettings: viewModel.expressCheckoutElement,
+                            applePayEnabled: viewModel.applePayEnabled,
+                            paymentElementApplePayDisplay: viewModel.paymentElementApplePayDisplay,
+                            currencySelectorAppearance: viewModel.currencySelectorAppearance,
+                            delayCheckoutClientRequests: viewModel.delayCheckoutClientRequests
+                        )
+                    case .uiKit:
+                        CheckoutCartUIKitView(
+                            clientSecret: clientSecret,
+                            emailSettings: viewModel.resolvedEmail,
+                            shippingAddressCollection: viewModel.shippingAddressCollection,
+                            defaultShippingAddress: viewModel.defaultShippingAddress,
+                            defaultBillingAddress: viewModel.defaultBillingAddress,
+                            adaptivePricing: true,
+                            integrationType: viewModel.integrationType,
+                            expressCheckoutElementSettings: viewModel.expressCheckoutElement,
+                            applePayEnabled: viewModel.applePayEnabled,
+                            paymentElementApplePayDisplay: viewModel.paymentElementApplePayDisplay,
+                            currencySelectorAppearance: viewModel.currencySelectorAppearance,
+                            delayCheckoutClientRequests: viewModel.delayCheckoutClientRequests
+                        )
+                    }
+                }
+            }
+            .sheet(isPresented: $showCurrencySelectorAppearance) {
+                CurrencySelectorAppearancePlaygroundView(
+                    appearance: viewModel.currencySelectorAppearance,
+                    doneAction: { updatedAppearance in
+                        viewModel.currencySelectorAppearance = updatedAppearance
+                        showCurrencySelectorAppearance = false
+                    }
+                )
+            }
+            .onAppear {
+                viewModel.activateLinkModeOverride()
+            }
+            .onDisappear {
+                viewModel.deactivateLinkModeOverride()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var currencySelectorAppearanceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            CheckoutPlayground.SectionHeader(title: "Currency Selector", icon: "paintbrush.fill")
+            VStack(spacing: 1) {
+                CheckoutPlayground.AdaptivePricingLocationRow(
+                    selection: $viewModel.adaptivePricingCountry
+                )
+
+                Button {
+                    showCurrencySelectorAppearance = true
+                } label: {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 16))
+                            .frame(width: 24)
+                            .foregroundColor(.blue)
+                        Text("Customize Appearance")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}

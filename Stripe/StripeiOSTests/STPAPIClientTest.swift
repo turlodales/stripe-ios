@@ -8,12 +8,13 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeApplePay
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeApplePay
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripeIssuing
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPAPIClientTest: XCTestCase {
     func testSharedClient() {
@@ -23,6 +24,7 @@ class STPAPIClientTest: XCTestCase {
     func testSetDefaultPublishableKey() {
         let clientInitializedBefore = STPAPIClient()
         StripeAPI.defaultPublishableKey = "test"
+        defer { StripeAPI.defaultPublishableKey = nil }
         let clientInitializedAfter = STPAPIClient()
         let sharedClient = STPAPIClient.shared
         XCTAssertEqual(clientInitializedBefore.publishableKey, "test")
@@ -30,6 +32,7 @@ class STPAPIClientTest: XCTestCase {
 
         // Setting the STPAPIClient instance overrides Stripe.defaultPublishableKey...
         sharedClient.publishableKey = "test2"
+        defer { sharedClient.publishableKey = nil }
         XCTAssertEqual(sharedClient.publishableKey, "test2")
 
         // ...while Stripe.defaultPublishableKey remains the same
@@ -90,25 +93,6 @@ class STPAPIClientTest: XCTestCase {
         XCTAssertEqual(accountHeader, "acct_123")
     }
 
-    func testInitWithConfiguration() {
-        let config = STPPaymentConfiguration()
-        // #pragma clang diagnostic push
-        // #pragma clang diagnostic ignored "-Wdeprecated"
-        config.publishableKey = "pk_123"
-        config.stripeAccount = "acct_123"
-
-        let sut = STPAPIClient(configuration: config)
-        XCTAssertEqual(sut.publishableKey, config.publishableKey)
-        XCTAssertEqual(sut.stripeAccount, config.stripeAccount)
-        // #pragma clang diagnostic pop
-
-        let accountHeader = sut.configuredRequest(
-            for: URL(string: "https://www.stripe.com")!,
-            additionalHeaders: [:]
-        ).allHTTPHeaderFields?["Stripe-Account"]
-        XCTAssertEqual(accountHeader, "acct_123")
-    }
-
     private struct MockUAUsageClass: STPAnalyticsProtocol {
         static let stp_analyticsIdentifier = "MockUAUsageClass"
     }
@@ -118,10 +102,42 @@ class STPAPIClientTest: XCTestCase {
         STPAnalyticsClient.sharedClient.addClass(toProductUsageIfNecessary: MockUAUsageClass.self)
         var params: [String: Any] = [:]
         params = STPAPIClient.paramsAddingPaymentUserAgent(params)
-        XCTAssertEqual(params["payment_user_agent"] as! String, "stripe-ios/\(StripeAPIConfiguration.STPSDKVersion); variant.legacy; MockUAUsageClass")
+        XCTAssertEqual(params["payment_user_agent"] as! String, "stripe-ios/\(StripeAPIConfiguration.STPSDKVersion); variant.paymentsheet; MockUAUsageClass")
 
         params = STPAPIClient.paramsAddingPaymentUserAgent(params, additionalValues: ["foo"])
-        XCTAssertEqual(params["payment_user_agent"] as! String, "stripe-ios/\(StripeAPIConfiguration.STPSDKVersion); variant.legacy; MockUAUsageClass; foo")
+        XCTAssertEqual(params["payment_user_agent"] as! String, "stripe-ios/\(StripeAPIConfiguration.STPSDKVersion); variant.paymentsheet; MockUAUsageClass; foo")
+    }
+
+    func testClientAttributionMetadata() {
+        AnalyticsHelper.shared.generateSessionID()
+        var params: [String: Any] = [:]
+        params = STPAPIClient.paramsAddingClientAttributionMetadata(params, clientAttributionMetadata: STPClientAttributionMetadata(elementsSessionConfigId: "elements_session_123"))
+        let clientAttributionMetadata = params["client_attribution_metadata"] as? [String: String]
+        XCTAssertEqual(clientAttributionMetadata?["client_session_id"], AnalyticsHelper.shared.sessionID)
+        XCTAssertEqual(clientAttributionMetadata?["merchant_integration_source"], "elements")
+        XCTAssertEqual(clientAttributionMetadata?["merchant_integration_subtype"], "mobile")
+        XCTAssertEqual(clientAttributionMetadata?["merchant_integration_version"], "stripe-ios/\(StripeAPIConfiguration.STPSDKVersion)")
+        XCTAssertNil(clientAttributionMetadata?["checkout_session_id"])
+    }
+
+    func testClientAttributionMetadata_withCheckoutSessionId() {
+        AnalyticsHelper.shared.generateSessionID()
+        var params: [String: Any] = [:]
+        params = STPAPIClient.paramsAddingClientAttributionMetadata(
+            params,
+            clientAttributionMetadata: STPClientAttributionMetadata(
+                elementsSessionConfigId: "elements_session_123",
+                checkoutSessionId: "cs_test_xxx",
+                paymentMethodSelectionFlow: .automatic
+            )
+        )
+        let clientAttributionMetadata = params["client_attribution_metadata"] as? [String: String]
+        XCTAssertEqual(clientAttributionMetadata?["client_session_id"], AnalyticsHelper.shared.sessionID)
+        XCTAssertEqual(clientAttributionMetadata?["elements_session_config_id"], "elements_session_123")
+        XCTAssertEqual(clientAttributionMetadata?["checkout_session_id"], "cs_test_xxx")
+        XCTAssertEqual(clientAttributionMetadata?["payment_method_selection_flow"], "automatic")
+        // payment_intent_creation_flow is intentionally omitted for CheckoutSession
+        XCTAssertNil(clientAttributionMetadata?["payment_intent_creation_flow"])
     }
 
     func testSetAppInfo() {

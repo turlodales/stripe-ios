@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI {
     /// PaymentMethod objects represent your customer's payment instruments. They can be used with PaymentIntents to collect payments.
@@ -17,7 +17,7 @@ extension StripeAPI {
         public let id: String
 
         /// Time at which the object was created. Measured in seconds since the Unix epoch.
-        public var created: Date?
+        public var created: Date
         /// `YES` if the object exists in live mode or the value `NO` if the object exists in test mode.
         public var livemode = false
 

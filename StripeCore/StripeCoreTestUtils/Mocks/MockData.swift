@@ -7,7 +7,7 @@
 
 import Foundation
 
-@testable@_spi(STP) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripeCore
 
 /// Protocol for easily opening JSON mock files.
 public protocol MockData: RawRepresentable where RawValue == String {
@@ -25,10 +25,11 @@ extension MockData {
     }
 
     public func make() throws -> ResponseType {
+        let httpURLResponse = HTTPURLResponse(url: URL(string: "https://api.stripe.com/v1/some_endpoint")!, statusCode: 200, httpVersion: nil, headerFields: ["request-id": "req_123"])
         let result: Result<ResponseType, Error> = STPAPIClient.decodeResponse(
             data: try data(),
             error: nil,
-            response: nil
+            response: httpURLResponse
         )
         switch result {
         case .success(let response):
@@ -42,7 +43,7 @@ extension MockData {
 // Dummy class to determine this bundle
 private class ClassForBundle {}
 
-@_spi(STP) public enum FileMock: String, MockData {
+@_spi(InternalOnlyAPI) public enum FileMock: String, MockData {
     public typealias ResponseType = StripeFile
     public var bundle: Bundle { return Bundle(for: ClassForBundle.self) }
 

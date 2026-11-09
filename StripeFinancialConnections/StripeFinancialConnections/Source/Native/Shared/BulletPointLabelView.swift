@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class BulletPointLabelView: HitTestView {
@@ -31,7 +31,7 @@ final class BulletPointLabelView: HitTestView {
                 font: font,
                 boldFont: font,
                 linkFont: font,
-                textColor: .textDefault
+                textColor: FinancialConnectionsAppearance.Colors.textDefault
             )
             primaryLabel.setText(title, action: didSelectURL)
             verticalLabelStackView.addArrangedSubview(primaryLabel)
@@ -45,7 +45,7 @@ final class BulletPointLabelView: HitTestView {
                 font: font,
                 boldFont: displayingOnlyContent ? .body(.medium) : .body(.smallEmphasized),
                 linkFont: font,
-                textColor: .textSubdued
+                textColor: FinancialConnectionsAppearance.Colors.textSubdued
             )
             subtitleLabel.setText(content, action: didSelectURL)
             verticalLabelStackView.addArrangedSubview(subtitleLabel)

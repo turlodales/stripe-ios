@@ -7,10 +7,12 @@
 
 import Foundation
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class IdentityTextButtonElement: Element {
+    let collectsUserInput: Bool = true
+
     typealias DidTapIdentityTextButton = () -> Void
     weak var delegate: StripeUICore.ElementDelegate?
 

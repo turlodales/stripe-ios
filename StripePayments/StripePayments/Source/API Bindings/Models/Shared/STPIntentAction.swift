@@ -52,9 +52,6 @@ import Foundation
     /// Contains details describing the microdeposits verification flow for US Bank Account payments
     case verifyWithMicrodeposits
 
-    /// The action type for UPI payment methods. The customer must complete the transaction in their banking app within 5 minutes.
-    case upiAwaitNotification
-
     /// Contains instructions for authenticating a payment by redirecting your customer to Cash App.
     case cashAppRedirectToApp
 
@@ -67,8 +64,20 @@ import Foundation
     /// Contains details for displaying the QR code required for PromptPay.
     case promptpayDisplayQrCode
 
+    /// Contains details for displaying the QR code required for Pix.
+    case pixDisplayQrCode
+
     /// Contains details for redirecting to the Swish app.
     case swishHandleRedirect
+
+    /// The action type is Multibanco payment. We provide `STPPaymentHandler` to display the Multibanco voucher.
+    case multibancoDisplayDetails
+
+    /// The action type for MB WAY. The customer must authorize the payment in the MB WAY app.
+    case mbWayAwaitAuthorization
+
+    /// The customer must authorize the payment out of band, such as in their mobile banking app.
+    case awaitAuthorization
 
     /// Parse the string and return the correct `STPIntentActionType`,
     /// or `STPIntentActionTypeUnknown` if it's unrecognized by this version of the SDK.
@@ -93,8 +102,6 @@ import Foundation
             self = .BLIKAuthorize
         case "verify_with_microdeposits":
             self = .verifyWithMicrodeposits
-        case "upi_await_notification":
-            self = .upiAwaitNotification
         case "cashapp_handle_redirect_or_display_qr_code":
             self = .cashAppRedirectToApp
         case "paynow_display_qr_code":
@@ -103,8 +110,16 @@ import Foundation
             self = .konbiniDisplayDetails
         case "promptpay_display_qr_code":
             self = .promptpayDisplayQrCode
+        case "pix_display_qr_code":
+            self = .pixDisplayQrCode
         case "swish_handle_redirect_or_display_qr_code":
             self = .swishHandleRedirect
+        case "multibanco_display_details":
+            self = .multibancoDisplayDetails
+        case "mb_way_await_authorization":
+            self = .mbWayAwaitAuthorization
+        case "await_authorization":
+            self = .awaitAuthorization
         default:
             self = .unknown
         }
@@ -131,20 +146,26 @@ import Foundation
             return "boleto_display_details"
         case .verifyWithMicrodeposits:
             return "verify_with_microdeposits"
-        case .upiAwaitNotification:
-            return "upi_await_notification"
         case .cashAppRedirectToApp:
             return "cashapp_handle_redirect_or_display_qr_code"
         case .konbiniDisplayDetails:
             return "konbini_display_details"
-        case .unknown:
-            break
         case .payNowDisplayQrCode:
             return "paynow_display_qr_code"
         case .promptpayDisplayQrCode:
             return "promptpay_display_qr_code"
+        case .pixDisplayQrCode:
+            return "pix_display_qr_code"
         case .swishHandleRedirect:
             return "swish_handle_redirect_or_display_qr_code"
+        case .multibancoDisplayDetails:
+            return "multibanco_display_details"
+        case .mbWayAwaitAuthorization:
+            return "mb_way_await_authorization"
+        case .awaitAuthorization:
+            return "await_authorization"
+        case .unknown:
+            break
         }
 
         // catch any unknown values here
@@ -193,8 +214,14 @@ public class STPIntentAction: NSObject {
     /// Contains details for displaying the QR code required for PromptPay.
     @objc public let promptPayDisplayQrCode: STPIntentActionPromptPayDisplayQrCode?
 
+    /// Contains details for displaying the QR code required for Pix.
+    @objc public let pixDisplayQrCode: STPIntentActionPixDisplayQrCode?
+
     /// Contains details for redirecting to the Swish app.
     @objc public let swishHandleRedirect: STPIntentActionSwishHandleRedirect?
+
+    /// The details for displaying Multibanco voucher via URL, when `type == .multibanco`
+    @objc public let multibancoDisplayDetails: STPIntentActionMultibancoDisplayDetails?
 
     internal let useStripeSDK: STPIntentActionUseStripeSDK?
 
@@ -238,12 +265,14 @@ public class STPIntentAction: NSObject {
             }
         case .BLIKAuthorize:
             break  // no additional details
+        case .mbWayAwaitAuthorization:
+            break  // no additional details
+        case .awaitAuthorization:
+            break  // no additional details
         case .verifyWithMicrodeposits:
             if let verifyWithMicrodeposits = verifyWithMicrodeposits {
                 props.append("verifyWithMicrodeposits = \(verifyWithMicrodeposits)")
             }
-        case .upiAwaitNotification:
-            props.append("upiAwaitNotification != nil")
         case .cashAppRedirectToApp:
             if let cashAppRedirectToApp = cashAppRedirectToApp {
                 props.append("cashAppRedirectToApp = \(cashAppRedirectToApp)")
@@ -260,9 +289,17 @@ public class STPIntentAction: NSObject {
             if let promptPayDisplayQrCode = promptPayDisplayQrCode {
                 props.append("promptpayDisplayQrCode = \(promptPayDisplayQrCode)")
             }
+        case .pixDisplayQrCode:
+            if let pixDisplayQrCode {
+                props.append("pixDisplayQrCode = \(pixDisplayQrCode)")
+            }
         case .swishHandleRedirect:
             if let swishHandleRedirect = swishHandleRedirect {
                 props.append("swishHandleRedirect = \(swishHandleRedirect)")
+            }
+        case .multibancoDisplayDetails:
+            if let multibancoDisplayDetails {
+                props.append("multibancoDisplayDetails = \(multibancoDisplayDetails)")
             }
         case .unknown:
             // unrecognized type, just show the original dictionary for debugging help
@@ -285,7 +322,9 @@ public class STPIntentAction: NSObject {
         payNowDisplayQrCode: STPIntentActionPayNowDisplayQrCode?,
         konbiniDisplayDetails: STPIntentActionKonbiniDisplayDetails?,
         promptPayDisplayQrCode: STPIntentActionPromptPayDisplayQrCode?,
+        pixDisplayQrCode: STPIntentActionPixDisplayQrCode? = nil,
         swishHandleRedirect: STPIntentActionSwishHandleRedirect?,
+        multibancoDisplayDetails: STPIntentActionMultibancoDisplayDetails?,
         allResponseFields: [AnyHashable: Any]
     ) {
         self.type = type
@@ -300,7 +339,9 @@ public class STPIntentAction: NSObject {
         self.payNowDisplayQrCode = payNowDisplayQrCode
         self.konbiniDisplayDetails = konbiniDisplayDetails
         self.promptPayDisplayQrCode = promptPayDisplayQrCode
+        self.pixDisplayQrCode = pixDisplayQrCode
         self.swishHandleRedirect = swishHandleRedirect
+        self.multibancoDisplayDetails = multibancoDisplayDetails
         self.allResponseFields = allResponseFields
         super.init()
     }
@@ -332,7 +373,9 @@ extension STPIntentAction: STPAPIResponseDecodable {
         var payNowDisplayQrCode: STPIntentActionPayNowDisplayQrCode?
         var konbiniDisplayDetails: STPIntentActionKonbiniDisplayDetails?
         var promptPayDisplayQrCode: STPIntentActionPromptPayDisplayQrCode?
+        var pixDisplayQrCode: STPIntentActionPixDisplayQrCode?
         var swishHandleRedirect: STPIntentActionSwishHandleRedirect?
+        var multibancoDisplayDetails: STPIntentActionMultibancoDisplayDetails?
 
         switch type {
         case .unknown:
@@ -381,6 +424,10 @@ extension STPIntentAction: STPAPIResponseDecodable {
             }
         case .BLIKAuthorize:
             break  // no additional details
+        case .mbWayAwaitAuthorization:
+            break  // no additional details
+        case .awaitAuthorization:
+            break  // no additional details
         case .verifyWithMicrodeposits:
             verifyWithMicrodeposits = STPIntentActionVerifyWithMicrodeposits.decodedObject(
                 fromAPIResponse: dict["verify_with_microdeposits"] as? [AnyHashable: Any]
@@ -388,8 +435,6 @@ extension STPIntentAction: STPAPIResponseDecodable {
             if verifyWithMicrodeposits == nil {
                 type = .unknown
             }
-        case .upiAwaitNotification:
-            break  // no additional details
         case .cashAppRedirectToApp:
             cashAppRedirectToApp = STPIntentActionCashAppRedirectToApp.decodedObject(
                 fromAPIResponse: dict["cashapp_handle_redirect_or_display_qr_code"] as? [AnyHashable: Any]
@@ -418,11 +463,25 @@ extension STPIntentAction: STPAPIResponseDecodable {
             if promptPayDisplayQrCode == nil {
                 type = .unknown
             }
+        case .pixDisplayQrCode:
+            pixDisplayQrCode = STPIntentActionPixDisplayQrCode.decodedObject(
+                fromAPIResponse: dict["pix_display_qr_code"] as? [AnyHashable: Any]
+            )
+            if pixDisplayQrCode == nil {
+                type = .unknown
+            }
         case .swishHandleRedirect:
             swishHandleRedirect = STPIntentActionSwishHandleRedirect.decodedObject(
                 fromAPIResponse: dict["swish_handle_redirect_or_display_qr_code"] as? [AnyHashable: Any]
             )
             if swishHandleRedirect == nil {
+                type = .unknown
+            }
+        case .multibancoDisplayDetails:
+            multibancoDisplayDetails = STPIntentActionMultibancoDisplayDetails.decodedObject(
+                fromAPIResponse: dict["multibanco_display_details"] as? [AnyHashable: Any]
+            )
+            if multibancoDisplayDetails == nil {
                 type = .unknown
             }
         }
@@ -440,7 +499,9 @@ extension STPIntentAction: STPAPIResponseDecodable {
             payNowDisplayQrCode: payNowDisplayQrCode,
             konbiniDisplayDetails: konbiniDisplayDetails,
             promptPayDisplayQrCode: promptPayDisplayQrCode,
+            pixDisplayQrCode: pixDisplayQrCode,
             swishHandleRedirect: swishHandleRedirect,
+            multibancoDisplayDetails: multibancoDisplayDetails,
             allResponseFields: dict
         ) as? Self
     }

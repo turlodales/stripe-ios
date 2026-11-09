@@ -1,11 +1,11 @@
-// swift-tools-version:5.7
+// swift-tools-version:6.1
 import PackageDescription
 
 let package = Package(
     name: "Stripe",
     defaultLocalization: "en",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v15)
     ],
     products: [
         .library(
@@ -33,30 +33,61 @@ let package = Package(
             targets: ["StripeIdentity"]
         ),
         .library(
+            name: "StripeIssuing",
+            targets: ["StripeIssuing"]
+        ),
+        .library(
             name: "StripeCardScan",
             targets: ["StripeCardScan"]
         ),
         .library(
             name: "StripeFinancialConnections",
             targets: ["StripeFinancialConnections"]
+        ),
+        .library(
+            name: "StripeFinancialConnectionsLite",
+            targets: ["StripeFinancialConnectionsLite"]
+        ),
+        .library(
+            name: "StripeConnect",
+            targets: ["StripeConnect"]
+        ),
+        .library(
+            name: "StripeCryptoOnramp",
+            targets: ["StripeCryptoOnramp"]
+        )
+    ],
+    traits: [
+        .trait(
+            name: "Identity",
+            description: "Enables 3D face capture in StripeIdentity."
+        )
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/stripe/identity-ios-mediapipe",
+            exact: "1.0.0"
         )
     ],
     targets: [
         .target(
             name: "Stripe",
-            dependencies: ["Stripe3DS2", "StripeCore", "StripeApplePay", "StripeUICore", "StripePayments", "StripePaymentsUI"],
+            dependencies: ["Stripe3DS2", "StripeCore", "StripeApplePay", "StripeUICore", "StripePayments", "StripePaymentsUI", "StripeIssuing"],
             path: "Stripe/StripeiOS",
             exclude: ["Info.plist"],
             resources: [
-                .process("Resources/StripeiOS.xcassets")
+                .process("Resources/StripeiOS.xcassets"),
+                .process("PrivacyInfo.xcprivacy")
             ]
         ),
         .target(
             name: "Stripe3DS2",
+            dependencies: ["StripeCore"],
             path: "Stripe3DS2/Stripe3DS2",
             exclude: ["Info.plist", "Resources/CertificateFiles", "include/Stripe3DS2-Prefix.pch"],
             resources: [
-                .process("Resources")
+                .process("Resources"),
+                .process("PrivacyInfo.xcprivacy")
             ],
             cSettings: [
                 .headerSearchPath(".")
@@ -71,7 +102,10 @@ let package = Package(
         .target(
             name: "StripeCore",
             path: "StripeCore/StripeCore",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist"],
+            resources: [
+                .process("PrivacyInfo.xcprivacy")
+            ]
         ),
         .target(
             name: "StripeApplePay",
@@ -81,11 +115,30 @@ let package = Package(
         ),
         .target(
             name: "StripeIdentity",
-            dependencies: ["StripeCore", "StripeUICore", "StripeCameraCore"],
+            dependencies: [
+                "StripeCore",
+                "StripeUICore",
+                "StripeCameraCore",
+                .product(
+                    name: "MediaPipeSPM",
+                    package: "identity-ios-mediapipe",
+                    condition: .when(traits: ["Identity"])
+                ),
+            ],
             path: "StripeIdentity/StripeIdentity",
             exclude: ["Info.plist"],
             resources: [
-                .process("Resources/Images")
+                .process("Resources/Audio"),
+                .process("Resources/Images"),
+                .copy("Resources/face_landmarker.task")
+            ]
+        ),
+        .target(
+            name: "StripeIssuing",
+            dependencies: ["StripeCore", "StripePayments", "StripePaymentsUI"],
+            path: "StripeIssuing/StripeIssuing",
+            resources: [
+                .process("Resources")
             ]
         ),
         .target(
@@ -129,13 +182,19 @@ let package = Package(
         ),
         .target(
             name: "StripePaymentSheet",
-            dependencies: ["StripePaymentsUI", "StripeApplePay", "StripePayments", "StripeCore", "StripeUICore"],
+            dependencies: ["StripePaymentsUI", "StripeApplePay", "StripePayments", "StripeCore", "StripeUICore", "StripeFinancialConnectionsLite"],
             path: "StripePaymentSheet/StripePaymentSheet",
             exclude: ["Info.plist"],
             resources: [
                 .process("Resources/StripePaymentSheet.xcassets"),
-                .process("Resources/JSON")
+                .process("PrivacyInfo.xcprivacy")
             ]
+        ),
+        .target(
+            name: "StripeFinancialConnectionsLite",
+            dependencies: ["StripeCore"],
+            path: "StripeFinancialConnectionsLite/StripeFinancialConnectionsLite",
+            exclude: ["Info.plist"]
         ),
         .target(
             name: "StripeFinancialConnections",
@@ -144,7 +203,24 @@ let package = Package(
             exclude: ["Info.plist"],
             resources: [
                 .process("Resources/Images"),
+                .process("PrivacyInfo.xcprivacy")
+            ]
+        ),
+        .target(
+            name: "StripeConnect",
+            dependencies: ["StripeCore", "StripeUICore", "StripeFinancialConnections"],
+            path: "StripeConnect/StripeConnect"
+        ),
+        .target(
+            name: "StripeCryptoOnramp",
+            dependencies: ["StripeApplePay", "StripeCore", "StripeIdentity", "StripePayments", "StripePaymentSheet", "StripePaymentsUI", "StripeUICore"],
+            path: "StripeCryptoOnramp/StripeCryptoOnramp",
+            exclude: ["StripeCryptoOnramp.h"],
+            resources: [
+                .process("Resources/StripeCryptoOnramp.xcassets"),
+                .process("Resources/Localizations")
             ]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

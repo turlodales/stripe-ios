@@ -7,17 +7,17 @@
 
 import Foundation
 
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripeCoreTestUtils
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsTestUtils
-@testable@_spi(STP) import StripeUICore
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripeCoreTestUtils
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsTestUtils
+@testable@_spi(InternalOnlyAPI) import StripeUICore
 
 import OHHTTPStubs
 import OHHTTPStubsSwift
 
-final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
+final class PaymentSheetConfirmParamsTest: APIStubbedTestCase {
     enum MockJson {
         static let cardPaymentMethod = STPTestUtils.jsonNamed("CardPaymentMethod")!
         static let paymentIntent = STPTestUtils.jsonNamed("PaymentIntent")!
@@ -81,11 +81,11 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         static let setupIntent = STPSetupIntent.decodedObject(fromAPIResponse: MockJson.setupIntent)!
 
         static func deferredPaymentIntentConfiguration(clientSecret: String) -> PaymentSheet.IntentConfiguration {
-            .init(mode: .payment(amount: 123, currency: "USD"), paymentMethodTypes: ["card"]) { _, _, c in c(.success(clientSecret)) }
+            .init(mode: .payment(amount: 123, currency: "USD"), paymentMethodTypes: ["card"]) { _, _ in return clientSecret }
         }
 
         static func deferredSetupIntentConfiguration(clientSecret: String) -> PaymentSheet.IntentConfiguration {
-            .init(mode: .setup(currency: "USD", setupFutureUsage: .offSession), confirmHandler: { _, _, c in c(.success(clientSecret)) })
+            .init(mode: .setup(currency: "USD", setupFutureUsage: .offSession), confirmHandler: { _, _ in return clientSecret })
         }
     }
 
@@ -135,14 +135,16 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         stubConfirmPaymentExpecting(isPaymentIntent: true, paymentMethodId: MockParams.cardPaymentMethod.stripeId)
 
         let configuration = MockParams.configurationWithCustomer(pk: MockParams.dashboardPublicKey)
-
         let exp = expectation(description: "confirm completed")
+        let paymentHandler = STPPaymentHandler(apiClient: configuration.apiClient)
         PaymentSheet.confirm(
             configuration: configuration,
             authenticationContext: self,
-            intent: .deferredIntent(elementsSession: .emptyElementsSession, intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            intent: .deferredIntent(intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            elementsSession: .emptyElementsSession,
             paymentOption: .saved(paymentMethod: MockParams.cardPaymentMethod, confirmParams: nil),
-            paymentHandler: STPPaymentHandler(apiClient: configuration.apiClient),
+            paymentHandler: paymentHandler,
+            analyticsHelper: ._testValue(),
             completion: { _, _ in
                 exp.fulfill()
             }
@@ -160,12 +162,15 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         let configuration = MockParams.configuration(pk: MockParams.dashboardPublicKey)
 
         let exp = expectation(description: "confirm completed")
+        let paymentHandler = STPPaymentHandler(apiClient: configuration.apiClient)
         PaymentSheet.confirm(
             configuration: configuration,
             authenticationContext: self,
-            intent: .deferredIntent(elementsSession: .emptyElementsSession, intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            intent: .deferredIntent(intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            elementsSession: .emptyElementsSession,
             paymentOption: .new(confirmParams: MockParams.intentConfirmParams),
-            paymentHandler: STPPaymentHandler(apiClient: configuration.apiClient),
+            paymentHandler: paymentHandler,
+            analyticsHelper: ._testValue(),
             completion: { _, _ in
                 exp.fulfill()
             }
@@ -187,17 +192,19 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         let configuration = MockParams.configurationWithCustomer(pk: MockParams.dashboardPublicKey)
 
         let exp = expectation(description: "confirm completed")
+        let paymentHandler = STPPaymentHandler(apiClient: configuration.apiClient)
         PaymentSheet.confirm(
             configuration: configuration,
             authenticationContext: self,
-            intent: .deferredIntent(elementsSession: .emptyElementsSession, intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            intent: .deferredIntent(intentConfig: MockParams.deferredPaymentIntentConfiguration(clientSecret: MockParams.dashboardPaymentIntentClientSecret)),
+            elementsSession: .emptyElementsSession,
             paymentOption: .new(confirmParams: intentConfirmParams),
-            paymentHandler: STPPaymentHandler(apiClient: configuration.apiClient),
+            paymentHandler: paymentHandler,
+            analyticsHelper: ._testValue(),
             completion: { _, _ in
                 exp.fulfill()
             }
         )
-
         waitForExpectations(timeout: 10)
     }
 
@@ -212,12 +219,15 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         let configuration = MockParams.configurationWithCustomer(pk: MockParams.dashboardPublicKey)
 
         let exp = expectation(description: "confirm completed")
+        let paymentHandler = STPPaymentHandler(apiClient: configuration.apiClient)
         PaymentSheet.confirm(
             configuration: configuration,
             authenticationContext: self,
-            intent: .deferredIntent(elementsSession: .emptyElementsSession, intentConfig: MockParams.deferredSetupIntentConfiguration(clientSecret: MockParams.dashboardSetupIntentClientSecret)),
+            intent: .deferredIntent(intentConfig: MockParams.deferredSetupIntentConfiguration(clientSecret: MockParams.dashboardSetupIntentClientSecret)),
+            elementsSession: .emptyElementsSession,
             paymentOption: .saved(paymentMethod: MockParams.cardPaymentMethod, confirmParams: nil),
-            paymentHandler: STPPaymentHandler(apiClient: configuration.apiClient),
+            paymentHandler: paymentHandler,
+            analyticsHelper: ._testValue(),
             completion: { _, _ in
                 exp.fulfill()
             }
@@ -235,12 +245,15 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
         let configuration = MockParams.configurationWithCustomer(pk: MockParams.dashboardPublicKey)
 
         let exp = expectation(description: "confirm completed")
+        let paymentHandler = STPPaymentHandler(apiClient: configuration.apiClient)
         PaymentSheet.confirm(
             configuration: configuration,
             authenticationContext: self,
-            intent: .deferredIntent(elementsSession: .emptyElementsSession, intentConfig: MockParams.deferredSetupIntentConfiguration(clientSecret: MockParams.dashboardSetupIntentClientSecret)),
+            intent: .deferredIntent(intentConfig: MockParams.deferredSetupIntentConfiguration(clientSecret: MockParams.dashboardSetupIntentClientSecret)),
+            elementsSession: .emptyElementsSession,
             paymentOption: .new(confirmParams: MockParams.intentConfirmParams),
-            paymentHandler: STPPaymentHandler(apiClient: configuration.apiClient),
+            paymentHandler: paymentHandler,
+            analyticsHelper: ._testValue(),
             completion: { _, _ in
                 exp.fulfill()
             }
@@ -250,7 +263,7 @@ final class PaymentSheet_ConfirmParamsTest: APIStubbedTestCase {
     }
 }
 
-extension PaymentSheet_ConfirmParamsTest: STPAuthenticationContext {
+extension PaymentSheetConfirmParamsTest: STPAuthenticationContext {
     func authenticationPresentingViewController() -> UIViewController {
         return UIViewController()
     }
@@ -258,7 +271,7 @@ extension PaymentSheet_ConfirmParamsTest: STPAuthenticationContext {
 
 // MARK: - Helpers
 
-private extension PaymentSheet_ConfirmParamsTest {
+private extension PaymentSheetConfirmParamsTest {
     func stubConfirmPaymentExpecting(
         isPaymentIntent: Bool,
         paymentMethodId: String,
@@ -300,16 +313,6 @@ private extension PaymentSheet_ConfirmParamsTest {
     }
 
     func bodyParams(from request: URLRequest, line: UInt) -> [String: String] {
-        guard let httpBody = request.httpBodyOrBodyStream,
-              let query = String(data: httpBody, encoding: .utf8)?.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let components = URLComponents(string: "http://someurl.com?\(query)") else {
-            XCTFail("Request body empty", line: line)
-            return [:]
-        }
-
-        return components.queryItems?.reduce(into: [:], { partialResult, item in
-            guard item.value != "" else { return }
-            partialResult[item.name] = item.value?.removingPercentEncoding
-        }) ?? [:]
+        return RequestBodyTestHelpers.formEncodedBodyParams(from: request, omittingEmptyValues: true, line: line)
     }
 }

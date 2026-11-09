@@ -6,13 +6,13 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) @testable import StripeUICore
+@_spi(InternalOnlyAPI) @testable import StripeUICore
 import XCTest
 
 final class IDNumberTextFieldConfigurationTest: XCTestCase {
 
     func testValidationBR_CPF_CNPJ() {
-        let config = IDNumberTextFieldConfiguration(type: .BR_CPF_CNPJ, label: "")
+        let config = IDNumberTextFieldConfiguration(type: .BR_CPF_CNPJ, label: "", defaultValue: nil)
 
         // CPF is 11 digits
         verifyValid(config.validate(text: "12345678901", isOptional: false))
@@ -35,7 +35,7 @@ final class IDNumberTextFieldConfigurationTest: XCTestCase {
     }
 
     func testValidationUnspecifiedType() {
-        let config = IDNumberTextFieldConfiguration(type: nil, label: "")
+        let config = IDNumberTextFieldConfiguration(type: nil, label: "", defaultValue: nil)
         // Anything but empty string is valid
         verifyInvalidEmpty(config.validate(text: "", isOptional: false))
         verifyValid(config.validate(text: "a", isOptional: false))
@@ -47,7 +47,7 @@ final class IDNumberTextFieldConfigurationTest: XCTestCase {
     }
 
     func testDisplayTextBR_CPF_CNPJ() {
-        let config = IDNumberTextFieldConfiguration(type: .BR_CPF_CNPJ, label: "")
+        let config = IDNumberTextFieldConfiguration(type: .BR_CPF_CNPJ, label: "", defaultValue: nil)
 
         XCTAssertEqual(config.makeDisplayText(for: "").string, "")
 

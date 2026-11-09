@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 /// These fields indicate whether a card field represents a valid value, invalid
 /// value, or incomplete value.
@@ -350,14 +350,13 @@ public class STPCardValidator: NSObject {
         case 0, 1:
             return .incomplete
         case 2:
-            if self.validationState(forExpirationMonth: sanitizedMonth) == .invalid {
+            guard let yearInt = Int(sanitizedYear), let monthInt = Int(sanitizedMonth), self.validationState(forExpirationMonth: sanitizedMonth) != .invalid else {
                 return .invalid
+            }
+            if yearInt == moddedYear {
+                return monthInt >= currentMonth ? .valid : .invalid
             } else {
-                if Int(sanitizedYear) ?? 0 == moddedYear {
-                    return Int(sanitizedMonth) ?? 0 >= currentMonth ? .valid : .invalid
-                } else {
-                    return Int(sanitizedYear) ?? 0 > moddedYear ? .valid : .invalid
-                }
+                return ((yearInt > moddedYear) && (yearInt - moddedYear <= 50)) ? .valid : .invalid
             }
         default:
             return .invalid
@@ -403,7 +402,7 @@ public class STPCardValidator: NSObject {
         return incomplete ? .incomplete : .valid
     }
 
-    @_spi(STP) public class func minCVCLength() -> Int {
+    @_spi(InternalOnlyAPI) public class func minCVCLength() -> Int {
         return 3
     }
 
@@ -449,7 +448,8 @@ public class STPCardValidator: NSObject {
             return
         }
 
-        cbcBinController.retrieveBINRanges(forPrefix: cardNumber, recordErrorsAsSuccess: false, onlyFetchForVariableLengthBINs: false) { result in
+        // TODO: BIN retrieval is broken if you don't use STPAPIClient.shared (https://jira.corp.stripe.com/browse/MOBILESDK-4322)
+        cbcBinController.retrieveBINRanges(apiClient: STPAPIClient.shared, forPrefix: cardNumber, recordErrorsAsSuccess: false, onlyFetchForVariableLengthBINs: false) { result in
             switch result {
             case .failure(let error):
                 completion(.failure(error))
@@ -483,7 +483,7 @@ extension STPCardValidator {
         }
     }
 
-    @_spi(STP) public class func cardNumberFormat(forCardNumber cardNumber: String) -> [NSNumber] {
+    @_spi(InternalOnlyAPI) public class func cardNumberFormat(forCardNumber cardNumber: String) -> [NSNumber] {
         let binRange = STPBINController.shared.mostSpecificBINRange(forNumber: cardNumber)
         if binRange.brand == .dinersClub && binRange.panLength == 14 {
             return [NSNumber(value: 4), NSNumber(value: 6), NSNumber(value: 4)]
@@ -492,7 +492,7 @@ extension STPCardValidator {
         return self.cardNumberFormat(for: binRange.brand)
     }
 
-    @_spi(STP) public class func stringIsValidLuhn(_ number: String) -> Bool {
+    @_spi(InternalOnlyAPI) public class func stringIsValidLuhn(_ number: String) -> Bool {
         var odd = true
         var sum = 0
         var digits: [String] = []
@@ -514,5 +514,18 @@ extension STPCardValidator {
         }
 
         return sum % 10 == 0
+    }
+
+    /// Returns the brand (eg VISA) for a card, respecting card brand choice.
+    @_spi(InternalOnlyAPI) public class func brand(for card: STPPaymentMethodCardParams?) -> STPCardBrand {
+        guard let card, let number = card.number else {
+            return .unknown
+        }
+        // If there's a preferred card network, just use that
+        if let networks = card.networks {
+            return STPCard.brand(from: networks.preferred ?? "")
+        }
+        // Otherwise use the default card network for the card number
+        return STPCardValidator.brand(forNumber: number)
     }
 }

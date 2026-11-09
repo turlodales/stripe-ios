@@ -6,11 +6,12 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP)@testable import StripeCore
+@_spi(InternalOnlyAPI)@testable import StripeCore
 import StripeCoreTestUtils
-@_spi(STP)@testable import StripePaymentSheet
+@_spi(InternalOnlyAPI)@testable import StripePaymentSheet
 @testable import StripePaymentsTestUtils
-@_spi(STP)@testable import StripeUICore
+@_spi(InternalOnlyAPI)@testable import StripeUICore
+import XCTest
 
 class AddressViewControllerSnapshotTests: STPSnapshotTestCase {
     private let addressSpecProvider: AddressSpecProvider = {
@@ -75,6 +76,21 @@ class AddressViewControllerSnapshotTests: STPSnapshotTestCase {
         verify(navVC.view)
     }
 
+    func testShippingAddressViewController_navigationTitle() {
+        let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
+        testWindow.isHidden = false
+        var configuration = configuration
+        configuration.useNavigationBarTitle = true
+        let vc = AddressViewController(
+            addressSpecProvider: addressSpecProvider,
+            configuration: configuration,
+            delegate: self
+        )
+        let navVC = UINavigationController(rootViewController: vc)
+        testWindow.rootViewController = navVC
+        verify(navVC.view)
+    }
+
     func testShippingAddressViewController_customText() {
         let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
         testWindow.isHidden = false
@@ -112,6 +128,151 @@ class AddressViewControllerSnapshotTests: STPSnapshotTestCase {
         verify(navVC.view)
     }
 
+    func testShippingAddressViewController_defaultValues() {
+        let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
+        testWindow.isHidden = false
+
+        let configuration = AddressViewController.Configuration(
+            defaultValues: .init(
+                address: .init(
+                    city: "San Francisco",
+                    country: "US",
+                    line1: "510 Townsend St.",
+                    postalCode: "94102",
+                    state: "California"
+                ),
+                name: "Jane Doe",
+                phone: "5555555555"
+            ),
+            additionalFields: self.configuration.additionalFields,
+            appearance: self.configuration.appearance
+        )
+
+        let vc = AddressViewController(
+            addressSpecProvider: addressSpecProvider,
+            configuration: configuration,
+            delegate: self
+        )
+        let navVC = UINavigationController(rootViewController: vc)
+        testWindow.rootViewController = navVC
+        verify(navVC.view)
+    }
+
+    @MainActor
+    func testShippingAddressElement_saving() async {
+        let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
+        testWindow.isHidden = false
+        let shippingAddressElement = ShippingAddressElement(
+            configuration: .init(),
+            userInterfaceStyle: .automatic,
+            initialShippingAddress: .init(
+                name: "Jane Doe",
+                address: .init(
+                    country: "US",
+                    line1: "510 Townsend St.",
+                    city: "San Francisco",
+                    state: "CA",
+                    postalCode: "94103"
+                )
+            ),
+            allowedCountries: ["US"],
+            checkoutSessionId: "cs_test_123",
+            apiClient: .init(publishableKey: "pk_test_1234"),
+            useAutocompleteEndpoints: false
+        )
+        let updateDelegate = ShippingAddressElementSnapshotDelegate()
+        let updateExpectation = expectation(description: "Shipping address update started")
+        updateDelegate.updateExpectation = updateExpectation
+        shippingAddressElement.delegate = updateDelegate
+        _ = await shippingAddressElement.normalizedInitialShippingAddress()
+
+        let navVC = UINavigationController(rootViewController: shippingAddressElement.addressViewController)
+        testWindow.rootViewController = navVC
+        let animationsWereEnabled = UIView.areAnimationsEnabled
+        UIView.setAnimationsEnabled(false)
+        defer {
+            UIView.setAnimationsEnabled(animationsWereEnabled)
+            updateDelegate.completeUpdate()
+        }
+
+        shippingAddressElement.addressViewController.didContinue()
+        await fulfillment(of: [updateExpectation])
+        navVC.view.layoutIfNeeded()
+
+        verify(navVC.view)
+    }
+
+    func testShippingAddressViewController_shippingEqualsBillingCheckbox() {
+        let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
+        testWindow.isHidden = false
+
+        var configuration = AddressViewController.Configuration(
+            additionalFields: self.configuration.additionalFields,
+            appearance: self.configuration.appearance
+        )
+        configuration.billingAddress = .init(
+            address: .init(
+                city: "New York",
+                country: "US",
+                line1: "123 Main Street",
+                postalCode: "10001",
+                state: "New York"
+            ),
+            name: "John Smith",
+            phone: "5551234567"
+        )
+
+        let vc = AddressViewController(
+            addressSpecProvider: addressSpecProvider,
+            configuration: configuration,
+            delegate: self
+        )
+        let navVC = UINavigationController(rootViewController: vc)
+        testWindow.rootViewController = navVC
+        verify(navVC.view)
+    }
+
+    func testShippingAddressViewController_shippingEqualsBillingCheckbox_withShippingAddress() {
+        let testWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 500))
+        testWindow.isHidden = false
+
+        var configuration = AddressViewController.Configuration(
+            defaultValues: .init(
+                address: .init(
+                    city: "San Francisco",
+                    country: "US",
+                    line1: "510 Townsend St.",
+                    postalCode: "94102",
+                    state: "California"
+                ),
+                name: "Jane Doe",
+                phone: "5555555555"
+            ),
+            additionalFields: self.configuration.additionalFields,
+            appearance: self.configuration.appearance
+        )
+        configuration.billingAddress = .init(
+            address: .init(
+                city: "New York",
+                country: "US",
+                line1: "123 Main Street",
+                postalCode: "10001",
+                state: "New York"
+            ),
+            name: "John Smith",
+            phone: "5551234567"
+        )
+
+        let vc = AddressViewController(
+            addressSpecProvider: addressSpecProvider,
+            configuration: configuration,
+            delegate: self
+        )
+        let navVC = UINavigationController(rootViewController: vc)
+        testWindow.rootViewController = navVC
+        verify(navVC.view)
+    }
+
     func verify(
         _ view: UIView,
         identifier: String? = nil,
@@ -128,5 +289,24 @@ extension AddressViewControllerSnapshotTests: AddressViewControllerDelegate {
         with address: AddressViewController.AddressDetails?
     ) {
         // no-op
+    }
+}
+
+@MainActor
+private final class ShippingAddressElementSnapshotDelegate: ShippingAddressElementDelegate {
+
+    var updateExpectation: XCTestExpectation?
+    private var updateContinuation: CheckedContinuation<Void, Never>?
+
+    func updateShippingAddressFromElement(name: String?, address: CheckoutElementsController.Address?) async throws {
+        updateExpectation?.fulfill()
+        await withCheckedContinuation { continuation in
+            updateContinuation = continuation
+        }
+    }
+
+    func completeUpdate() {
+        updateContinuation?.resume()
+        updateContinuation = nil
     }
 }

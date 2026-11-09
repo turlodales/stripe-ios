@@ -4,21 +4,27 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol CustomerAddPaymentMethodViewControllerDelegate: AnyObject {
     func didUpdate(_ viewController: CustomerAddPaymentMethodViewController)
-    func updateErrorLabel(for: Error?)
+    func updateErrorLabel(for: Swift.Error?)
 }
 
 @objc(STP_Internal_CustomerAddPaymentMethodViewController)
 class CustomerAddPaymentMethodViewController: UIViewController {
+    enum Error: Swift.Error {
+        case paymentMethodTypesEmpty
+        case usBankAccountParamsMissing
+    }
 
     let paymentMethodTypes: [PaymentSheet.PaymentMethodType]
     let cbcEligible: Bool
+    let useAutocompleteEndpoints: Bool
+    let savePaymentMethodConsentBehavior: PaymentSheetFormFactory.SavePaymentMethodConsentBehavior
 
     // MARK: - Read-only Properties
     weak var delegate: CustomerAddPaymentMethodViewControllerDelegate?
@@ -36,18 +42,14 @@ class CustomerAddPaymentMethodViewController: UIViewController {
     }
     // MARK: - Writable Properties
     private let configuration: CustomerSheet.Configuration
-    private lazy var usBankAccountFormElement: USBankAccountPaymentMethodElement? = {
-        // We are keeping usBankAccountInfo in memory to preserve state
-        // if the user switches payment method types
-        let paymentMethodElement = makeElement(for: selectedPaymentMethodType)
-        if let usBankAccountPaymentMethodElement = paymentMethodElement as? USBankAccountPaymentMethodElement {
-            usBankAccountPaymentMethodElement.presentingViewControllerDelegate = self
-        } else {
-            assertionFailure("Wrong type for usBankAccountFormElement")
-        }
-        return paymentMethodElement as? USBankAccountPaymentMethodElement
-    }()
 
+    /// This caches forms for payment methods so that customers don't have to re-enter details
+    /// This assumes the form generated for a given PM type _does not change_ at any point after load.
+    let formCache = PaymentMethodFormCache()
+
+    /// Reference to the AddressSectionElement in the form, if present
+    private var addressSectionElement: AddressSectionElement?
+    private var selectedAutoCompleteAddress: PaymentSheet.Address?
     var overrideActionButtonBehavior: OverrideableBuyButtonBehavior? {
         if selectedPaymentMethodType == .stripe(.USBankAccount) {
             if let paymentOption = paymentOption,
@@ -71,7 +73,10 @@ class CustomerAddPaymentMethodViewController: UIViewController {
         }
         switch overrideBuyButtonBehavior {
         case .LinkUSBankAccount:
+            let usBankAccountFormElement = formCache[.stripe(.USBankAccount)] as? USBankAccountPaymentMethodElement
             return usBankAccountFormElement?.canLinkAccount ?? false
+        case .instantDebits:
+            return false // instant debits is not supported for customer sheet
         }
     }
 
@@ -84,26 +89,39 @@ class CustomerAddPaymentMethodViewController: UIViewController {
         return nil
     }
 
-    private lazy var paymentMethodFormElement: PaymentMethodElement = {
-        if selectedPaymentMethodType == .stripe(.USBankAccount),
-           let usBankAccountFormElement = usBankAccountFormElement {
-            return usBankAccountFormElement
+    lazy var paymentMethodFormElement: PaymentMethodElement = {
+        if let cachedForm = formCache[selectedPaymentMethodType] {
+            return cachedForm
+        } else {
+            let element = makeElement(for: selectedPaymentMethodType)
+            formCache[selectedPaymentMethodType] = element
+            return element
         }
-        return makeElement(for: selectedPaymentMethodType)
     }()
 
     // MARK: - Views
     private lazy var paymentMethodDetailsView: UIView = {
         return paymentMethodFormElement.view
     }()
-    private lazy var paymentMethodTypesView: PaymentMethodTypeCollectionView = {
+    lazy var paymentMethodTypesView: PaymentMethodTypeCollectionView = {
         let view = PaymentMethodTypeCollectionView(
-            paymentMethodTypes: paymentMethodTypes, appearance: configuration.appearance, delegate: self)
+            paymentMethodTypes: paymentMethodTypes,
+            appearance: configuration.appearance,
+            incentive: nil,
+            delegate: self
+        )
         return view
     }()
     private lazy var paymentMethodDetailsContainerView: DynamicHeightContainerView = {
         let view = DynamicHeightContainerView(pinnedDirection: .bottom)
-        view.directionalLayoutMargins = PaymentSheetUI.defaultMargins
+        // if the carousel is hidden, then we have a singular card form that needs to apply top padding
+        // otherwise, the superview will handle the top padding
+        let isCarouselHidden = paymentMethodTypes == [.stripe(.card)]
+        view.directionalLayoutMargins = .insets(
+            top: isCarouselHidden ? configuration.appearance.formInsets.top : 0,
+            leading: configuration.appearance.formInsets.leading,
+            trailing: configuration.appearance.formInsets.trailing
+        )
         view.addPinnedSubview(paymentMethodDetailsView)
         view.updateHeight()
         return view
@@ -117,12 +135,22 @@ class CustomerAddPaymentMethodViewController: UIViewController {
         configuration: CustomerSheet.Configuration,
         paymentMethodTypes: [PaymentSheet.PaymentMethodType],
         cbcEligible: Bool,
+        useAutocompleteEndpoints: Bool,
+        savePaymentMethodConsentBehavior: PaymentSheetFormFactory.SavePaymentMethodConsentBehavior,
         delegate: CustomerAddPaymentMethodViewControllerDelegate
     ) {
         self.configuration = configuration
         self.delegate = delegate
+        if paymentMethodTypes.isEmpty {
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedCustomerSheetError,
+                                              error: Error.paymentMethodTypesEmpty)
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+        }
+        stpAssert(!paymentMethodTypes.isEmpty, "At least one payment method type must be available.")
         self.paymentMethodTypes = paymentMethodTypes
         self.cbcEligible = cbcEligible
+        self.useAutocompleteEndpoints = useAutocompleteEndpoints
+        self.savePaymentMethodConsentBehavior = savePaymentMethodConsentBehavior
         super.init(nibName: nil, bundle: nil)
         self.view.backgroundColor = configuration.appearance.colors.background
     }
@@ -131,6 +159,11 @@ class CustomerAddPaymentMethodViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         STPAnalyticsClient.sharedClient.logCSAddPaymentMethodScreenPresented()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        sendEventToSubviews(.viewDidAppear, from: view)
     }
 
     override func viewDidLoad() {
@@ -163,7 +196,7 @@ class CustomerAddPaymentMethodViewController: UIViewController {
         guard let usBankAccountPaymentMethodElement = self.paymentMethodFormElement as? USBankAccountPaymentMethodElement else {
             return false
         }
-        let customerHasLinkedBankAccount = usBankAccountPaymentMethodElement.getLinkedBank() != nil
+        let customerHasLinkedBankAccount = usBankAccountPaymentMethodElement.linkedBank != nil
         return customerHasLinkedBankAccount
     }
 
@@ -179,7 +212,7 @@ class CustomerAddPaymentMethodViewController: UIViewController {
             paymentMethodDetailsContainerView.layoutIfNeeded()
             newView.alpha = 0
 
-            #if !canImport(CompositorServices)
+            #if !os(visionOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             // Fade the new one in and the old one out
@@ -199,33 +232,83 @@ class CustomerAddPaymentMethodViewController: UIViewController {
         }
     }
     private func updateFormElement() {
-        if selectedPaymentMethodType == .stripe(.USBankAccount),
-           let usBankAccountFormElement = usBankAccountFormElement {
-            paymentMethodFormElement = usBankAccountFormElement
+        if let cachedForm = formCache[selectedPaymentMethodType] {
+            paymentMethodFormElement = cachedForm
         } else {
-            paymentMethodFormElement = makeElement(for: selectedPaymentMethodType)
+            let element = makeElement(for: selectedPaymentMethodType)
+            formCache[selectedPaymentMethodType] = element
+            paymentMethodFormElement = element
         }
         updateUI()
         sendEventToSubviews(.viewDidAppear, from: view)
     }
     private func makeElement(for type: PaymentSheet.PaymentMethodType) -> PaymentMethodElement {
+        let configuration = PaymentSheetFormFactoryConfig.customerSheet(configuration)
         let formElement = PaymentSheetFormFactory(
-            configuration: .customerSheet(configuration),
+            configuration: configuration,
             paymentMethod: type,
+            paymentMethodOrientation: .horizontal,
             previousCustomerInput: nil,
             addressSpecProvider: .shared,
-            offerSaveToLinkWhenSupported: false,
+            showLinkInlineCardSignup: false,
             linkAccount: nil,
+            accountService: nil,
             cardBrandChoiceEligible: cbcEligible,
-            supportsLinkCard: false,
             isPaymentIntent: false,
-            currency: nil,
-            amount: nil,
+            collectsTaxFromBillingAddress: false,
+            isSettingUp: true,
             countryCode: nil,
-            saveMode: .merchantRequired)
-            .make()
+            savePaymentMethodConsentBehavior: savePaymentMethodConsentBehavior,
+            analyticsHelper: nil,
+            paymentMethodIncentive: nil
+        ).make()
         formElement.delegate = self
+
+        // Setup AddressSectionElement autocomplete callback after form creation
+        setupAddressSectionAutocompleteCallback(for: formElement)
+
         return formElement
+    }
+
+    // MARK: - Autocomplete Methods
+
+    /// Sets up the autocomplete button callback for the billing address section in the form
+    private func setupAddressSectionAutocompleteCallback(for formElement: PaymentMethodElement) {
+        let unwrappedFormElement = (formElement as? PaymentMethodElementWrapper<FormElement>)?.element ?? formElement
+        if let addressSection = unwrappedFormElement.getAllUnwrappedSubElements()
+            .compactMap({ $0 as? AddressSectionElement }).first {
+            // Store reference to the address section element
+            self.addressSectionElement = addressSection
+            addressSection.didTapAutocompleteButton = { [weak self] in
+                self?.presentAutocomplete()
+            }
+        }
+    }
+
+    /// Presents the autocomplete view controller
+    private func presentAutocomplete() {
+        guard let addressSectionElement = addressSectionElement else {
+            return
+        }
+
+        // Create a basic AddressViewController.Configuration for the autocomplete
+        var addressConfiguration = AddressViewController.Configuration(
+            appearance: configuration.appearance
+        )
+        addressConfiguration.apiClient = configuration.apiClient
+
+        let autoCompleteViewController = AutoCompleteViewController(
+            configuration: addressConfiguration,
+            initialLine1Text: addressSectionElement.line1?.text,
+            selectedCountry: addressSectionElement.selectedCountryCode,
+            addressSpecProvider: AddressSpecProvider.shared,
+            verticalOffset: PaymentSheetUI.navBarPadding(appearance: configuration.appearance),
+            useAutocompleteEndpoints: useAutocompleteEndpoints
+        )
+        autoCompleteViewController.delegate = self
+
+        let navigationController = UINavigationController(rootViewController: autoCompleteViewController)
+        present(navigationController, animated: true)
     }
 }
 
@@ -236,6 +319,8 @@ extension CustomerAddPaymentMethodViewController {
         switch behavior {
         case .LinkUSBankAccount:
             handleCollectBankAccount(from: viewController, clientSecret: clientSecret)
+        case .instantDebits:
+            assertionFailure("instant debits is not supported for customer sheet")
         }
     }
     func handleCollectBankAccount(from viewController: UIViewController, clientSecret: String) {
@@ -244,7 +329,10 @@ extension CustomerAddPaymentMethodViewController {
             let name = usBankAccountPaymentMethodElement.name,
             let email = usBankAccountPaymentMethodElement.email
         else {
-            assertionFailure()
+            let errorAnalytic = ErrorAnalytic(event: .unexpectedCustomerSheetError,
+                                              error: Error.usBankAccountParamsMissing)
+            STPAnalyticsClient.sharedClient.log(analytic: errorAnalytic)
+            stpAssertionFailure()
             return
         }
 
@@ -252,7 +340,14 @@ extension CustomerAddPaymentMethodViewController {
             with: name,
             email: email
         )
-        let client = STPBankAccountCollector()
+        let bankAccountCollectorStyle: STPBankAccountCollectorUserInterfaceStyle = {
+            switch configuration.style {
+            case .automatic: return .automatic
+            case .alwaysLight: return .alwaysLight
+            case .alwaysDark: return .alwaysDark
+            }
+        }()
+        let client = STPBankAccountCollector(style: bankAccountCollectorStyle)
         let errorText = STPLocalizedString(
             "Something went wrong when linking your account.\nPlease try again later.",
             "Error message when an error case happens when linking your account"
@@ -276,16 +371,24 @@ extension CustomerAddPaymentMethodViewController {
             switch financialConnectionsResult {
             case .cancelled:
                 break
-            case .completed(let linkedBank):
-                usBankAccountPaymentMethodElement.setLinkedBank(linkedBank)
+            case .completed(let completedResult):
+                if case .financialConnections(let linkedBank) = completedResult {
+                    usBankAccountPaymentMethodElement.linkedBank = linkedBank
+                } else {
+                    self.delegate?.updateErrorLabel(for: genericError)
+                }
             case .failed:
                 self.delegate?.updateErrorLabel(for: genericError)
             }
         }
 
+        let additionalParameters: [String: Any] = [
+            "hosted_surface": "customer_sheet",
+        ]
         client.collectBankAccountForSetup(
             clientSecret: clientSecret,
             returnURL: configuration.returnURL,
+            additionalParameters: additionalParameters,
             onEvent: nil,
             params: params,
             from: viewController,
@@ -314,5 +417,57 @@ extension CustomerAddPaymentMethodViewController: PaymentMethodTypeCollectionVie
 extension CustomerAddPaymentMethodViewController: PresentingViewControllerDelegate {
     func presentViewController(viewController: UIViewController, completion: (() -> Void)?) {
         self.present(viewController, animated: true, completion: completion)
+    }
+}
+
+// MARK: - AutoCompleteViewControllerDelegate
+
+extension CustomerAddPaymentMethodViewController: AutoCompleteViewControllerDelegate {
+    func didSelectManualEntry(_ line1: String) {
+        guard let addressSectionElement = addressSectionElement else { return }
+
+        // Dismiss the autocomplete view controller
+        presentedViewController?.dismiss(animated: true) {
+            addressSectionElement.beginManualEntry(with: line1)
+            addressSectionElement.line1?.beginEditing()
+        }
+    }
+
+    func didSelectAddress(_ address: PaymentSheet.Address?) {
+        guard let addressSectionElement = addressSectionElement else { return }
+
+        // Dismiss the autocomplete view controller
+        presentedViewController?.dismiss(animated: true) {
+            guard let address = address else {
+                return
+            }
+
+            addressSectionElement.setAddress(address.addressSectionAddress)
+
+            // Read back from the element so field processing (e.g. postal code truncation) is reflected
+            let normalized = addressSectionElement.addressDetails.address
+            self.selectedAutoCompleteAddress = PaymentSheet.Address(
+                city: normalized.city, country: normalized.country, line1: normalized.line1,
+                line2: normalized.line2, postalCode: normalized.postalCode, state: normalized.state
+            )
+        }
+    }
+
+    func logBillingAddressCompletionIfNeeded() {
+        guard let addressSectionElement = addressSectionElement else { return }
+        let details = addressSectionElement.addressDetails.address
+        let submittedAddress = PaymentSheet.Address(
+            city: details.city,
+            country: details.country,
+            line1: details.line1,
+            line2: details.line2,
+            postalCode: details.postalCode,
+            state: details.state
+        )
+        var editDistance: Int?
+        if let autoCompleteAddress = selectedAutoCompleteAddress {
+            editDistance = submittedAddress.editDistance(from: autoCompleteAddress)
+        }
+        STPAnalyticsClient.sharedClient.logCustomerSheetBillingAddressCompleted(addressCountryCode: addressSectionElement.selectedCountryCode, autoCompleteResultedSelected: selectedAutoCompleteAddress != nil, editDistance: editDistance, apiClient: configuration.apiClient)
     }
 }

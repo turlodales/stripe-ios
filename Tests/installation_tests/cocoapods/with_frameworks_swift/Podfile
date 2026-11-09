@@ -1,7 +1,7 @@
 use_frameworks!
 
 target 'CocoapodsTest' do
-  platform :ios, '13.0'
+  platform :ios, '15.0'
   use_frameworks!
   pod 'Stripe', path: '../../../..'
   pod 'StripeIdentity', path: '../../../..'
@@ -9,12 +9,15 @@ target 'CocoapodsTest' do
   pod 'StripeCardScan', path: '../../../..'
   pod 'StripeApplePay', path: '../../../..'
   pod 'StripeCameraCore', path: '../../../..'
+  pod 'StripeConnect', path: '../../../..'
   pod 'StripeCore', path: '../../../..'
   pod 'StripeUICore', path: '../../../..'
   pod 'StripePayments', path: '../../../..'
   pod 'StripePaymentsUI', path: '../../../..'
+  pod 'StripeFinancialConnectionsLite', path: '../../../..'
   pod 'StripePaymentSheet', path: '../../../..'
-
+  pod 'StripeIssuing', path: '../../../..'
+  
   post_install do |installer|
     installer.pods_project.build_configurations.each do |config|
       config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'YES'
@@ -27,7 +30,7 @@ target 'CocoapodsTest' do
 end
 
 target 'TestExtension' do
-  platform :ios, '13.0'
+  platform :ios, '15.0'
   use_frameworks!
   pod 'StripeApplePay', path: '../../../..'
   pod 'StripeCore', path: '../../../..'

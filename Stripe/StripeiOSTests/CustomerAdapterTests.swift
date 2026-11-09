@@ -6,12 +6,11 @@
 import Foundation
 import OHHTTPStubs
 import OHHTTPStubsSwift
-@_spi(STP) @testable import StripeCore
-@_spi(STP) @testable import StripeCore
+@_spi(InternalOnlyAPI) @testable import StripeCore
 @testable import StripeCoreTestUtils
-@_spi(STP) @testable import StripePayments
-@_spi(STP) @testable import StripePaymentSheet
-@_spi(STP) @testable import StripePaymentsTestUtils
+@_spi(InternalOnlyAPI) @testable import StripePayments
+@_spi(InternalOnlyAPI) @testable import StripePaymentSheet
+@_spi(InternalOnlyAPI) @testable import StripePaymentsTestUtils
 import XCTest
 
 enum MockEphemeralKeyEndpoint {
@@ -67,10 +66,10 @@ class CustomerAdapterTests: APIStubbedTestCase {
                 }
                 """
             var pmList =
-                try! JSONSerialization.jsonObject(
-                    with: paymentMethodsJSON.data(using: .utf8)!,
-                    options: []
-                ) as! [AnyHashable: Any]
+            try! JSONSerialization.jsonObject(
+                with: paymentMethodsJSON.data(using: .utf8)!,
+                options: []
+            ) as! [AnyHashable: Any]
             // Only send the example cards for a card request
             if urlRequest.url?.absoluteString.contains("card") ?? false {
                 pmList["data"] = paymentMethodJSONs
@@ -78,6 +77,45 @@ class CustomerAdapterTests: APIStubbedTestCase {
                 pmList["data"] = paymentMethodJSONs
             }
             return HTTPStubsResponse(jsonObject: pmList, statusCode: 200, headers: nil)
+        }
+    }
+    func stubElementsSession(
+        paymentMethodJSONs: [[AnyHashable: Any]]?
+    ) {
+        stub { urlRequest in
+            return urlRequest.url?.absoluteString.contains("/v1/elements/sessions") ?? false
+        } response: { _ in
+            let elementsSessionJSON = """
+                {
+                  "payment_method_preference": {"ordered_payment_method_types": ["card"],
+                                                "country_code": "US"
+                                               },
+                  "ordered_payment_method_types" : ["card"],
+                  "session_id": "123",
+                  "config_id": "123",
+                  "apple_pay_preference": "enabled",
+                  "customer": {"payment_methods": [
+                               ],
+                               "customer_session": {
+                                  "id": "cuss_654321",
+                                  "livemode": false,
+                                  "api_key": "ek_12345",
+                                  "api_key_expiry": 1899787184,
+                                  "customer": "cus_12345"
+                                }
+                              }
+                }
+                """
+            var elementSession = try! JSONSerialization.jsonObject(
+                with: elementsSessionJSON.data(using: .utf8)!,
+                options: []
+            ) as! [AnyHashable: Any]
+            if var customer = elementSession["customer"] as? [AnyHashable: Any],
+               paymentMethodJSONs != nil {
+                customer["payment_methods"] = paymentMethodJSONs
+                elementSession["customer"] = customer
+            }
+            return HTTPStubsResponse(jsonObject: elementSession, statusCode: 200, headers: nil)
         }
     }
 
@@ -122,10 +160,10 @@ class CustomerAdapterTests: APIStubbedTestCase {
     }
 
     func testFetchPM_CardAndUSBankAccount() async throws {
-        let expectedPaymentMethods_card = [STPFixtures.paymentMethod()]
+        let expectedPaymentMethods_card = STPFixtures.paymentMethod()
         let expectedPaymentMethods_cardJSON = [STPFixtures.paymentMethodJSON()]
 
-        let expectedPaymentMethods_usbank = [STPFixtures.bankAccountPaymentMethod()]
+        let expectedPaymentMethods_usbank = STPFixtures.bankAccountPaymentMethod()
         let expectedPaymentMethods_usbankJSON = [STPFixtures.bankAccountPaymentMethodJSON()]
 
         let apiClient = stubbedAPIClient()
@@ -139,8 +177,8 @@ class CustomerAdapterTests: APIStubbedTestCase {
                                         apiClient: apiClient)
         let pms = try await sut.fetchPaymentMethods()
         XCTAssertEqual(pms.count, 2)
-        XCTAssertEqual(pms[0].stripeId, expectedPaymentMethods_card[0].stripeId)
-        XCTAssertEqual(pms[1].stripeId, expectedPaymentMethods_usbank[0].stripeId)
+        XCTAssertEqual(pms[0].stripeId, expectedPaymentMethods_usbank.stripeId)
+        XCTAssertEqual(pms[1].stripeId, expectedPaymentMethods_card.stripeId)
     }
 
     func testAttachPM() async throws {

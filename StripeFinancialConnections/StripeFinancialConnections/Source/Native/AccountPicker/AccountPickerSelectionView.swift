@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol AccountPickerSelectionViewDelegate: AnyObject {
@@ -26,13 +26,15 @@ final class AccountPickerSelectionView: UIView {
         enabledAccounts: [FinancialConnectionsPartnerAccount],
         disabledAccounts: [FinancialConnectionsPartnerAccount],
         institution: FinancialConnectionsInstitution,
+        appearance: FinancialConnectionsAppearance,
         delegate: AccountPickerSelectionViewDelegate
     ) {
         self.delegate = delegate
         self.listView = AccountPickerSelectionListView(
             selectionType: selectionType,
             enabledAccounts: enabledAccounts,
-            disabledAccounts: disabledAccounts
+            disabledAccounts: disabledAccounts,
+            appearance: appearance
         )
         super.init(frame: .zero)
         listView.delegate = self

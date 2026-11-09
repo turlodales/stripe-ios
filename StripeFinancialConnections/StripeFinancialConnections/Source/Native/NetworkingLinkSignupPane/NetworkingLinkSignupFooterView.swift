@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class NetworkingLinkSignupFooterView: HitTestView {
@@ -15,6 +15,7 @@ class NetworkingLinkSignupFooterView: HitTestView {
     private let aboveCtaText: String
     private let saveToLinkButtonText: String
     private let notNowButtonText: String
+    private let appearance: FinancialConnectionsAppearance
     private let didSelectSaveToLink: () -> Void
     private let didSelectNotNow: () -> Void
     private let didSelectURL: (URL) -> Void
@@ -40,8 +41,8 @@ class NetworkingLinkSignupFooterView: HitTestView {
             font: .label(.small),
             boldFont: .label(.smallEmphasized),
             linkFont: .label(.small),
-            textColor: .textDefault,
-            alignCenter: true
+            textColor: FinancialConnectionsAppearance.Colors.textDefault,
+            alignment: .center
         )
         termsAndPrivacyPolicyLabel.setText(
             aboveCtaText,
@@ -60,8 +61,9 @@ class NetworkingLinkSignupFooterView: HitTestView {
     }()
 
     private lazy var saveToLinkButton: StripeUICore.Button = {
-        let saveToLinkButton = Button.primary()
+        let saveToLinkButton = Button.primary(appearance: appearance)
         saveToLinkButton.title = saveToLinkButtonText
+        saveToLinkButton.accessibilityIdentifier = "networking_link_signup_footer_view.save_to_link_button"
         saveToLinkButton.addTarget(self, action: #selector(didSelectSaveToLinkButton), for: .touchUpInside)
         saveToLinkButton.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -73,6 +75,7 @@ class NetworkingLinkSignupFooterView: HitTestView {
     private lazy var notNowButton: StripeUICore.Button = {
         let saveToLinkButton = Button.secondary()
         saveToLinkButton.title = notNowButtonText
+        saveToLinkButton.accessibilityIdentifier = "networking_link_signup_footer_view.not_now_button"
         saveToLinkButton.addTarget(self, action: #selector(didSelectNotNowButton), for: .touchUpInside)
         saveToLinkButton.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -85,6 +88,7 @@ class NetworkingLinkSignupFooterView: HitTestView {
         aboveCtaText: String,
         saveToLinkButtonText: String,
         notNowButtonText: String,
+        appearance: FinancialConnectionsAppearance,
         didSelectSaveToLink: @escaping () -> Void,
         didSelectNotNow: @escaping () -> Void,
         didSelectURL: @escaping (URL) -> Void
@@ -92,11 +96,12 @@ class NetworkingLinkSignupFooterView: HitTestView {
         self.aboveCtaText = aboveCtaText
         self.saveToLinkButtonText = saveToLinkButtonText
         self.notNowButtonText = notNowButtonText
+        self.appearance = appearance
         self.didSelectSaveToLink = didSelectSaveToLink
         self.didSelectNotNow = didSelectNotNow
         self.didSelectURL = didSelectURL
         super.init(frame: .zero)
-        backgroundColor = .customBackgroundColor
+        backgroundColor = FinancialConnectionsAppearance.Colors.background
         addAndPinSubview(footerVerticalStackView)
     }
 
@@ -132,6 +137,7 @@ private struct NetworkingLinkSignupFooterViewUIViewRepresentable: UIViewRepresen
             aboveCtaText: "By saving your account to Link, you agree to Link’s [Terms](https://link.co/terms) and [Privacy Policy](https://link.co/privacy)",
             saveToLinkButtonText: "Save to Link",
             notNowButtonText: "Not now",
+            appearance: .stripe,
             didSelectSaveToLink: {},
             didSelectNotNow: {},
             didSelectURL: { _ in }
@@ -143,7 +149,6 @@ private struct NetworkingLinkSignupFooterViewUIViewRepresentable: UIViewRepresen
     }
 }
 
-@available(iOS 14.0, *)
 struct NetworkingLinkSignupFooterView_Previews: PreviewProvider {
     static var previews: some View {
         VStack {

@@ -3,20 +3,20 @@
 PaymentSheet is a prebuilt UI that combines all the steps required to pay - collecting payment details, billing details, and confirming the payment - into a single sheet that displays on top of your app.
 
 ## Table of contents
-
+<!-- NOTE: Use case-sensitive anchor links for docc compatibility -->
 <!--ts-->
-* [Features](#features)
-* [Requirements](#requirements)
-* [Getting started](#getting-started)
-   * [Integration](#integration)
-   * [Example](#example)
-* [Manual linking](#manual-linking)
+* [Features](#Features)
+* [Requirements](#Requirements)
+* [Getting started](#Getting-started)
+   * [Integration](#Integration)
+   * [Example](#Example)
+* [Manual linking](#Manual-linking)
 
 <!--te-->
 
 ## Requirements
 
-The StripePaymentSheet module is compatible with apps targeting iOS 13.0 or above.
+The StripePaymentSheet module is compatible with apps targeting iOS 15.0 or above.
 
 ## Getting started
 
@@ -38,4 +38,5 @@ If you link this library manually, use a version from our [releases](https://git
 - `StripePayments.xcframework`
 - `StripePaymentsUI.xcframework`
 - `StripeApplePay.xcframework`
+- `StripeFinancialConnectionsLite.xcframework`
 - `StripePaymentSheet.xcframework`

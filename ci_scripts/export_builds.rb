@@ -1,8 +1,10 @@
 #!/usr/bin/env ruby
 
 require 'fileutils'
-require 'zip'
 require 'yaml'
+require_relative 'framework_architecture_validator'
+
+DEFAULT_SIMULATOR_ARCHITECTURES = %w[arm64 x86_64].freeze
 
 # MARK: - Helpers
 
@@ -12,6 +14,13 @@ end
 
 def die(string)
   abort "[#{File.basename(__FILE__)}] [ERROR] #{string}"
+end
+
+def verify_architectures(binary_path, expected_architectures)
+  architectures = FrameworkArchitectureValidator.verify(binary_path, expected_architectures)
+  info "Verified architectures for #{binary_path}: #{architectures.join(', ')}"
+rescue FrameworkArchitectureValidator::VerificationError => error
+  die error.message
 end
 
 # Joins the given strings. If one or more arguments is nil or empty, an exception is raised.
@@ -55,6 +64,7 @@ Dir.chdir(root_dir) do
       -scheme "AllStripeFrameworks" \
       -configuration "Release" \
       -archivePath "#{build_dir}/StripeFrameworks-iOS.xcarchive" \
+      -derivedDataPath "#{build_dir}/DerivedData" \
       -sdk iphoneos \
       -destination 'generic/platform=iOS' \
       SUPPORTS_MACCATALYST=NO \
@@ -75,6 +85,7 @@ Dir.chdir(root_dir) do
     -destination 'generic/platform=iOS Simulator' \
     -configuration "Release" \
     -archivePath "#{build_dir}/StripeFrameworks-sim.xcarchive" \
+    -derivedDataPath "#{build_dir}/DerivedData" \
     -sdk iphonesimulator \
     SUPPORTS_MACCATALYST=NO \
     BUILD_LIBRARIES_FOR_DISTRIBUTION=YES \
@@ -93,6 +104,7 @@ Dir.chdir(root_dir) do
       -scheme "AllStripeFrameworksCatalyst" \
       -configuration "Release" \
       -archivePath "#{build_dir}/StripeFrameworks-mac.xcarchive" \
+      -derivedDataPath "#{build_dir}/DerivedData" \
       -sdk macosx \
       -destination 'generic/platform=macOS,variant=Mac Catalyst' \
       SUPPORTS_MACCATALYST=YES \
@@ -107,9 +119,21 @@ Dir.chdir(root_dir) do
     scheme = m['scheme']
     framework_name = m['framework_name']
     supports_catalyst = m['supports_catalyst']
+    simulator_architectures = m.fetch('simulator_architectures', DEFAULT_SIMULATOR_ARCHITECTURES)
     platform_frameworks = []
     die 'Module is missing scheme' if scheme.nil? || scheme.empty?
     die 'Module is missing framework_name' if framework_name.nil? || framework_name.empty?
+
+    simulator_binary = File.join_if_safe(
+      build_dir,
+      'StripeFrameworks-sim.xcarchive',
+      'Products',
+      'Library',
+      'Frameworks',
+      "#{framework_name}.framework",
+      framework_name,
+    )
+    verify_architectures(simulator_binary, simulator_architectures)
 
     platform_frameworks.append("-framework \"#{build_dir}/StripeFrameworks-iOS.xcarchive/Products/Library/Frameworks/#{framework_name}.framework\"")
 
@@ -125,13 +149,29 @@ Dir.chdir(root_dir) do
   end # modules.each
 end # Dir.chdir
 
-Zip::File.open(File.join_if_safe(build_dir, 'Stripe.xcframework.zip'), create: true) do |zipfile|
-  # Add module framework directories to zip
-  modules.each do |m|
-    framework_name = m['framework_name']
-    Dir.glob("#{build_dir}/#{framework_name}.xcframework/**/*").each do |file|
-      file_name = Pathname.new(file).relative_path_from(Pathname.new(build_dir))
-      zipfile.add(file_name, file)
-    end
-  end
+# Verify no xcframework contains an embedded Frameworks folder
+info 'Checking for embedded Frameworks folders in xcframeworks...'
+embedded_frameworks = Dir.glob(File.join(build_dir, '*.xcframework', '**', 'Frameworks'))
+unless embedded_frameworks.empty?
+  embedded_frameworks.each { |path| info "Found: #{path}" }
+  die 'One or more xcframeworks contain an embedded Frameworks folder. This indicates a dependency was incorrectly embedded.'
+end
+
+release_documents = {
+  File.join(root_dir, 'LICENSE') => File.join(build_dir, 'LICENSE'),
+  File.join(root_dir, 'NOTICE') => File.join(build_dir, 'NOTICE'),
+  File.join(root_dir, 'LICENSE-MediaPipe') => File.join(build_dir, 'LICENSE-MediaPipe'),
+}
+
+info 'Adding license and notice files to the release archive...'
+release_documents.each do |source, destination|
+  die "Missing release document: #{source}" unless File.file?(source)
+
+  FileUtils.cp(source, destination)
+end
+
+Dir.chdir(build_dir) do
+  archive_contents = Dir.glob('*.xcframework').sort + release_documents.values.map { |path| File.basename(path) }
+  die 'No xcframeworks found to archive.' if archive_contents.none? { |path| path.end_with?('.xcframework') }
+  die 'Failed to create Stripe.xcframework.zip' unless system('zip', '-r', 'Stripe.xcframework.zip', *archive_contents)
 end

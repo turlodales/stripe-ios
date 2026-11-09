@@ -7,11 +7,9 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension STPAnalyticsClient {
-    // MARK: - Log events
-
     func logPaymentMethodCreationAttempt(paymentMethodType: String?) {
         log(
             analytic: PaymentAPIAnalytic(

@@ -4,7 +4,8 @@
 //
 
 import Combine
-@_spi(STP) import StripePaymentSheet
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePaymentSheet
 import SwiftUI
 
 class CustomerSheetTestPlaygroundController: ObservableObject {
@@ -16,6 +17,18 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
     @Published var paymentOptionSelection: CustomerSheet.PaymentOptionSelection?
 
     private var subscribers: Set<AnyCancellable> = []
+
+    convenience init() {
+        self.init(settings: .defaultValues())
+        Task.detached {
+            let settings = Self.settingsFromDefaults() ?? .defaultValues()
+
+            await MainActor.run {
+                self.settings = settings
+            }
+        }
+    }
+
     init(settings: CustomerSheetTestPlaygroundSettings) {
         // Hack to ensure we don't force the native flow unless we're in a UI test
         if ProcessInfo.processInfo.environment["UITesting"] == nil {
@@ -26,22 +39,29 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
         }
         self.settings = settings
         self.currentlyRenderedSettings = .defaultValues()
-        $settings
-            .sink { newValue in
-            if !self.isLoading && newValue.autoreload == .on {
-                self.load()
+        $settings.removeDuplicates().sink { [weak self] newValue in
+            if newValue.autoreload == .on {
+                // This closure is called *before* `settings` is updated! Wait until the next run loop before calling `load`
+                DispatchQueue.main.async {
+                    self?.load()
+                }
             }
+
         }.store(in: &subscribers)
     }
 
     var customerSheet: CustomerSheet?
+    var _customerAdapter: CustomerAdapter?
     var backend: CustomerSheetBackend!
     var currentEndpoint: String = defaultEndpoint
     var appearance = PaymentSheet.Appearance.default
 
     var rootViewController: UIViewController {
         // Hack, should do this in SwiftUI
-        return UIApplication.shared.windows.first!.rootViewController!
+        return UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }!.rootViewController!
     }
 
     func makeAlertController() -> UIAlertController {
@@ -57,25 +77,26 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
     func didTapResetConfig() {
         self.settings = CustomerSheetTestPlaygroundSettings.defaultValues()
         self.appearance = PaymentSheet.Appearance.default
+        load()
+    }
+    func didTapSetToUnsupported() {
+        CustomerPaymentOption.setDefaultPaymentMethod(.link, forCustomer: settings.customerId)
+        self.load()
     }
 
     func appearanceButtonTapped() {
-        if #available(iOS 14.0, *) {
-            let vc = UIHostingController(rootView: AppearancePlaygroundView(appearance: appearance, doneAction: { updatedAppearance in
-                self.appearance = updatedAppearance
-                self.rootViewController.dismiss(animated: true, completion: nil)
-                self.load()
-            }))
-            rootViewController.present(vc, animated: true, completion: nil)
-        } else {
-            let alert = UIAlertController(title: "Unavailable", message: "Appearance playground is only available in iOS 14+.", preferredStyle: UIAlertController.Style.alert)
-            alert.addAction(UIAlertAction(title: "Ok", style: UIAlertAction.Style.default, handler: nil))
-            rootViewController.present(alert, animated: true, completion: nil)
-        }
+        let vc = UIHostingController(rootView: AppearancePlaygroundView(appearance: appearance, doneAction: { [weak self] updatedAppearance in
+            self?.appearance = updatedAppearance
+            self?.rootViewController.dismiss(animated: true, completion: nil)
+            self?.load()
+        }))
+        rootViewController.present(vc, animated: true, completion: nil)
     }
 
     func presentCustomerSheet() {
-        customerSheet?.present(from: rootViewController, completion: { result in
+        customerSheet?.present(from: rootViewController, completion: { [weak self] result in
+            guard let self else { return }
+
             switch result {
             case .selected(let paymentOptionSelection), .canceled(let paymentOptionSelection):
                 self.paymentOptionSelection = paymentOptionSelection
@@ -100,7 +121,7 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
         })
     }
 
-    func customerSheetConfiguration(customerId: String, ephemeralKey: String) -> CustomerSheet.Configuration {
+    func customerSheetConfiguration() -> CustomerSheet.Configuration {
         var configuration = CustomerSheet.Configuration()
         configuration.appearance = appearance
         configuration.returnURL = "payments-example://stripe-redirect"
@@ -109,7 +130,7 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
 
         if settings.defaultBillingAddress == .on {
             configuration.defaultBillingDetails.name = "Jane Doe"
-            configuration.defaultBillingDetails.email = "foo@bar.com"
+            configuration.defaultBillingDetails.email = "foo-\(UUID().uuidString)@bar.com"
             configuration.defaultBillingDetails.phone = "+13105551234"
             configuration.defaultBillingDetails.address = .init(
                 city: "San Francisco",
@@ -126,26 +147,55 @@ class CustomerSheetTestPlaygroundController: ObservableObject {
         configuration.billingDetailsCollectionConfiguration.address = .init(rawValue: settings.collectAddress.rawValue)!
         configuration.billingDetailsCollectionConfiguration.attachDefaultsToPaymentMethod = settings.attachDefaults == .on
         configuration.preferredNetworks = settings.preferredNetworksEnabled == .on ? [.visa, .cartesBancaires] : nil
+        configuration.applePayEnabled = self.applePayEnabled()
+        switch settings.cardBrandAcceptance {
+        case .all:
+            configuration.cardBrandAcceptance = .all
+        case .blockAmEx:
+            configuration.cardBrandAcceptance = .disallowed(brands: [.amex])
+        case .allowVisa:
+            configuration.cardBrandAcceptance = .allowed(brands: [.visa])
+        }
+        configuration.opensCardScannerAutomatically = settings.opensCardScannerAutomatically == .on
+
         return configuration
     }
 
-    func customerAdapter(customerId: String, ephemeralKey: String, configuration: CustomerSheet.Configuration) -> StripeCustomerAdapter {
-        let customerAdapter: StripeCustomerAdapter
+    func createCustomerSheet(configuration: CustomerSheet.Configuration,
+                             customerAdapter: CustomerAdapter) -> CustomerSheet {
+
+        return CustomerSheet(configuration: configuration, customer: customerAdapter)
+    }
+
+    func createCustomerSheet(configuration: CustomerSheet.Configuration,
+                             customerId: String,
+                             customerSessionClientSecret: String?) -> CustomerSheet {
+        let intentConfiguration = CustomerSheet.IntentConfiguration(setupIntentClientSecretProvider: { [weak self] in
+            guard let self else { throw NSError(domain: "", code: 0) }
+            return try await self.backend.createSetupIntent(customerId: customerId, settings: self.settings)
+        })
+        return CustomerSheet(configuration: configuration,
+                             intentConfiguration: intentConfiguration,
+                             customerSessionClientSecretProvider: {
+            .init(customerId: customerId, clientSecret: customerSessionClientSecret!)
+        })
+    }
+
+    func customerAdapter(customerId: String, ephemeralKey: String) -> StripeCustomerAdapter {
         switch settings.paymentMethodMode {
         case .setupIntent:
-            customerAdapter = StripeCustomerAdapter(customerEphemeralKeyProvider: {
+            return StripeCustomerAdapter(customerEphemeralKeyProvider: {
                 // This should be a block that fetches this from your server
-                .init(customerId: customerId, ephemeralKeySecret: ephemeralKey)
+                return .init(customerId: customerId, ephemeralKeySecret: ephemeralKey)
             }, setupIntentClientSecretProvider: {
-                return try await self.backend.createSetupIntent(customerId: customerId, merchantCountryCode: self.settings.merchantCountryCode.rawValue)
+                return try await self.backend.createSetupIntent(customerId: customerId, settings: self.settings)
             })
         case .createAndAttach:
-            customerAdapter = StripeCustomerAdapter(customerEphemeralKeyProvider: {
+            return StripeCustomerAdapter(customerEphemeralKeyProvider: {
                 // This should be a block that fetches this from your server
-                .init(customerId: customerId, ephemeralKeySecret: ephemeralKey)
+                return .init(customerId: customerId, ephemeralKeySecret: ephemeralKey)
             }, setupIntentClientSecretProvider: nil)
         }
-        return customerAdapter
     }
 
     func applePayEnabled() -> Bool {
@@ -188,7 +238,7 @@ extension CustomerSheetTestPlaygroundController {
 
         // TODO: Refactor this to make the ephemeral key and customerId fetching async
         self.backend.loadBackendCustomerEphemeralKey(customerType: customerType,
-                                                     merchantCountryCode: settings.merchantCountryCode.rawValue) { result in
+                                                     settings: settings) { result in
             if settingsToLoad != self.settings {
                 DispatchQueue.main.async {
                     self.load()
@@ -196,7 +246,6 @@ extension CustomerSheetTestPlaygroundController {
                 return
             }
             guard let json = result,
-                  let ephemeralKey = json["customerEphemeralKeySecret"], !ephemeralKey.isEmpty,
                   let customerId = json["customerId"], !customerId.isEmpty,
                   let publishableKey = json["publishableKey"] else {
                 DispatchQueue.main.async {
@@ -205,39 +254,64 @@ extension CustomerSheetTestPlaygroundController {
                 }
                 return
             }
+            let ephemeralKey = json["customerEphemeralKeySecret"]
+            let customerSessionClientSecret = json["customerSessionClientSecret"]
+            guard ephemeralKey != nil || customerSessionClientSecret != nil else {
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    self.currentlyRenderedSettings = self.settings
+                    print("Error: Backend did not return a customerSessionClientSecret or customerEphemeralKeySecret")
+                }
+                return
+            }
 
             STPAPIClient.shared.publishableKey = publishableKey
 
-            Task {
-                // Create Customer Sheet
-                var configuration = self.customerSheetConfiguration(customerId: customerId, ephemeralKey: ephemeralKey)
-                configuration.applePayEnabled = self.applePayEnabled()
-                let customerAdapter = self.customerAdapter(customerId: customerId, ephemeralKey: ephemeralKey, configuration: configuration)
-                self.customerSheet = CustomerSheet(configuration: configuration, customer: customerAdapter)
+            // Clear analytics log and set up delegate for UI tests
+            DispatchQueue.main.async {
+                AnalyticsLogObserver.shared.analyticsLog.removeAll()
+            }
+            STPAnalyticsClient.sharedClient.delegate = self
 
-                // Retrieve selected PM
-                do {
-                    let selection = try await customerAdapter.retrievePaymentOptionSelection()
-                    DispatchQueue.main.async {
-                        self.paymentOptionSelection = selection
-                        self.settings.customerId = customerId
-                        self.settings.customerMode = .customID
-                        self.currentlyRenderedSettings = self.settings
-                        self.serializeSettingsToNSUserDefaults()
-                        self.isLoading = false
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.settings.customerId = customerId
-                        self.settings.customerMode = .customID
-                        self.currentlyRenderedSettings = self.settings
-                        self.serializeSettingsToNSUserDefaults()
-                        self.isLoading = false
-                    }
-                    throw error
+            let configuration = self.customerSheetConfiguration()
+            if let ephemeralKey {
+                // Create Customer Sheet using CustomerAdapter w/ legacy ephemeral key
+                let customerAdapter = self.customerAdapter(customerId: customerId,
+                                                           ephemeralKey: ephemeralKey)
+                self._customerAdapter = customerAdapter
+                self.customerSheet = self.createCustomerSheet(configuration: configuration, customerAdapter: customerAdapter)
+                Task { @MainActor in
+                    do {
+                        self.paymentOptionSelection = try await customerAdapter.retrievePaymentOptionSelection()
+                    } catch {}
+                }
+            } else {
+                // Create Customer Sheet using CustomerSession
+                let customerSheet = self.createCustomerSheet(configuration: configuration,
+                                                             customerId: customerId,
+                                                             customerSessionClientSecret: customerSessionClientSecret)
+                self.customerSheet = customerSheet
+                Task { @MainActor in
+                    do {
+                        self.paymentOptionSelection = try await customerSheet.retrievePaymentOptionSelection()
+                    } catch {}
                 }
             }
+            DispatchQueue.main.async {
+                self.settings.customerId = customerId
+                self.settings.customerMode = .customID
+                self.currentlyRenderedSettings = self.settings
+                self.serializeSettingsToNSUserDefaults()
+                self.isLoading = false
+            }
         }
+    }
+    func customerSessionSettingsTapped() {
+        let vc = UIHostingController(rootView: CustomerSheetCustomerSessionPlaygroundView(viewModel: settings, doneAction: { updatedSettings in
+            self.settings = updatedSettings
+            self.rootViewController.dismiss(animated: true, completion: nil)
+        }))
+        rootViewController.present(vc, animated: true, completion: nil)
     }
 }
 
@@ -269,11 +343,29 @@ class CustomerSheetBackend {
         self.endpoint = endpoint
     }
 
-    func loadBackendCustomerEphemeralKey(customerType: String, merchantCountryCode: String, completion: @escaping ([String: String]?) -> Void) {
+    func loadBackendCustomerEphemeralKey(customerType: String,
+                                         settings: CustomerSheetTestPlaygroundSettings,
+                                         completion: @escaping ([String: String]?) -> Void) {
 
-        let body = [ "customer_type": customerType,
-                     "merchant_country_code": merchantCountryCode,
+        var body = [ "customer_type": customerType,
+                     "customer_key_type": settings.customerKeyType.rawValue,
+                     "merchant_country_code": settings.merchantCountryCode.rawValue,
+                     "customer_session_payment_method_remove": settings.paymentMethodRemove.rawValue,
+                     "customer_session_payment_method_remove_last": settings.paymentMethodRemoveLast.rawValue,
+                     "customer_session_payment_method_sync_default": settings.paymentMethodSyncDefault.rawValue,
         ] as [String: Any]
+
+        // Send custom keys to backend if provided
+        if let customSecretKey = settings.customSecretKey, !customSecretKey.isEmpty {
+            body["custom_secret_key"] = customSecretKey
+        }
+        if let customPublishableKey = settings.customPublishableKey, !customPublishableKey.isEmpty {
+            body["custom_publishable_key"] = customPublishableKey
+        }
+
+        if let allowRedisplayValue = settings.paymentMethodAllowRedisplayFilters.arrayValue() {
+            body["customer_session_payment_method_allow_redisplay_filters"] = allowRedisplayValue
+        }
 
         let url = URL(string: "\(endpoint)/customer_ephemeral_key")!
         let session = URLSession.shared
@@ -297,10 +389,17 @@ class CustomerSheetBackend {
         task.resume()
     }
 
-    func createSetupIntent(customerId: String, merchantCountryCode: String) async throws -> String {
-        let body = [ "customer_id": customerId,
-                     "merchant_country_code": merchantCountryCode,
+    func createSetupIntent(customerId: String, settings: CustomerSheetTestPlaygroundSettings) async throws -> String {
+        var body = [ "customer_id": customerId,
+                     "merchant_country_code": settings.merchantCountryCode.rawValue,
         ] as [String: Any]
+
+        if let customSecretKey = settings.customSecretKey, !customSecretKey.isEmpty {
+            body["custom_secret_key"] = customSecretKey
+        }
+        if let customPublishableKey = settings.customPublishableKey, !customPublishableKey.isEmpty {
+            body["custom_publishable_key"] = customPublishableKey
+        }
         let url = URL(string: "\(endpoint)/create_setup_intent")!
         let session = URLSession.shared
 
@@ -315,5 +414,14 @@ class CustomerSheetBackend {
             throw NSError(domain: "test", code: 0, userInfo: nil) // Throw more specific error
         }
         return secret
+    }
+}
+
+// MARK: - STPAnalyticsClientDelegate
+extension CustomerSheetTestPlaygroundController: STPAnalyticsClientDelegate {
+    func analyticsClientDidLog(analyticsClient: StripeCore.STPAnalyticsClient, payload: [String: Any]) {
+        DispatchQueue.main.async {
+            AnalyticsLogObserver.shared.analyticsLog.append(payload)
+        }
     }
 }

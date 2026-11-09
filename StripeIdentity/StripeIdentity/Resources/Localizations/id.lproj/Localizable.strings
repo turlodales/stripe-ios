@@ -1,20 +1,38 @@
-"A few photos will be taken automatically on the next step to verify it's you" = "Beberapa foto akan diambil secara otomatis pada langkah berikutnya untuk memverifikasi diri Anda";
-
 "Accepted forms of ID include" = "Bentuk identifikasi yang diterima antara lain";
+
+"Allow" = "Izinkan";
 
 "Alternatively, you may manually upload a photo of your identity document." = "Atau, Anda dapat mengunggah foto dokumen identitas secara manual";
 
 "App Settings" = "Pengaturan Aplikasi";
 
-"Back identity card photo successfully uploaded" = "Foto bagian belakang kartu identitas mengemudi berhasil diunggah";
+"Auto" = "Otomatis";
 
-"Back of identity card" = "Bagian belakang kartu identitas";
+"Back %@ photo successfully uploaded" = "Bagian belakang %@ foto berhasil diunggah";
+
+"Back identity document photo successfully uploaded" = "Foto dokumen identitas belakang berhasil diunggah";
+
+"Back of %@" = "Bagian belakang %@";
+
+"Back of ID not detected" = "Bagian belakang ID tidak terdeteksi";
+
+"Back of driver's license or government-issued photo ID" = "Bagian belakang SIM atau identitas berfoto yang dikeluarkan pemerintah";
+
+"Back of identity document" = "Bagian belakang dokumen identitas";
 
 "Camera permission" = "Izin kamera";
 
 "Camera unavailable" = "Kamera tidak tersedia";
 
+"Captured front" = "Tampak depan berhasil diambil";
+
+"Captured left" = "Tampak kiri berhasil diambil";
+
+"Captured right" = "Tampak kanan berhasil diambil";
+
 "Capturing…" = "Mengambil gambar...";
+
+"Center ID in view" = "Pusatkan ID sampai terlihat";
 
 "Choose File" = "Pilih File";
 
@@ -22,15 +40,37 @@
 
 "Could not capture image" = "Tidak dapat mengambil gambar";
 
-"Date of Birth" = "Tanggal Lahir";
-
 "Date of birth does not look valid" = "Tanggal lahir sepertinya tidak valid";
+
+"Decline" = "Tolak";
+
+"Details not visible" = "Detail tidak terlihat";
+
+"Flip your %@ over to the other side" = "Balikkan %@ Anda ke sisi lain";
+
+"Flip your driver's license or government-issued photo ID over to the other side" = "Balikkan SIM atau identitas berfoto yang dikeluarkan pemerintah ke sisi lainnya";
 
 "Flip your identity card over to the other side" = "Balikkan kartu identitas Anda ke sisi yang lain";
 
-"Front identity card photo successfully uploaded" = "Foto bagian depan kartu identitas berhasil diunggah";
+"Follow the instructions to take selfies to compare against the image on your photo ID." = "Ikuti petunjuk untuk mengambil swafoto guna dibandingkan dengan foto pada kartu identitas Anda.";
 
-"Front of identity card" = "Bagian depan kartu identitas";
+"Front %@ photo successfully uploaded" = "Bagian depan %@ foto berhasil diunggah";
+
+"Front identity document photo successfully uploaded" = "Bagian depan foto dokumen identitas berhasil diunggah";
+
+"Front of %@" = "Bagian depan %@";
+
+"Front of ID not detected" = "Bagian depan ID tidak terdeteksi";
+
+"Front of driver's license or government-issued photo ID" = "Bagian depan SIM atau identitas berfoto yang dikeluarkan pemerintah";
+
+"Front of driver's license or passport" = "Bagian depan SIM atau paspor";
+
+"Front of driver's license, passport, or government-issued photo ID" = "Bagian depan SIM, paspor, atau identitas berfoto yang dikeluarkan pemerintah";
+
+"Front of identity document" = "Bagian depan dokumen identitas";
+
+"Front of passport or government-issued photo ID" = "Bagian depan paspor atau identitas berfoto yang dikeluarkan pemerintah";
 
 "Get ready to scan your photo ID" = "Siapkan pemindaian identitas berfoto Anda";
 
@@ -38,25 +78,45 @@
 
 "Go Back" = "Kembali";
 
+"Great! Checking your images...." = "Bagus! Memeriksa foto Anda....";
+
+"Help us improve verifications" = "Bantu kami meningkatkan verifikasi";
+
 "Hold still, scanning" = "Jangan bergerak, memindai";
+
+"Hold still..." = "Jangan bergerak...";
 
 "I'm ready" = "Saya siap";
 
 "ID Number" = "Nomor Identifikasi";
 
+"Image is blurry. Hold your phone steady and try again." = "Gambar buram. Stabilkan ponsel Anda dan coba lagi.";
+
+"Image taken" = "Gambar diambil";
+
 "Individual CPF" = "CPF perorangan";
+
+"Invalid document" = "Dokumen tidak valid";
+
+"Keep ID level" = "Sejajarkan identitas";
 
 "Last 4 of Social Security number" = "4 angka terakhir Nomor Jaminan Sosial";
 
-"Loading" = "Memuat";
-
 "Make sure you're in a well lit space." = "Pastikan Anda berada di ruang yang cukup terang.";
+
+"Manual" = "Manual";
 
 "Move closer" = "Mendekat";
 
 "Move farther" = "Jauhkan";
 
+"Move to a darker area" = "Pindah ke tempat yang lebih gelap";
+
+"Move to a well-lit area" = "Pindahkan ke tempat yang cukup terang";
+
 "NRIC or FIN" = "NRIC atau FIN";
+
+"No document detected" = "Tidak ada dokumen yang terdeteksi";
 
 "Personal ID number" = "Nomor identifikasi pribadi";
 
@@ -68,11 +128,25 @@
 
 "Photo Library" = "Pustaka Foto";
 
-"Please upload images of the front and back of your identity card" = "Unggah gambar bagian depan dan belakang kartu identitas Anda";
+"Place your face within the frame" = "Posisikan wajah Anda di dalam bingkai";
+
+"Please upload images of the front and back of your %@" = "Silakan unggah gambar bagian depan dan belakang %@ Anda";
+
+"Please upload images of the front and back of your identity document" = "Silakan unggah gambar bagian depan dan belakang dokumen identitas Anda";
+
+"Position your %@ in the center of the frame" = "Posisikan %@ Anda di tengah bingkai";
+
+"Position your driver's license or government-issued photo ID in the center of the frame" = "Posisikan SIM atau identitas berfoto yang dikeluarkan pemerintah di bagian tengah bingkai";
+
+"Position your driver's license or passport in the center of the frame" = "Posisikan SIM atau paspor Anda di bagian tengah bingkai";
+
+"Position your driver's license, passport, or government-issued photo ID in the center of the frame" = "Posisikan SIM, paspor, atau identitas berfoto yang dikeluarkan pemerintah di bagian tengah bingkai";
 
 "Position your face in the center of the frame." = "Posisikan wajah Anda di tengah bingkai.";
 
-"Position your identity card in the center of the frame" = "Posisikan kartu identitas Anda di tengah bingkai";
+"Position your identity document in the center of the frame" = "Posisikan dokumen identitas Anda di bagian tengah bingkai";
+
+"Position your passport or government-issued photo ID in the center of the frame" = "Posisikan paspor atau identitas berfoto yang dikeluarkan pemerintah di bagian tengah bingkai";
 
 "Retake Photos" = "Ambil Ulang Foto";
 
@@ -86,13 +160,15 @@
 
 "Select a location to upload the front of your identity document from" = "Pilih lokasi untuk mengunggah bagian depan dokumen identitas Anda";
 
-"Select back identity card photo" = "Pilih foto bagian belakang kartu identitas";
+"Select back %@ photo" = "Pilih bagian belakang %@ foto";
 
-"Select front identity card photo" = "Pilih foto bagian depan kartu identitas";
+"Select back identity document photo" = "Pilih bagian belakang foto dokumen identitas";
+
+"Select front %@ photo" = "Pilih bagian depan %@ foto";
+
+"Select front identity document photo" = "Pilih bagian depan foto dokumen identitas";
 
 "Selfie" = "Swafoto";
-
-"Selfie captures" = "Pengambilan gambar swafoto";
 
 "Selfie captures are complete" = "Pengambilan gambar swafoto selesai";
 
@@ -104,6 +180,16 @@
 
 "Try Again" = "Coba Lagi";
 
+"Try reduce glare and make ID visible" = "Coba kurangi silau cahaya dan pastikan identitas terlihat";
+
+"Turn head left" = "Tolehkan kepala ke kiri";
+
+"Turn head right" = "Tolehkan kepala ke kanan";
+
+"Turn your head left." = "Tolehkan kepala Anda ke kiri.";
+
+"Turn your head right." = "Tolehkan kepala Anda ke kanan.";
+
 "Unable to establish a connection." = "Tidak dapat membuat koneksi.";
 
 "Unsaved changes" = "Perubahan tak tersimpan";
@@ -112,11 +198,19 @@
 
 "Upload a Photo" = "Unggah Foto";
 
+"Upload your %@" = "Unggah %@ Anda";
+
 "Upload your photo ID" = "Unggah ID berfoto Anda";
 
-"Uploading back identity card photo" = "Mengunggah foto bagian belakang kartu identitas";
+"Uploading back %@ photo" = "Mengunggah bagian belakang %@ foto";
 
-"Uploading front identity card photo" = "Mengunggah foto bagian depan kartu identitas";
+"Uploading back identity document photo" = "Mengunggah bagian belakang foto dokumen identitas";
+
+"Uploading front %@ photo" = "Mengunggah bagian depan %@ foto";
+
+"Uploading front identity document photo" = "Mengunggah bagian depan foto dokumen identitas";
+
+"Verify with a selfie" = "Verifikasikan dengan swafoto";
 
 "Verify your identity" = "Verifikasikan identitas Anda";
 
@@ -125,6 +219,8 @@
 "We need permission to use your camera. Please allow camera access in app settings." = "Kami memerlukan izin Anda untuk menggunakan kamera. Harap izinkan akses kamera di pengaturan aplikasi.";
 
 "Welcome" = "Selamat datang";
+
+"With your permission, Stripe may use your images to improve fraud detection. Declining doesn't affect your verification." = "Dengan seizin Anda, Stripe mungkin menggunakan gambar Anda untuk meningkatkan deteksi penipuan. Penolakan tidak memengaruhi verifikasi Anda.";
 
 "You can either try again or upload an image from your device." = "Anda dapat mencoba lagi atau mengunggah gambar dari perangkat.";
 

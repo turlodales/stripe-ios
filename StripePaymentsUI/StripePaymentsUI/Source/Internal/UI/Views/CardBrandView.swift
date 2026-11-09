@@ -6,15 +6,15 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// A view that displays a card brand icon/logo, or an icon to help the user locate the CVC
 /// for a specific card brand.
 /// For internal SDK use only
 @objc(STP_Internal_CardBrandView)
-@_spi(STP) public final class CardBrandView: UIView {
+@_spi(InternalOnlyAPI) public final class CardBrandView: UIView {
 
     // TODO(ramont): unify icon sizes.
 
@@ -23,7 +23,7 @@ import UIKit
 
     /// The target size of the rectangular part of the icon.
     /// internal so we can reuse size with other icon views (see LinkPaymentMethodPicker-CellContentView)
-    @_spi(STP) public static let targetIconSize = CGSize(width: 24, height: 16)
+    @_spi(InternalOnlyAPI) public static let targetIconSize = CGSize(width: 24, height: 16)
 
     /// Padding built in to the icon.
     ///
@@ -47,7 +47,7 @@ import UIKit
     private var centeringPadding: UIEdgeInsets {
         return UIEdgeInsets(
             top: 0,
-            left: 0,
+            left: centerHorizontally ? Self.iconPadding.right : 0,
             bottom: Self.iconPadding.top,
             right: 0
         )
@@ -71,6 +71,9 @@ import UIKit
     /// If `true`, the view will display the CVC hint icon instead of the card brand image.
     let showCVC: Bool
 
+    /// If `true`, will center the card brand icon horizontally in the containing view
+    let centerHorizontally: Bool
+
     /// If `true`, show a CBC indicator arrow
     var isShowingCBCIndicator: Bool = false {
         didSet {
@@ -84,11 +87,11 @@ import UIKit
         }
     }
 
-    @_spi(STP) public override var intrinsicContentSize: CGSize {
+    @_spi(InternalOnlyAPI) public override var intrinsicContentSize: CGSize {
         return size(for: Self.targetIconSize)
     }
 
-    @_spi(STP) public func size(for targetSize: CGSize) -> CGSize {
+    @_spi(InternalOnlyAPI) public func size(for targetSize: CGSize) -> CGSize {
         let padding = centeringPadding
 
         // The way this scaling works isn't perfect since the returned size has to map to a valid point value
@@ -101,7 +104,7 @@ import UIKit
             targetSize.height
             / (Self.legacyIconSize.height - Self.iconPadding.top - Self.iconPadding.bottom)
         // We could adapt this for multiple screens, but probably not worth it (better solution is to remove padding from images)
-        #if canImport(CompositorServices)
+        #if os(visionOS)
         let screenScale = 1.0
         #else
         let screenScale = UIScreen.main.scale
@@ -124,10 +127,12 @@ import UIKit
 
     /// Creates and returns an initialized card brand view.
     /// - Parameter showCVC: Whether or not to show the CVC hint icon instead of the card brand image.
-    @_spi(STP) public init(
-        showCVC: Bool = false
+    @_spi(InternalOnlyAPI) public init(
+        showCVC: Bool = false,
+        centerHorizontally: Bool = false
     ) {
         self.showCVC = showCVC
+        self.centerHorizontally = centerHorizontally
         super.init(frame: .zero)
 
         addSubview(imageView)
@@ -175,6 +180,10 @@ import UIKit
         coder: NSCoder
     ) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    @_spi(InternalOnlyAPI) public func setCardBrand(_ brand: STPCardBrand) {
+        setCardBrand(.brand(brand), animated: false)
     }
 
     /// Updates the card brand, optionally animating the transition.
@@ -242,8 +251,8 @@ import UIKit
     }
 
     // MARK: - Callbacks
-#if !canImport(CompositorServices)
-    @_spi(STP) public override func traitCollectionDidChange(
+#if !os(visionOS)
+    @_spi(InternalOnlyAPI) public override func traitCollectionDidChange(
         _ previousTraitCollection: UITraitCollection?
     ) {
         super.traitCollectionDidChange(previousTraitCollection)

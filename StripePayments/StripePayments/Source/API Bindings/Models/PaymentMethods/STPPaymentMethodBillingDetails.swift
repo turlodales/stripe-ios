@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 /// Billing information associated with a `STPPaymentMethod` that may be used or required by particular types of payment methods.
 /// - seealso: https://stripe.com/docs/api/payment_methods/object#payment_method_object-billing_details
@@ -129,5 +129,23 @@ extension STPPaymentMethodBillingDetails {
         address.postalCode = postalCode
         address.country = countryCode
         self.address = address
+    }
+
+    /// Convenience initializer for creating an `STPPaymentMethodBillingDetails` instance with a Link BillingDetails
+    @_spi(InternalOnlyAPI) public convenience init?(
+        billingAddress: BillingAddress?,
+        email: String?
+    ) {
+        self.init()
+        let address = STPPaymentMethodAddress()
+        address.line1 = billingAddress?.line1
+        address.line2 = billingAddress?.line2
+        address.city = billingAddress?.city
+        address.state = billingAddress?.state
+        address.postalCode = billingAddress?.postalCode
+        address.country = billingAddress?.countryCode
+        self.address = address
+        self.name = billingAddress?.name
+        self.email = email
     }
 }

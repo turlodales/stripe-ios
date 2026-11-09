@@ -1,0 +1,128 @@
+//
+//  AttachWalletAddressView.swift
+//  CryptoOnramp Example
+//
+//  Created by Michael Liberatore on 8/20/25.
+//
+
+import SwiftUI
+
+@_spi(CryptoOnrampAlpha)
+import StripeCryptoOnramp
+
+@_spi(InternalOnlyAPI)
+import StripePaymentSheet
+
+/// A view shown in a sheet to attach a crypto wallet address to the current user’s account.
+struct AttachWalletAddressView: View {
+
+    /// The coordinator used to submit the wallet address.
+    let coordinator: CryptoOnrampCoordinator
+
+    /// Callback invoked on successful attach with the address and network used.
+    let onWalletAttached: ((String, CryptoNetwork) -> Void)?
+
+    @State private var walletAddress: String = ""
+    @State private var selectedNetwork: CryptoNetwork = .solana
+    @State private var errorMessage: String?
+
+    @Environment(\.isLoading) private var isLoading
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var walletFieldFocused: Bool
+
+    private var isSubmitDisabled: Bool {
+        isLoading.wrappedValue || walletAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Attach a wallet address to your account.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    FormField("Wallet Address") {
+                        TextField("Enter wallet address", text: $walletAddress, axis: .vertical)
+                            .lineLimit(1...3)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .focused($walletFieldFocused)
+                    }
+
+                    FormField("Network") {
+                        Picker("Network", selection: $selectedNetwork) {
+                            ForEach(CryptoNetwork.allCases, id: \.rawValue) { network in
+                                Text(network.rawValue.localizedCapitalized).tag(network)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if let errorMessage {
+                        ErrorMessageView(message: errorMessage)
+                    }
+                }
+                .horizontallyCenteredContent()
+                .padding()
+            }
+            .navigationTitle("Wallet Address")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        submit()
+                    } label: {
+                        Label("Submit", systemImage: "checkmark")
+                    }
+                    .disabled(isSubmitDisabled)
+                    .opacity(isSubmitDisabled ? 0.5 : 1)
+                }
+            }
+        }
+        .task {
+            walletFieldFocused = true
+        }
+    }
+
+    private func submit() {
+        isLoading.wrappedValue = true
+        errorMessage = nil
+
+        let address = walletAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Task {
+            do {
+                try await coordinator.registerWalletAddress(walletAddress: address, network: selectedNetwork)
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    onWalletAttached?(address, selectedNetwork)
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    errorMessage = "Attach wallet failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+}
+
+#Preview {
+    PreviewWrapperView { coordinator in
+        AttachWalletAddressView(coordinator: coordinator, onWalletAttached: nil)
+    }
+}

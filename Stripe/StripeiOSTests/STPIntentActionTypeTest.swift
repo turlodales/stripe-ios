@@ -8,11 +8,11 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPIntentActionTypeTest: XCTestCase {
 
@@ -36,6 +36,19 @@ class STPIntentActionTypeTest: XCTestCase {
         )
 
         XCTAssertEqual(
+            STPIntentActionType(string: "mb_way_await_authorization"),
+            STPIntentActionType.mbWayAwaitAuthorization
+        )
+        XCTAssertEqual(
+            STPIntentActionType(string: "await_authorization"),
+            STPIntentActionType.awaitAuthorization
+        )
+        XCTAssertEqual(
+            STPIntentActionType(string: "pix_display_qr_code"),
+            STPIntentActionType.pixDisplayQrCode
+        )
+
+        XCTAssertEqual(
             STPIntentActionType(string: "garbage"),
             STPIntentActionType.unknown
         )
@@ -43,6 +56,24 @@ class STPIntentActionTypeTest: XCTestCase {
             STPIntentActionType(string: "GARBAGE"),
             STPIntentActionType.unknown
         )
+    }
+
+    func testMBAwaitAuthorizationDecoding() {
+        let action = STPIntentAction.decodedObject(fromAPIResponse: [
+            "type": "mb_way_await_authorization",
+            "mb_way_await_authorization": [:],
+        ])
+
+        XCTAssertEqual(action?.type, .mbWayAwaitAuthorization)
+    }
+
+    func testAwaitAuthorizationDecoding() {
+        let action = STPIntentAction.decodedObject(fromAPIResponse: [
+            "type": "await_authorization",
+            "await_authorization": [:],
+        ])
+
+        XCTAssertEqual(action?.type, .awaitAuthorization)
     }
 
 }

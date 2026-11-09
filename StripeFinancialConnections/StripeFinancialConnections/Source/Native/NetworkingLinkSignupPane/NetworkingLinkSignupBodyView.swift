@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class NetworkingLinkSignupBodyView: UIView {
@@ -64,8 +64,8 @@ private func CreateBulletPointView(
 ) -> UIView {
     let imageView = UIImageView()
     imageView.contentMode = .scaleAspectFit
-    imageView.tintColor = .iconDefault
-    imageView.setImage(with: iconUrl)
+    imageView.tintColor = FinancialConnectionsAppearance.Colors.icon
+    imageView.setImage(with: iconUrl, useAlwaysTemplateRenderingMode: true)
     imageView.translatesAutoresizingMaskIntoConstraints = false
     let imageDiameter: CGFloat = 20
     NSLayoutConstraint.activate([

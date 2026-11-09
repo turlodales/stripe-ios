@@ -8,8 +8,8 @@
 
 import Foundation
 import PassKit
-@_spi(STP) import StripeApplePay
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeApplePay
+@_spi(InternalOnlyAPI) import StripeCore
 
 /// Implement the required methods of this delegate to supply a PaymentIntent to STPApplePayContext and be notified of the completion of the Apple Pay payment.
 /// You may also implement the optional delegate methods to handle shipping methods and shipping address changes e.g. to verify you can ship to the address, or update the payment amount.
@@ -22,6 +22,7 @@ import PassKit
     /// If you create the PaymentIntent with confirmation_method=manual, you can collect shipping information using its `shippingContact` and `shippingMethod` properties.
     ///   - completion:                        Call this with the PaymentIntent or SetupIntent client secret, or the error that occurred creating the PaymentIntent or SetupIntent.
     @objc(applePayContext:didCreatePaymentMethod:paymentInformation:completion:)
+    @MainActor @preconcurrency
     func applePayContext(
         _ context: STPApplePayContext,
         didCreatePaymentMethod paymentMethod: STPPaymentMethod,
@@ -35,6 +36,7 @@ import PassKit
     ///   - status: The status of the payment
     ///   - error: The error that occurred, if any.
     @objc(applePayContext:didCompleteWithStatus:error:)
+    @MainActor @preconcurrency
     func applePayContext(
         _ context: STPApplePayContext,
         didCompleteWith status: STPPaymentStatus,

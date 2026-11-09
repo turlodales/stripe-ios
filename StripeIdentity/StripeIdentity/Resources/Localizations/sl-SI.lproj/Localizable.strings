@@ -1,20 +1,38 @@
-"A few photos will be taken automatically on the next step to verify it's you" = "V naslednjem koraku bo samodejno posnetih nekaj fotografij, da bomo lahko preverili vašo identiteto.";
-
 "Accepted forms of ID include" = "Med sprejemljive oblike osebnih dokumentov spadajo";
+
+"Allow" = "Dovoli";
 
 "Alternatively, you may manually upload a photo of your identity document." = "Fotografijo svojega osebnega dokumenta pa lahko tudi ročno naložite.";
 
 "App Settings" = "Nastavitve aplikacije";
 
-"Back identity card photo successfully uploaded" = "Fotografija hrbtne strani osebne izkaznice je bila uspešno naložena";
+"Auto" = "Samodejno";
 
-"Back of identity card" = "Hrbtna stran osebne izkaznice";
+"Back %@ photo successfully uploaded" = "Fotografija na zadnji strani %@ je bila uspešno naložena";
+
+"Back identity document photo successfully uploaded" = "Fotografija na zadnji strani osebnega dokumenta je bila uspešno naložena";
+
+"Back of %@" = "Zadnja stran %@";
+
+"Back of ID not detected" = "Zadnji del identifikacije ni zaznan";
+
+"Back of driver's license or government-issued photo ID" = "Hrbtna stran vozniškega dovoljenja ali osebnega dokumenta s fotografijo, ki ga je izdal državni organ";
+
+"Back of identity document" = "Hrbtna stran osebnega dokumenta";
 
 "Camera permission" = "Dovoljenje za kamero";
 
 "Camera unavailable" = "Kamera ni na voljo";
 
+"Captured front" = "Zajeta sprednja stran";
+
+"Captured left" = "Zajeta leva stran";
+
+"Captured right" = "Zajeta desna stran";
+
 "Capturing…" = "Zajemanje ...";
+
+"Center ID in view" = "Sredinski ID v vidnem polju";
 
 "Choose File" = "Izberite datoteko";
 
@@ -22,15 +40,37 @@
 
 "Could not capture image" = "Slike ni bilo mogoče posneti";
 
-"Date of Birth" = "Datum rojstva";
-
 "Date of birth does not look valid" = "Videti je, da datum rojstva ni veljaven";
+
+"Decline" = "Zavrnite";
+
+"Details not visible" = "Podrobnosti niso vidne";
+
+"Flip your %@ over to the other side" = "Obrnite svojo %@ na drugo stran";
+
+"Flip your driver's license or government-issued photo ID over to the other side" = "Obrnite vozniško dovoljenje ali osebni dokument s fotografijo, ki ga je izdal državni organ, na drugo stran";
 
 "Flip your identity card over to the other side" = "Obrnite osebno izkaznico na drugo stran";
 
-"Front identity card photo successfully uploaded" = "Fotografija sprednje strani osebne izkaznice je bila uspešno naložena";
+"Follow the instructions to take selfies to compare against the image on your photo ID." = "Sledite navodilom in posnemite selfije za primerjavo s fotografijo na vašem osebnem dokumentu.";
 
-"Front of identity card" = "Sprednja stran osebne izkaznice";
+"Front %@ photo successfully uploaded" = "Fotografija na sprednji strani %@ je bila uspešno naložena";
+
+"Front identity document photo successfully uploaded" = "Fotografija na sprednji strani osebnega dokumenta je bila uspešno naložena";
+
+"Front of %@" = "Sprednja stran %@";
+
+"Front of ID not detected" = "Sprednji del identifikacije ni zaznan";
+
+"Front of driver's license or government-issued photo ID" = "Sprednja stran vozniškega dovoljenja ali osebnega dokumenta s fotografijo, ki ga je izdal državni organ";
+
+"Front of driver's license or passport" = "Sprednja stran vozniškega dovoljenja ali potnega lista";
+
+"Front of driver's license, passport, or government-issued photo ID" = "Sprednja stran vozniškega dovoljenja, potnega lista ali osebnega dokumenta s fotografijo, ki ga je izdal državni organ";
+
+"Front of identity document" = "Sprednja stran osebnega dokumenta";
+
+"Front of passport or government-issued photo ID" = "Sprednja stran potnega lista ali osebnega dokumenta s fotografijo, ki ga je izdal državni organ";
 
 "Get ready to scan your photo ID" = "Pripravite se na optično branje osebnega dokumenta s fotografijo";
 
@@ -38,25 +78,45 @@
 
 "Go Back" = "Nazaj";
 
+"Great! Checking your images...." = "Odlično! Preverjanje vaših slik …";
+
+"Help us improve verifications" = "Pomagajte nam izboljšati preverjanje";
+
 "Hold still, scanning" = "Optično branje – držite pri miru";
+
+"Hold still..." = "Držite pri miru ...";
 
 "I'm ready" = "Pripravljen(-a) sem";
 
 "ID Number" = "Številka osebnega dokumenta";
 
+"Image is blurry. Hold your phone steady and try again." = "Slika je zamegljena. Telefon držite pri miru in poskusite znova.";
+
+"Image taken" = "Slika je bila posneta";
+
 "Individual CPF" = "CPF posameznika";
+
+"Invalid document" = "Neveljaven dokument";
+
+"Keep ID level" = "Osebni dokument naj ostane raven";
 
 "Last 4 of Social Security number" = "Zadnje 4 števke številke socialnega zavarovanja";
 
-"Loading" = "Nalaganje";
-
 "Make sure you're in a well lit space." = "Poskrbite, da ste v dobro osvetljenem prostoru.";
+
+"Manual" = "Ročno";
 
 "Move closer" = "Približajte";
 
 "Move farther" = "Oddaljite";
 
+"Move to a darker area" = "Pojdite v temnejši prostor";
+
+"Move to a well-lit area" = "Pojdite v dobro osvetljen prostor";
+
 "NRIC or FIN" = "NRIC ali FIN";
+
+"No document detected" = "Zaznan ni bil noben dokument";
 
 "Personal ID number" = "Številka osebne izkaznice";
 
@@ -68,11 +128,25 @@
 
 "Photo Library" = "Knjižnica fotografij";
 
-"Please upload images of the front and back of your identity card" = "Naložite sliki sprednje in hrbtne strani osebne izkaznice";
+"Place your face within the frame" = "Namestite obraz v okvir";
+
+"Please upload images of the front and back of your %@" = "Prosimo, naložite slike sprednjo in zadnjo stran vašega %@";
+
+"Please upload images of the front and back of your identity document" = "Naložite slike sprednje in zadnje strani osebnega dokumenta.";
+
+"Position your %@ in the center of the frame" = "Namestite %@ na sredino okvirja";
+
+"Position your driver's license or government-issued photo ID in the center of the frame" = "Namestite vozniško dovoljenje ali osebni dokument s fotografijo, ki ga je izdal državni organ, v sredino okvirja";
+
+"Position your driver's license or passport in the center of the frame" = "Namestite vozniško dovoljenje ali potni list v sredino okvirja";
+
+"Position your driver's license, passport, or government-issued photo ID in the center of the frame" = "Namestite vozniško dovoljenje, potni list ali osebni dokument s fotografijo, ki ga je izdal državni organ, v sredino okvirja";
 
 "Position your face in the center of the frame." = "Zagotovite, da je vaš obraz na sredini okvira.";
 
-"Position your identity card in the center of the frame" = "Zagotovite, da je osebna izkaznica na sredini okvirja";
+"Position your identity document in the center of the frame" = "Osebni dokument namestite na sredino okvirja.";
+
+"Position your passport or government-issued photo ID in the center of the frame" = "Namestite potni list ali osebni dokument s fotografijo, ki ga je izdal državni organ, v sredino okvirja";
 
 "Retake Photos" = "Znova posnemi fotografije";
 
@@ -86,13 +160,15 @@
 
 "Select a location to upload the front of your identity document from" = "Izberite mesto, s katerega želite naložiti sprednjo stran osebnega dokumenta";
 
-"Select back identity card photo" = "Izberite fotografijo hrbtne strani osebne izkaznice";
+"Select back %@ photo" = "Izberite fotografijo na zadnji strani %@";
 
-"Select front identity card photo" = "Izberite fotografijo sprednje strani osebne izkaznice";
+"Select back identity document photo" = "Izberite fotografijo osebnega dokumenta";
+
+"Select front %@ photo" = "Izberite fotografijo na sprednji strani %@";
+
+"Select front identity document photo" = "Izberite fotografijo na sprednji strani osebnega dokumenta";
 
 "Selfie" = "Selfi";
-
-"Selfie captures" = "Posnetki selfija";
 
 "Selfie captures are complete" = "Selfiji so posneti";
 
@@ -104,6 +180,16 @@
 
 "Try Again" = "Poskusi znova";
 
+"Try reduce glare and make ID visible" = "Poskusite zmanjšati bleščanje in se prepričajte, da je osebni dokument viden";
+
+"Turn head left" = "Obrnite glavo v levo";
+
+"Turn head right" = "Obrnite glavo v desno";
+
+"Turn your head left." = "Obrnite glavo v levo.";
+
+"Turn your head right." = "Obrnite glavo v desno.";
+
 "Unable to establish a connection." = "Povezave ni mogoče vzpostaviti.";
 
 "Unsaved changes" = "Neshranjene spremembe";
@@ -112,11 +198,19 @@
 
 "Upload a Photo" = "Naloži fotografijo";
 
+"Upload your %@" = "Naložite svoj %@";
+
 "Upload your photo ID" = "Naložite osebni dokument s svojo fotografijo";
 
-"Uploading back identity card photo" = "Nalaganje fotografije hrbtne strani osebne izkaznice";
+"Uploading back %@ photo" = "Nalaganje fotografije %@ na zadnji strani";
 
-"Uploading front identity card photo" = "Nalaganje fotografije sprednje strani osebne izkaznice";
+"Uploading back identity document photo" = "Nalaganje fotografije osebnega dokumenta";
+
+"Uploading front %@ photo" = "Nalaganje fotografije %@ na sprednji strani";
+
+"Uploading front identity document photo" = "Nalaganje fotografije na sprednji strani osebnega dokumenta";
+
+"Verify with a selfie" = "Preverite s selfijem";
 
 "Verify your identity" = "Preverite svojo identiteto";
 
@@ -125,6 +219,8 @@
 "We need permission to use your camera. Please allow camera access in app settings." = "Potrebujemo dovoljenje za uporabo vaše kamere. Dovolite dostop do kamere v nastavitvah aplikacije.";
 
 "Welcome" = "Dobrodošli";
+
+"With your permission, Stripe may use your images to improve fraud detection. Declining doesn't affect your verification." = "Z vašim dovoljenjem lahko Stripe uporabi vaše slike za izboljšanje odkrivanja goljufij. Zavrnitev ne vpliva na vaše preverjanje.";
 
 "You can either try again or upload an image from your device." = "Poskusite znova ali pa naložite sliko iz svoje naprave.";
 

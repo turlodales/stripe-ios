@@ -7,20 +7,22 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePaymentsUI
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
-class PaymentSheetImageLibrary {
+@_spi(ReactNativeSDK)
+public class PaymentSheetImageLibrary {
 
     /// An icon representing Afterpay.
     @objc
-    public class func afterpayLogo(locale: Locale = Locale.current) -> UIImage {
-        switch (locale.stp_languageCode, locale.stp_regionCode) {
-        case ("en", "GB"):
+    public class func afterpayLogo(currency: String? = nil) -> UIImage {
+        if AfterpayPriceBreakdownView.shouldUseClearpayBrand(for: currency) {
             return self.safeImageNamed("clearpay_mark", templateIfAvailable: true)
-        default:
+        } else if AfterpayPriceBreakdownView.shouldUseCashAppBrand(for: currency) {
+            return self.safeImageNamed("cash_app_afterpay_mark", templateIfAvailable: true)
+        } else {
             return self.safeImageNamed("afterpay_mark", templateIfAvailable: true)
         }
     }
@@ -48,7 +50,8 @@ class PaymentSheetImageLibrary {
         "wellsfargo": [#"Wells Fargo"#],
     ]
 
-    class func bankIconCode(for bankName: String?) -> String {
+    @_spi(ReactNativeSDK)
+    public class func bankIconCode(for bankName: String?) -> String {
         guard let bankName = bankName else {
             return "default"
         }
@@ -62,15 +65,31 @@ class PaymentSheetImageLibrary {
         return "default"
     }
 
-    class func bankIcon(for bank: String?) -> UIImage {
+    @_spi(ReactNativeSDK) @_spi(AppearanceAPIAdditionsPreview)
+    public class func bankIcon(for bank: String?, iconStyle: PaymentSheet.Appearance.IconStyle) -> UIImage {
         guard let bank = bank else {
-            return STPImageLibrary.bankIcon()
+            return STPPaymentMethodType.USBankAccount.makeImage(iconStyle: iconStyle) ?? UIImage()
         }
         let icon = safeImageNamed("bank_icon_\(bank.lowercased())")
         if icon.size == .zero {
-            return STPImageLibrary.bankIcon() // use generic
+            return STPPaymentMethodType.USBankAccount.makeImage(iconStyle: iconStyle) ?? UIImage() // use generic
         }
         return icon
+    }
+
+    class func bankInstitutionIcon(for bank: String?) -> UIImage? {
+        guard let bank else {
+            return nil
+        }
+        let icon = safeImageNamed("bank_icon_\(bank.lowercased())")
+        if icon.size == .zero {
+            return nil
+        }
+        return icon
+    }
+
+    class func linkBankIcon() -> UIImage {
+        STPImageLibrary.linkBankIcon()
     }
 }
 
@@ -78,7 +97,7 @@ class PaymentSheetImageLibrary {
 
 extension STPCardBrand {
     /// Returns a borderless image of the card brand's logo
-    func makeSavedPaymentMethodCellImage() -> UIImage {
+    func makeSavedPaymentMethodCellImage(overrideUserInterfaceStyle: UIUserInterfaceStyle?) -> UIImage {
         let image: Image
         switch self {
         case .JCB:
@@ -102,7 +121,7 @@ extension STPCardBrand {
         @unknown default:
             image = .carousel_card_unknown
         }
-        let brandImage = image.makeImage()
+        let brandImage = image.makeImage(overrideUserInterfaceStyle: overrideUserInterfaceStyle)
         // Don't allow tint colors to change the brand images.
         return brandImage.withRenderingMode(.alwaysOriginal)
     }
@@ -111,6 +130,6 @@ extension STPCardBrand {
 // MARK: - ImageMaker
 
 // :nodoc:
-@_spi(STP) extension PaymentSheetImageLibrary: ImageMaker {
-    @_spi(STP) public typealias BundleLocator = StripePaymentSheetBundleLocator
+@_spi(InternalOnlyAPI) extension PaymentSheetImageLibrary: ImageMaker {
+    @_spi(InternalOnlyAPI) public typealias BundleLocator = StripePaymentSheetBundleLocator
 }

@@ -8,7 +8,8 @@
 import Foundation
 import UIKit
 
-// Prefer `AttributedLabel` over `AttributedTextView` for single-line text.
+// `AttributedLabel` is a UILabel wrapper that supports custom fonts and text colors.
+// It defaults to multi-line text wrapping for better localization support.
 final class AttributedLabel: UILabel {
 
     private let customFont: FinancialConnectionsFont
@@ -33,6 +34,9 @@ final class AttributedLabel: UILabel {
         self.customFont = font
         self.customTextColor = textColor
         super.init(frame: .zero)
+        // Enable multi-line text wrapping by default for better localization support
+        self.numberOfLines = 0
+        self.lineBreakMode = .byWordWrapping
     }
 
     required init?(coder: NSCoder) {
@@ -69,20 +73,28 @@ final class AttributedLabel: UILabel {
         }
     }
 
-    func setText(_ text: String) {
+    func setText(_ text: String, underline: Bool = false) {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.minimumLineHeight = customFont.lineHeight
         paragraphStyle.maximumLineHeight = customFont.lineHeight
         if let customTextAlignment = customTextAlignment {
             paragraphStyle.alignment = customTextAlignment
         }
+
         let string = NSMutableAttributedString(
             string: text,
-            attributes: [
-                .paragraphStyle: paragraphStyle,
-                .font: customFont.uiFont,
-                .foregroundColor: customTextColor,
-            ]
+            attributes: {
+                var attributes: [NSAttributedString.Key: Any] = [
+                    .paragraphStyle: paragraphStyle,
+                    .font: customFont.uiFont,
+                    .foregroundColor: customTextColor,
+                ]
+                if underline {
+                    attributes[.underlineColor] = customTextColor
+                    attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                }
+                return attributes
+            }()
         )
         attributedText = string
     }

@@ -7,52 +7,95 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension DocumentCaptureViewController {
 
-    func titleText(for side: DocumentSide) -> String {
-        if side == .front {
-            return STPLocalizedString(
-                "Front of identity card",
-                "Title of ID document scanning screen when scanning the front of an identity card"
-            )
+    func titleText(for side: DocumentSide, availableIDTypes: [String]) -> String {
+        return side.instruction(availableIDTypes: availableIDTypes)
+    }
+
+    func scanningTextWithNoInput(availableIDTypes: [String], for side: DocumentSide) -> String {
+        let localizedTypes = availableIDTypes.compactMap { $0.uiIDType() }
+
+        func fallback() -> String {
+            switch side {
+            case .front:
+                return String.Localized.position_in_center_identity_card
+            case .back:
+                return String.Localized.flip_to_other_side_identity_card
+            }
+
+        }
+
+        // Handle specific combinations for scanning instructions
+        if localizedTypes.count == 2 {
+            if localizedTypes.contains(String.Localized.driverLicense) && localizedTypes.contains(String.Localized.passport) {
+                return side == .front ? String.Localized.positionDriverLicenseOrPassport : String(format: String.Localized.flip_to_other_side, String.Localized.driverLicense)
+            } else if localizedTypes.contains(String.Localized.driverLicense) && localizedTypes.contains(String.Localized.governmentIssuedId) {
+                return side == .front ? String.Localized.positionDriverLicenseOrGovernmentId : String.Localized.flipDriverLicenseOrGovernmentId
+            } else if localizedTypes.contains(String.Localized.passport) && localizedTypes.contains(String.Localized.governmentIssuedId) {
+                return side == .front ? String.Localized.positionPassportOrGovernmentId : String(format: String.Localized.flip_to_other_side, String.Localized.governmentIssuedId)
+            } else {
+                return fallback()
+            }
+        } else if localizedTypes.count == 3 {
+            // Handle all three types for scanning instructions
+            return side == .front ? String.Localized.positionAllIdTypes : String.Localized.flipDriverLicenseOrGovernmentId
+        } else if localizedTypes.count == 1, let type = localizedTypes.first {
+            // Handle single type
+            switch side {
+            case .front:
+                return String(format: String.Localized.position_in_center, type)
+            case .back:
+                return String(format: String.Localized.flip_to_other_side, type)
+            }
         } else {
-            return STPLocalizedString(
-                "Back of identity card",
-                "Title of ID document scanning screen when scanning the back of an identity card"
-            )
+            // Fallback to generic text
+            return fallback()
         }
     }
 
     func scanningInstructionText(
         for side: DocumentSide,
-        idDetectorOutput: IDDetectorOutput?
+        documentScannerOutput: DocumentScannerOutput?,
+        availableIDTypes: [String]
     ) -> String {
-        let foundClassification = idDetectorOutput?.classification
-        let matchesClassification =
-        foundClassification?.matchesDocument(side: side) ?? false
-        let zoomLevel = idDetectorOutput?.computeZoomLevel()
+        switch documentScannerOutput {
+        case .none:
+            return scanningTextWithNoInput(availableIDTypes: availableIDTypes, for: side)
+        case .some(.legacy(let idDetectorOutput, _, let motionblur, _, _)):
+            let foundClassification = idDetectorOutput.classification
+            let matchesClassification = foundClassification.matchesDocument(side: side)
+            let zoomLevel = idDetectorOutput.computeZoomLevel()
 
-        guard let zoomLevel = zoomLevel else {
-            if side == .front {
-                return String.Localized.position_in_center
-            } else {
-                return String.Localized.flip_to_other_side
+            if foundClassification == .invalid {
+                return String.Localized.invalid_document
             }
-        }
-
-        switch (side, matchesClassification, zoomLevel) {
-        case (.front, false, _):
-            return String.Localized.position_in_center
-        case (.back, false, _):
-            return String.Localized.flip_to_other_side
-        case (_, true, .ok):
-            return String.Localized.scanning
-        case (_, true, .tooClose):
-            return String.Localized.move_farther
-        case (_, true, .tooFar):
-            return String.Localized.move_closer
+            // If document appears off-center, ask user to center it (only when the side matches)
+            if matchesClassification && !idDetectorOutput.isCentered() {
+                return String.Localized.center_id_in_view
+            }
+            switch (side, matchesClassification, zoomLevel) {
+            case (.front, false, _), (.back, false, _):
+                switch (side, foundClassification) {
+                case (.front, .idCardBack):
+                    return String.Localized.front_of_id_not_detected
+                case (.back, .idCardFront), (.back, .passport):
+                    return String.Localized.back_of_id_not_detected
+                default:
+                    return scanningTextWithNoInput(availableIDTypes: availableIDTypes, for: side)
+                }
+            case (_, true, .ok):
+                if motionblur.hasMotionBlur {
+                    return String.Localized.reduce_blur
+                }
+                return String.Localized.scanning
+            case (_, true, .tooClose):
+                return String.Localized.move_farther
+            case (_, true, .tooFar):
+                return String.Localized.move_closer
+            }
         }
     }
 
@@ -60,6 +103,13 @@ extension DocumentCaptureViewController {
         STPLocalizedString(
             "Scanned",
             "State when identity document has been successfully scanned"
+        )
+    }
+
+    static var imageTakenInstructionalText: String {
+        STPLocalizedString(
+            "Image taken",
+            "State when a manual identity document image has been captured"
         )
     }
 

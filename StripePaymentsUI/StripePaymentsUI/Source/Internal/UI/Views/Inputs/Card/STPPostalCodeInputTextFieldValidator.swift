@@ -6,23 +6,17 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class STPPostalCodeInputTextFieldValidator: STPInputTextFieldValidator {
 
     override var defaultErrorMessage: String? {
         if countryCode?.uppercased() == "US" {
-            return STPLocalizedString(
-                "Your ZIP is invalid.",
-                "Error message for when postal code in form is invalid (US only)"
-            )
+            String.Localized.your_zip_is_invalid
         } else {
-            return STPLocalizedString(
-                "Your postal code is invalid.",
-                "Error message for when postal code in form is invalid"
-            )
+            String.Localized.your_postal_code_is_invalid
         }
     }
 

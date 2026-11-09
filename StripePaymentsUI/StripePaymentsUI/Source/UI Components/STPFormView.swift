@@ -6,7 +6,7 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// Base protocol to support manually backspacing between form inputs and
@@ -19,7 +19,7 @@ protocol STPFormContainer: NSObjectProtocol {
 
 /// Internal version of `STPFormViewDelegate` that also includes additional methods for controlling
 /// form view interactions.
-@_spi(STP) public protocol STPFormViewInternalDelegate: NSObjectProtocol {
+@_spi(InternalOnlyAPI) public protocol STPFormViewInternalDelegate: NSObjectProtocol {
     func formView(_ form: STPFormView, didChangeToStateComplete complete: Bool)
     func formViewWillBecomeFirstResponder(_ form: STPFormView)
     func formView(_ form: STPFormView, didTapAccessoryButton button: UIButton)
@@ -65,7 +65,7 @@ public class STPFormView: UIView, STPFormInputValidationObserver {
     static let cornerRadius: CGFloat = 6
     static let interSectionSpacing: CGFloat = 7
 
-    @_spi(STP) public weak var formViewInternalDelegate: STPFormViewInternalDelegate?
+    @_spi(InternalOnlyAPI) public weak var formViewInternalDelegate: STPFormViewInternalDelegate?
 
     required init(
         sections: [Section]
@@ -287,10 +287,6 @@ public class STPFormView: UIView, STPFormInputValidationObserver {
             }
         }
         return nil
-    }
-
-    @_spi(STP) public func nextFirstResponderFieldBecomeFirstResponder() {
-        nextFirstResponderField()?.becomeFirstResponder()
     }
 
     func nextFirstResponderField(_ wantsAutoFocusOnly: Bool = false) -> STPFormInput? {
@@ -576,6 +572,7 @@ extension STPFormView {
                 stackView.distribution = .fillEqually
                 stackView.translatesAutoresizingMaskIntoConstraints = false
                 stackView.spacing = STPFormView.borderWidth
+                stackView.borderWidth = STPFormView.borderWidth
                 stackView.separatorColor = InputFormColors.outlineColor
                 return stackView
             }
@@ -588,6 +585,7 @@ extension STPFormView {
             stackView.axis = .vertical
             stackView.distribution = .fillEqually
             stackView.spacing = STPFormView.borderWidth
+            stackView.borderWidth = STPFormView.borderWidth
             stackView.separatorColor = InputFormColors.outlineColor
 
             stackView.drawBorder = true

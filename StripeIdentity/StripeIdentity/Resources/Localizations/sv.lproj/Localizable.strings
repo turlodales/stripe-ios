@@ -1,20 +1,38 @@
-"A few photos will be taken automatically on the next step to verify it's you" = "Ett par foton kommer att tas automatiskt i nästa steg för att verifiera att det är du";
-
 "Accepted forms of ID include" = "Godkända former av id-handlingar inkluderar";
+
+"Allow" = "Tillåt";
 
 "Alternatively, you may manually upload a photo of your identity document." = "Du kan även manuellt ladda upp ett foto av din id-handling.";
 
 "App Settings" = "Appinställningar";
 
-"Back identity card photo successfully uploaded" = "Bilden på id-kortets baksida har laddats upp";
+"Auto" = "Automatisk";
 
-"Back of identity card" = "Baksida av id-kort";
+"Back %@ photo successfully uploaded" = "Bilden på baksidan av %@ har laddats upp";
+
+"Back identity document photo successfully uploaded" = "Bilden på identitetshandlingens baksida har laddats upp";
+
+"Back of %@" = "Baksidan av %@";
+
+"Back of ID not detected" = "Id-handlingens baksida inte identifierad";
+
+"Back of driver's license or government-issued photo ID" = "Baksidan av körkort eller en myndighetsutfärdad id-handling med foto";
+
+"Back of identity document" = "Id-handlingens baksida";
 
 "Camera permission" = "Kamerabehörighet";
 
 "Camera unavailable" = "Kamera ej tillgänglig";
 
+"Captured front" = "Bild tagen framsida";
+
+"Captured left" = "Bild vänstervänd";
+
+"Captured right" = "Bild högervänd";
+
 "Capturing…" = "Tar bild …";
+
+"Center ID in view" = "Centrera id-handlingen";
 
 "Choose File" = "Välj fil";
 
@@ -22,15 +40,37 @@
 
 "Could not capture image" = "Det gick inte att ta bilden";
 
-"Date of Birth" = "Födelsedatum";
-
 "Date of birth does not look valid" = "Födelsedatumet verkar inte vara giltig";
+
+"Decline" = "Neka";
+
+"Details not visible" = "Detaljer syns inte";
+
+"Flip your %@ over to the other side" = "Vänd på %@ till andra sidan";
+
+"Flip your driver's license or government-issued photo ID over to the other side" = "Vänd på ditt körkort eller myndighetsutfärdad id-handling med foto över till andra sidan";
 
 "Flip your identity card over to the other side" = "Vänd på id-handlingen";
 
-"Front identity card photo successfully uploaded" = "Bilden på id-kortets framsida har laddats upp";
+"Follow the instructions to take selfies to compare against the image on your photo ID." = "Följ instruktionerna för att ta selfies att jämföra med bilden på din fotolegitimation.";
 
-"Front of identity card" = "Framsida av id-kort";
+"Front %@ photo successfully uploaded" = "Bilden på framsidan av %@ har laddats upp";
+
+"Front identity document photo successfully uploaded" = "Bilden på identitetshandlingens framsida har laddats upp";
+
+"Front of %@" = "Framsidan av %@";
+
+"Front of ID not detected" = "Id-handlingens framsida inte identifierad";
+
+"Front of driver's license or government-issued photo ID" = "Framsidan av körkort eller en myndighetsutfärdad id-handling med foto";
+
+"Front of driver's license or passport" = "Framsidan av körkort eller pass";
+
+"Front of driver's license, passport, or government-issued photo ID" = "Framsidan av körkort, pass eller myndighetsutfärdad id-handling med foto";
+
+"Front of identity document" = "Id-handlingens framsida";
+
+"Front of passport or government-issued photo ID" = "Framsidan av pass eller myndighetsutfärdad id-handling med foto";
 
 "Get ready to scan your photo ID" = "Gör dig redo att skanna ditt foto-id";
 
@@ -38,25 +78,45 @@
 
 "Go Back" = "Gå tillbaka";
 
+"Great! Checking your images...." = "Bra! Kontrollerar dina bilder ....";
+
+"Help us improve verifications" = "Hjälp oss att förbättra verifiering";
+
 "Hold still, scanning" = "Rör dig inte, dokumentet skannas in";
+
+"Hold still..." = "Var stilla ...";
 
 "I'm ready" = "Jag är redo";
 
 "ID Number" = "ID-nummer";
 
+"Image is blurry. Hold your phone steady and try again." = "Bilden är suddig. Håll telefonen stadigt och försök igen.";
+
+"Image taken" = "Bild tagen";
+
 "Individual CPF" = "Personligt CPF";
+
+"Invalid document" = "Ogiltigt dokument";
+
+"Keep ID level" = "Se till att id-handlingen ligger rakt";
 
 "Last 4 of Social Security number" = "Fyra sista siffrorna i socialförsäkringsnumret";
 
-"Loading" = "Laddar";
-
 "Make sure you're in a well lit space." = "Se till att du befinner dig på en plats med bra belysning.";
+
+"Manual" = "Manuell";
 
 "Move closer" = "Flytta närmare";
 
 "Move farther" = "Flytta längre bort";
 
+"Move to a darker area" = "Flytta till en mörkare plats";
+
+"Move to a well-lit area" = "Flytta till en plats med bra belysning";
+
 "NRIC or FIN" = "NRIC eller FIN";
+
+"No document detected" = "Inget dokument identifierades";
 
 "Personal ID number" = "Personligt ID-nummer";
 
@@ -68,11 +128,25 @@
 
 "Photo Library" = "Fotobibliotek";
 
-"Please upload images of the front and back of your identity card" = "Ladda upp bilderna på fram- och baksidan av ditt id-kort";
+"Place your face within the frame" = "Placera ansiktet inom ramen";
+
+"Please upload images of the front and back of your %@" = "Ladda upp bilderna på fram- och baksidan av ditt %@";
+
+"Please upload images of the front and back of your identity document" = "Ladda upp bilder av fram- och baksidan av din identitetshandling";
+
+"Position your %@ in the center of the frame" = "Placera %@ i mitten av ramen";
+
+"Position your driver's license or government-issued photo ID in the center of the frame" = "Placera ditt körkort eller myndighetsutfärdade ID-handling med foto i mitten av ramen";
+
+"Position your driver's license or passport in the center of the frame" = "Placera ditt körkort eller pass i mitten av ramen";
+
+"Position your driver's license, passport, or government-issued photo ID in the center of the frame" = "Placera ditt körkort, pass eller myndighetsutfärdade ID-handling med foto i mitten av ramen";
 
 "Position your face in the center of the frame." = "Placera ansiktet i mitten av ramen.";
 
-"Position your identity card in the center of the frame" = "Placera id-kortet i mitten av ramen";
+"Position your identity document in the center of the frame" = "Placera din identitetshandling i mitten av ramen";
+
+"Position your passport or government-issued photo ID in the center of the frame" = "Placera ditt pass eller myndighetsutfärdade ID-handling med foto i mitten av ramen";
 
 "Retake Photos" = "Ta bilden på nytt";
 
@@ -86,13 +160,15 @@
 
 "Select a location to upload the front of your identity document from" = "Välj från vilken plats du vill ladda upp framsidan på din id-handling";
 
-"Select back identity card photo" = "Välj en bild på id-kortets baksida";
+"Select back %@ photo" = "Välj bilden på baksidan av %@";
 
-"Select front identity card photo" = "Välj en bild på id-kortets framsida";
+"Select back identity document photo" = "Välj bilden på baksidan av identitetshandlingen";
+
+"Select front %@ photo" = "Välj bilden på framsidan av %@";
+
+"Select front identity document photo" = "Välj bilden på framsidan av identitetshandlingen";
 
 "Selfie" = "Selfie";
-
-"Selfie captures" = "Selfiebilder";
 
 "Selfie captures are complete" = "Selfiebilderna har tagits";
 
@@ -104,6 +180,16 @@
 
 "Try Again" = "Försök igen";
 
+"Try reduce glare and make ID visible" = "Försök att minska bländningen och se till att id-handlingen är synlig";
+
+"Turn head left" = "Vrid huvudet åt vänster";
+
+"Turn head right" = "Vrid huvudet åt höger";
+
+"Turn your head left." = "Vrid huvudet åt vänster.";
+
+"Turn your head right." = "Vrid huvudet åt höger.";
+
 "Unable to establish a connection." = "Det gick inte att upprätta en anslutning.";
 
 "Unsaved changes" = "Ändringarna har inte sparats";
@@ -112,11 +198,19 @@
 
 "Upload a Photo" = "Ladda upp en bild";
 
+"Upload your %@" = "Ladda upp ditt %@";
+
 "Upload your photo ID" = "Ladda upp ditt foto-id";
 
-"Uploading back identity card photo" = "Laddar upp bild på id-kortets baksida";
+"Uploading back %@ photo" = "Laddar upp bilden på baksidan av %@";
 
-"Uploading front identity card photo" = "Laddar upp bild på id-kortets framsida";
+"Uploading back identity document photo" = "Laddar upp bilden på baksidan av identitetshandlingen";
+
+"Uploading front %@ photo" = "Laddar upp bilden på framsidan av %@";
+
+"Uploading front identity document photo" = "Laddar upp bilden på framsidan av identitetshandlingen";
+
+"Verify with a selfie" = "Verifiera med en selfie";
 
 "Verify your identity" = "Verifiera din identitet";
 
@@ -125,6 +219,8 @@
 "We need permission to use your camera. Please allow camera access in app settings." = "Vi behöver behörighet att använda din kamera. Tillåt kameraåtkomst i appens inställningar.";
 
 "Welcome" = "Välkommen";
+
+"With your permission, Stripe may use your images to improve fraud detection. Declining doesn't affect your verification." = "Om du tillåter kan Stripe använda dina bilder för att förbättra identifieringen av bedrägerier. Att neka påverkar inte din verifiering.";
 
 "You can either try again or upload an image from your device." = "Du kan antingen försöka igen eller ladda upp en bild från din enhet.";
 

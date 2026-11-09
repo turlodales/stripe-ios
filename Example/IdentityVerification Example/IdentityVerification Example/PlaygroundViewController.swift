@@ -6,17 +6,26 @@
 //
 
 import StripeIdentity
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 class PlaygroundViewController: UIViewController {
 
     // Constants
-    let baseURL = "https://stripe-mobile-identity-verification-playground.glitch.me"
-    let verifyEndpoint = "/create-verification-session"
+    // View and fork the backend code here: https://codesandbox.io/p/devbox/dsx4vq
+    let baseURL = "https://stripe-mobile-identity-verification-playground.stripedemos.com"
+    let verifyEndpoint = "/verification-sessions"
+    let testVerifyEndpoint = "/test/verification-sessions"
+    let reuseEndpoint = "/reuse-verification-session"
+    private var is3DFaceCaptureEnabled: Bool {
+        return faceCaptureEnabledSwitch.isOn
+    }
 
     // Outlets
     @IBOutlet private weak var nativeOrWebSelector: UISegmentedControl!
+    @IBOutlet private weak var newOrReuseSelector: UISegmentedControl!
+    @IBOutlet private weak var testModeContainerView: UIStackView!
+    @IBOutlet private weak var testModeSwitch: UISwitch!
     @IBOutlet private weak var verificationTypeSelector: UISegmentedControl!
     @IBOutlet private weak var drivingLicenseSwitch: UISwitch!
     @IBOutlet private weak var passportSwitch: UISwitch!
@@ -25,8 +34,11 @@ class PlaygroundViewController: UIViewController {
     @IBOutlet private weak var requireAddressSwitch: UISwitch!
     @IBOutlet private weak var requireLiveCaptureSwitch: UISwitch!
     @IBOutlet private weak var requireSelfieSwitch: UISwitch!
+    @IBOutlet private weak var verificationTypeContainerView: UIStackView!
     @IBOutlet private weak var documentOptionsContainerView: UIStackView!
     @IBOutlet private weak var nativeComponentsOptionsContainerView: UIStackView!
+    @IBOutlet private weak var reuseVerificationIDContainerView: UIStackView!
+    @IBOutlet private weak var reuseVerificationSessionIDInput: UITextField!
 
     @IBOutlet weak var phoneOptionsContainerView: UIStackView!
     @IBOutlet private weak var verifyButton: UIButton!
@@ -39,6 +51,9 @@ class PlaygroundViewController: UIViewController {
     @IBOutlet weak var phoneOtpContainerView: UIStackView!
 
     @IBOutlet weak var fallbackToDocumentSwitch: UISwitch!
+    private let faceCaptureEnabledSwitch = UISwitch()
+    private let faceCaptureEnabledContainerView = UIStackView()
+
     private let phoneElement: PhoneNumberElement
 
     private let phoneView: UIView
@@ -48,6 +63,12 @@ class PlaygroundViewController: UIViewController {
         case web
         case link
     }
+
+    enum CreationMethod: CaseIterable {
+        case new
+        case reuse
+    }
+
     enum VerificationType: String, CaseIterable {
         case document = "document"
         case idNumber = "id_number"
@@ -67,14 +88,42 @@ class PlaygroundViewController: UIViewController {
         case required = "required"
     }
 
+    var otpCheckType: OtpCheckType {
+        return OtpCheckType.allCases[otpCheckSelector.selectedSegmentIndex]
+    }
+
+    var noOtpCheckSegmentIndex: Int {
+        return OtpCheckType.allCases.firstIndex(of: .none)!
+    }
+
     /// Use native SDK or web redirect
     var invocationType: InvocationType {
         return InvocationType.allCases[nativeOrWebSelector.selectedSegmentIndex]
     }
 
+    /// Create new verification or reuse existing one
+    var creationMethod: CreationMethod {
+        return CreationMethod.allCases[newOrReuseSelector.selectedSegmentIndex]
+    }
+
     /// VerificationType specified in the UI toggle
     var verificationType: VerificationType {
         return VerificationType.allCases[verificationTypeSelector.selectedSegmentIndex]
+    }
+
+    private var requireMatchingSelfie: Bool {
+        guard requireSelfieSwitch.isOn else {
+            return false
+        }
+
+        switch verificationType {
+        case .document:
+            return true
+        case .phone:
+            return fallbackToDocumentSwitch.isOn
+        case .idNumber, .address:
+            return false
+        }
     }
 
     /// List of allowed document types based on UI toggles
@@ -104,12 +153,7 @@ class PlaygroundViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        if #available(iOS 14.3, *) {
-            nativeOrWebSelector.isEnabled = true
-        } else {
-            nativeOrWebSelector.isEnabled = false
-            nativeComponentsOptionsContainerView.isHidden = false
-        }
+        nativeOrWebSelector.isEnabled = true
 
         mockDocumentCameraForSimulator()
 
@@ -118,9 +162,14 @@ class PlaygroundViewController: UIViewController {
 
         activityIndicator.hidesWhenStopped = true
         verifyButton.addTarget(self, action: #selector(didTapVerifyButton), for: .touchUpInside)
-
         // TODO(ccen) enable phoneOtpContainerView when backend adds support to PII
         phoneOtpContainerView.isHidden = true
+        add3DFaceCaptureSwitch()
+        requireSelfieSwitch.isOn = true
+        newOrReuseSelector.isHidden = true
+        reuseVerificationIDContainerView.isHidden = true
+        reuseVerificationSessionIDInput.isHidden = true
+        didChangeVerificationType(self)
     }
 
     @objc
@@ -130,104 +179,203 @@ class PlaygroundViewController: UIViewController {
 
     @IBAction func fallbackToDocumentValueChanged(_ uiSwitch: UISwitch) {
         documentOptionsContainerView.isHidden = !uiSwitch.isOn
-        otpCheckContainerView.isHidden = !uiSwitch.isOn
     }
 
     @IBAction func requireOtpSwitchValueChanged(_ uiSwitch: UISwitch) {
         phoneView.isHidden = !uiSwitch.isOn
     }
 
+    private func add3DFaceCaptureSwitch() {
+        guard
+            faceCaptureEnabledContainerView.superview == nil,
+            let playgroundStackView = verificationTypeContainerView.superview as? UIStackView
+        else {
+            return
+        }
+
+        let label = UILabel()
+        label.text = "3D face capture enabled"
+        label.font = .systemFont(ofSize: 17)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        faceCaptureEnabledSwitch.isOn = true
+        faceCaptureEnabledSwitch.setContentHuggingPriority(.required, for: .horizontal)
+
+        faceCaptureEnabledContainerView.axis = .horizontal
+        faceCaptureEnabledContainerView.alignment = .center
+        faceCaptureEnabledContainerView.spacing = 8
+        faceCaptureEnabledContainerView.translatesAutoresizingMaskIntoConstraints = false
+        faceCaptureEnabledContainerView.addArrangedSubview(label)
+        faceCaptureEnabledContainerView.addArrangedSubview(faceCaptureEnabledSwitch)
+
+        let insertionIndex = playgroundStackView.arrangedSubviews.firstIndex(of: verificationTypeContainerView)
+            .map { $0 + 1 }
+            ?? playgroundStackView.arrangedSubviews.count
+        playgroundStackView.insertArrangedSubview(faceCaptureEnabledContainerView, at: insertionIndex)
+    }
+
     func requestVerificationSession() {
         // Disable the button while we make the request
         updateButtonState(isLoading: true)
+        var endpoint: String
+        var requestDict: [String: Any]
 
-        // Make request to our verification endpoint
-        let session = URLSession.shared
-        let url = URL(string: baseURL + verifyEndpoint)!
+        if creationMethod == .reuse {
+            endpoint = reuseEndpoint
 
-        // Forwarding VerificationSession options from the client to server to
-        // for demo purposes. In production, these are typically set by the
-        // server depending on the desired behavior.
-        var requestDict: [String: Any] = [
-            "type": verificationType.rawValue
-        ]
-
-        var options: [String: Any] = [:]
-
-        switch verificationType {
-        case .document:
-            options = [
-               "document": [
-                   "allowed_types": documentAllowedTypes.map { $0.rawValue },
-                   "require_id_number": requireIDNumberSwitch.isOn,
-                   "require_live_capture": requireLiveCaptureSwitch.isOn,
-                   "require_matching_selfie": requireSelfieSwitch.isOn,
-                   "require_address": requireAddressSwitch.isOn,
-               ],
+            requestDict = [
+                "verification_session": reuseVerificationSessionIDInput.text ?? ""
             ]
-            if requirePhoneNumberSwitch.isOn {
-                options["phone"] = [
-                    "require_verification": true
-                ]
-                requestDict["provided_details"] = [
-                    "phone": phoneElement.phoneNumber?.string(as: .e164)
-                ]
+        } else {
+            // Make request to our verification endpoint
+            endpoint = testModeSwitch.isOn ? testVerifyEndpoint : verifyEndpoint
+
+            // Forwarding VerificationSession options from the client to the server
+            // for demo purposes. In production, these are typically set by the
+            // server depending on the desired behavior.
+            requestDict = [
+                "type": verificationType.rawValue
+            ]
+            if requireMatchingSelfie {
+                requestDict["3d_face_capture_enabled"] = is3DFaceCaptureEnabled
             }
-        case .idNumber:
-            if requirePhoneNumberSwitch.isOn {
-                options["phone"] = [
-                    "require_verification": true
-                ]
-                requestDict["provided_details"] = [
-                    "phone": phoneElement.phoneNumber?.string(as: .e164)
-                ]
-            }
-        case .address:
-            // no-op
-            break
-        case .phone:
-            if fallbackToDocumentSwitch.isOn {
+
+            var options: [String: Any] = [:]
+
+            switch verificationType {
+            case .document:
                 options = [
-                   "document": [
-                    "allowed_types": documentAllowedTypes.map { $0.rawValue },
-                    "require_id_number": requireIDNumberSwitch.isOn,
-                    "require_live_capture": requireLiveCaptureSwitch.isOn,
-                    "require_matching_selfie": requireSelfieSwitch.isOn,
-                    "require_address": requireAddressSwitch.isOn,
-                   ],
-                   "phone_otp": [
-                    "check": OtpCheckType.allCases[otpCheckSelector.selectedSegmentIndex].rawValue
-                   ],
-                   "phone_records": [
-                    "fallback": "document"
-                   ],
+                    "document": [
+                        "allowed_types": documentAllowedTypes.map { $0.rawValue },
+                        "require_id_number": requireIDNumberSwitch.isOn,
+                        "require_live_capture": requireLiveCaptureSwitch.isOn,
+                        "require_matching_selfie": requireMatchingSelfie,
+                        "require_address": requireAddressSwitch.isOn,
+                    ],
                 ]
+                if requirePhoneNumberSwitch.isOn {
+                    options["phone"] = [
+                        "require_verification": true,
+                    ]
+                    requestDict["provided_details"] = [
+                        "phone": phoneElement.phoneNumber?.string(as: .e164),
+                    ]
+                }
+            case .idNumber:
+                if requirePhoneNumberSwitch.isOn {
+                    options["phone"] = [
+                        "require_verification": true,
+                    ]
+                    requestDict["provided_details"] = [
+                        "phone": phoneElement.phoneNumber?.string(as: .e164),
+                    ]
+                }
+            case .address:
+                // no-op
+                break
+            case .phone:
+                options["phone_otp"] = [
+                    "check": otpCheckType.rawValue,
+                ]
+                if fallbackToDocumentSwitch.isOn {
+                    options["document"] = [
+                        "allowed_types": documentAllowedTypes.map { $0.rawValue },
+                        "require_id_number": requireIDNumberSwitch.isOn,
+                        "require_live_capture": requireLiveCaptureSwitch.isOn,
+                        "require_matching_selfie": requireMatchingSelfie,
+                        "require_address": requireAddressSwitch.isOn,
+                    ]
+                    options["phone_records"] = [
+                        "fallback": "document",
+                    ]
+                }
+            }
+            requestDict["options"] = options
+        }
+
+        performRequest(to: endpoint, requestDict: requestDict) { [weak self] responseJson in
+            guard let self = self else {
+                return
+            }
+
+            if self.creationMethod == .new,
+                self.invocationType == .native,
+                responseJson["ephemeral_key_secret"] == nil
+            {
+                guard let verificationSessionId = responseJson["id"] else {
+                    self.updateButtonState(isLoading: false)
+                    assertionFailure("Did not receive a valid id.")
+                    return
+                }
+
+                self.performRequest(
+                    to: self.reuseEndpoint,
+                    requestDict: [
+                        "verification_session": verificationSessionId,
+                    ]
+                ) { [weak self] responseJson in
+                    self?.updateButtonState(isLoading: false)
+                    self?.startVerificationFlow(responseJson: responseJson)
+                }
+            } else {
+                self.updateButtonState(isLoading: false)
+                self.startVerificationFlow(responseJson: responseJson)
             }
         }
-        requestDict["options"] = options
+    }
 
-        let requestJson = try! JSONSerialization.data(withJSONObject: requestDict, options: [])
+    func performRequest(
+        to endpoint: String,
+        requestDict: [String: Any],
+        completion: @escaping ([String: String]) -> Void
+    ) {
+        let requestJson: Data
+        do {
+            requestJson = try JSONSerialization.data(withJSONObject: requestDict, options: [])
+        } catch {
+            updateButtonState(isLoading: false)
+            print(error)
+            return
+        }
 
+        let url = URL(string: baseURL + endpoint)!
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-type")
         urlRequest.httpBody = requestJson
 
-        let task = session.dataTask(with: urlRequest) { [weak self] data, _, error in
+        let task = URLSession.shared.dataTask(with: urlRequest) { [weak self] data, _, error in
             DispatchQueue.main.async { [weak self] in
-                // Re-enable button
-                self?.updateButtonState(isLoading: false)
+                guard let self = self else {
+                    return
+                }
 
-                guard
-                    error == nil,
-                    let data = data,
-                    let responseJson = try? JSONDecoder().decode([String: String].self, from: data)
-                else {
+                guard error == nil else {
+                    self.updateButtonState(isLoading: false)
                     print(error as Any)
                     return
                 }
 
-                self?.startVerificationFlow(responseJson: responseJson)
+                guard
+                    let data = data,
+                    let responseJson = try? JSONDecoder().decode([String: String].self, from: data)
+                else {
+                    self.updateButtonState(isLoading: false)
+                    if let data = data,
+                        let responseString = String(data: data, encoding: .utf8)
+                    {
+                        print(responseString)
+                    }
+                    return
+                }
+
+                if let errorMessage = responseJson["error"] {
+                    self.updateButtonState(isLoading: false)
+                    print(errorMessage)
+                    return
+                }
+
+                completion(responseJson)
             }
         }
         task.resume()
@@ -239,9 +387,7 @@ class PlaygroundViewController: UIViewController {
         } else {
             let shouldUseNativeComponents = invocationType == .native
 
-            if !shouldUseNativeComponents,
-                #available(iOS 14.3, *)
-            {
+            if !shouldUseNativeComponents {
                 setupVerificationSheetWebUI(responseJson: responseJson)
             } else {
                 setupVerificationSheetNativeUI(responseJson: responseJson)
@@ -279,12 +425,12 @@ class PlaygroundViewController: UIViewController {
             verificationSessionId: verificationSessionId,
             ephemeralKeySecret: ephemeralKeySecret,
             configuration: IdentityVerificationSheet.Configuration(
-                brandLogo: UIImage(named: "BrandLogo")!
+                brandLogo: UIImage(named: "BrandLogo")!,
+                brandColor: UIColor(named: "BrandColor")
             )
         )
     }
 
-    @available(iOS 14.3, *)
     func setupVerificationSheetWebUI(responseJson: [String: String]) {
         guard let clientSecret = responseJson["client_secret"] else {
             assertionFailure("Did not receive a valid client secret.")
@@ -343,38 +489,43 @@ class PlaygroundViewController: UIViewController {
         case .document:
             documentOptionsContainerView.isHidden = false
             phoneOptionsContainerView.isHidden = true
-            // phoneOtpContainerView.isHidden = false
+            phoneOptionsContainerView.arrangedSubviews.first?.isHidden = false
             requirePhoneNumberSwitch.isOn = false
             phoneView.isHidden = true
+            otpCheckSelector.selectedSegmentIndex = noOtpCheckSegmentIndex
             fallbackToDocumentSwitch.isOn = false
             otpCheckContainerView.isHidden = true
+
             phoneElement.clearPhoneNumber()
         case .idNumber:
             documentOptionsContainerView.isHidden = true
             phoneOptionsContainerView.isHidden = true
-            // phoneOtpContainerView.isHidden = false
+            phoneOptionsContainerView.arrangedSubviews.first?.isHidden = false
             requirePhoneNumberSwitch.isOn = false
             phoneView.isHidden = true
+            otpCheckSelector.selectedSegmentIndex = noOtpCheckSegmentIndex
             fallbackToDocumentSwitch.isOn = false
             otpCheckContainerView.isHidden = true
             phoneElement.clearPhoneNumber()
         case .address:
             documentOptionsContainerView.isHidden = true
             phoneOptionsContainerView.isHidden = true
-            // phoneOtpContainerView.isHidden = true
+            phoneOptionsContainerView.arrangedSubviews.first?.isHidden = false
             requirePhoneNumberSwitch.isOn = false
             phoneView.isHidden = true
+            otpCheckSelector.selectedSegmentIndex = noOtpCheckSegmentIndex
             fallbackToDocumentSwitch.isOn = false
             otpCheckContainerView.isHidden = true
             phoneElement.clearPhoneNumber()
         case .phone:
             documentOptionsContainerView.isHidden = true
             phoneOptionsContainerView.isHidden = false
-            // phoneOtpContainerView.isHidden = true
+            phoneOptionsContainerView.arrangedSubviews.first?.isHidden = false
             requirePhoneNumberSwitch.isOn = false
             phoneView.isHidden = true
+            otpCheckSelector.selectedSegmentIndex = noOtpCheckSegmentIndex
             fallbackToDocumentSwitch.isOn = false
-            otpCheckContainerView.isHidden = true
+            otpCheckContainerView.isHidden = false
             phoneElement.clearPhoneNumber()
         }
     }
@@ -387,6 +538,30 @@ class PlaygroundViewController: UIViewController {
             nativeComponentsOptionsContainerView.isHidden = true
         case .link:
             nativeComponentsOptionsContainerView.isHidden = true
+        }
+    }
+
+    // MARK: - New or Reuse Handlers
+    @IBAction func didChangeNewOrReuse(_ sender: Any) {
+        switch creationMethod {
+        case .new:
+            testModeContainerView.isHidden = false
+            verificationTypeContainerView.isHidden = false
+            reuseVerificationIDContainerView.isHidden = true
+            didChangeVerificationType(sender)
+        case .reuse:
+            testModeContainerView.isHidden = true
+            verificationTypeContainerView.isHidden = true
+            documentOptionsContainerView.isHidden = true
+            phoneOptionsContainerView.isHidden = true
+            phoneOptionsContainerView.arrangedSubviews.first?.isHidden = false
+            requirePhoneNumberSwitch.isOn = false
+            phoneView.isHidden = true
+            otpCheckSelector.selectedSegmentIndex = noOtpCheckSegmentIndex
+            fallbackToDocumentSwitch.isOn = false
+            otpCheckContainerView.isHidden = true
+            phoneElement.clearPhoneNumber()
+            reuseVerificationIDContainerView.isHidden = false
         }
     }
 
@@ -456,12 +631,15 @@ class PlaygroundViewController: UIViewController {
 
     func applyUIAppearance() {
         // Changes to UIAppearance are only applied when the view is added to the window hierarchy
-        UIApplication.shared.windows.forEach { window in
-            window.subviews.forEach { view in
-                view.removeFromSuperview()
-                window.addSubview(view)
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .forEach { window in
+                window.subviews.forEach { view in
+                    view.removeFromSuperview()
+                    window.addSubview(view)
+                }
             }
-        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {

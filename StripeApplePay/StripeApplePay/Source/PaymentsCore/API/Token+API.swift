@@ -8,7 +8,7 @@
 
 import Foundation
 import PassKit
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI.Token {
     /// A callback to be run with a token response from the Stripe API.
@@ -81,8 +81,8 @@ extension PKPayment {
 
         var transactionIdentifier = self.token.transactionIdentifier
         if transactionIdentifier != "" {
-            if self.stp_isSimulated() {
-                transactionIdentifier = PKPayment.stp_testTransactionIdentifier()
+            if self.stp_applepay_isSimulated() {
+                transactionIdentifier = PKPayment.stp_applepay_testTransactionIdentifier()
             }
             payload["pk_token_transaction_id"] = transactionIdentifier
         }

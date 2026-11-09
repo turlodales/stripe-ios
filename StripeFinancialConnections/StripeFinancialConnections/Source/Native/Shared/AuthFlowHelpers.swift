@@ -7,7 +7,7 @@
 
 import Foundation
 import SafariServices
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 final class AuthFlowHelpers {
 
@@ -36,10 +36,17 @@ final class AuthFlowHelpers {
         url: URL,
         pane: FinancialConnectionsSessionManifest.NextPane,
         analyticsClient: FinancialConnectionsAnalyticsClient,
-        handleStripeScheme: (_ urlHost: String?) -> Void
+        handleURL: (_ urlHost: String?, _ nextPaneOrDrawerOnSecondaryCta: String?) -> Void
     ) {
-        if let urlParameters = URLComponents(url: url, resolvingAgainstBaseURL: true),
-            let eventName = urlParameters.queryItems?.first(where: { $0.name == "eventName" })?.value
+        let internalLinkToPaneId: [String: String] = [
+            "manual-entry": "manual_entry"
+        ]
+        let urlParameters = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        if
+            let urlParameters,
+            let eventName = urlParameters.queryItems?.first(
+                where: { $0.name == "eventName" }
+            )?.value
         {
             analyticsClient
                 .log(
@@ -48,10 +55,21 @@ final class AuthFlowHelpers {
                 )
         }
 
+        var nextPaneOrDrawerOnSecondaryCta: String?
+        if
+            let urlParameters,
+            let _nextPaneOrDrawerOnSecondaryCta = urlParameters.queryItems?.first(
+                where: { $0.name == "nextPaneOrDrawerOnSecondaryCta" }
+            )?.value
+        {
+            nextPaneOrDrawerOnSecondaryCta = internalLinkToPaneId[_nextPaneOrDrawerOnSecondaryCta]
+        }
+
         if url.scheme == "stripe" {
-            handleStripeScheme(url.host)
+            handleURL(url.host, nextPaneOrDrawerOnSecondaryCta)
         } else {
-            SFSafariViewController.present(url: url)
+            let linkBrand = PresentationManager.shared.resolvedLinkBrand(manifestLinkBrand: nil) ?? .link
+            SFSafariViewController.present(url: linkBrand.brandAwareLegalSupportURL(for: url))
         }
     }
 
@@ -74,7 +92,9 @@ final class AuthFlowHelpers {
                 let trailingMessage = (otpType == "EMAIL") ? STPLocalizedString("Click “Resend code” and try again, or %@.", "Text as part of an error message that shows up when user entered an invalid one-time-passcode (OTP). '%@' will be replaced by text with a link: 'contact us'") : STPLocalizedString("Try again, or %@.", "Text as part of an error message that shows up when user entered an invalid one-time-passcode (OTP). '%@' will be replaced by text with a link: 'contact us'")
 
                 let contactUsText = STPLocalizedString("contact us", "A link/button inside of text that can be tapped to visit a support website. This link will be embedded inside of larger text: 'It looks like the verification code you provided is not valid anymore. Try again, or contact us.'")
-                let contactUsUrlString = "https://support.link.co/contact/email?skipVerification=true"
+                let contactUsUrlString = (PresentationManager.shared.resolvedLinkBrand(manifestLinkBrand: nil) ?? .link)
+                    .supportContactURL
+                    .absoluteString
                 let contactUsWithUrlText = "[\(contactUsText)](\(contactUsUrlString))"
 
                 return leadingMessage + " " + String(format: trailingMessage, contactUsWithUrlText)

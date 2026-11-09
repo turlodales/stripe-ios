@@ -13,6 +13,11 @@
 # Uncomment the line if you want fastlane to automatically update itself
 # update_fastlane
 
+require 'yaml'
+require_relative '../ci_scripts/prepare_ci_branch'
+require_relative '../ci_scripts/size_report_modules'
+require_relative '../ci_scripts/size_report_cache'
+
 default_platform(:ios)
 
 DEFAULT_TEST_DEVICE = 'iPhone 12 mini'.freeze
@@ -41,19 +46,18 @@ platform :ios do
   lane :build_extras do
     Dir.chdir('..') do
       sh('rm -rf build-ci-tests')
-      sh("./ci_scripts/test.rb --build-only --scheme 'Basic Integration'")
       sh("./ci_scripts/test.rb --build-only --scheme 'CardImageVerification Example'")
       sh("./ci_scripts/test.rb --build-only --scheme 'UI Examples'")
       sh("./ci_scripts/test.rb --build-only --scheme 'Non-Card Payment Examples'")
       sh("./ci_scripts/test.rb --build-only --scheme 'IntegrationTester'")
       sh("./ci_scripts/test.rb --build-only --scheme 'PaymentSheet Example'")
       sh("./ci_scripts/test.rb --build-only --scheme 'AppClipExample'")
+      sh("./ci_scripts/test.rb --build-only --scheme 'StripeIssuing'")
     end
   end
 
   lane :threeds2_tests do
     Dir.chdir('..') do
-      sh('./stripe3ds2-support/ci_scripts/check_for_new_localized_strings.sh')
       sh('./stripe3ds2-support/ci_scripts/run_tests.sh')
       sh('./stripe3ds2-support/ci_scripts/run_builds.sh')
       sh('./stripe3ds2-support/ci_scripts/run_analyzer.sh')
@@ -65,6 +69,18 @@ platform :ios do
       sh("./ci_scripts/test.rb --scheme StripeiOS --device '#{DEFAULT_TEST_DEVICE}' --version #{DEFAULT_TEST_VERSION} --retry-on-failure")
     end
   end
+  
+  lane :stripeissuing_tests do
+    Dir.chdir('..') do
+      sh("./ci_scripts/test.rb --scheme StripeIssuing --device '#{DEFAULT_TEST_DEVICE}' --version #{DEFAULT_TEST_VERSION} --retry-on-failure")
+    end
+  end
+
+  lane :stripeconnect_tests do
+    Dir.chdir('..') do
+      sh("./ci_scripts/test.rb --scheme StripeConnect --device '#{DEFAULT_TEST_DEVICE}' --version #{DEFAULT_TEST_VERSION} --retry-on-failure")
+    end
+  end
 
   lane :integration_all do
     Dir.chdir('..') do
@@ -74,7 +90,11 @@ platform :ios do
 
   private_lane :legacy_tests do |options|
     # TODO(bmelts): would be nice to read these from modules.yaml
-    schemes = %w[StripeiOS StripePayments StripePaymentsUI StripePaymentSheet StripeCameraCore StripeCore StripeUICore StripeApplePay StripeCardScan]
+    schemes = %w[StripeiOS StripePayments StripePaymentsUI StripePaymentSheet StripeCameraCore StripeCore StripeUICore
+                 StripeApplePay StripeCardScan StripeIssuing]
+
+    schemes << 'StripeConnect' if Gem::Version.new(options[:version]) >= Gem::Version.new('15.0')
+
     Dir.chdir('..') do
       schemes.each do |scheme|
         sh("./ci_scripts/test.rb --scheme '#{scheme}' --device '#{options[:device]}' --version #{options[:version]} --skip-snapshot-tests --retry-on-failure")
@@ -118,26 +138,22 @@ platform :ios do
 
   lane :size_report do
     Dir.chdir('..') do
-      sh("bundle exec ruby Tests/installation_tests/size_test/size_report.rb #{ENV['BITRISE_GIT_BRANCH']} master")
-      unless ENV['EMERGE_API_TOKEN'].nil?
-        archive_path = Dir.pwd + '/build/size_tests/'
-        arguments = { repo_name: "#{ENV['BITRISEIO_GIT_REPOSITORY_OWNER']}/#{ENV['BITRISEIO_GIT_REPOSITORY_SLUG']}",
-                      sha: ENV['BITRISE_GIT_COMMIT'].to_s,
-                      build_type: 'release' }
-        unless ENV['BITRISE_PULL_REQUEST'].nil?
-          arguments[:pr_number] = ENV['BITRISE_PULL_REQUEST']
-          arguments[:base_sha] = `git rev-parse master`.to_s
-        end
-        emerge(file_path: archive_path + 'Stripe.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripeApplePay.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripeFinancialConnections.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripeIdentity.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripePayments.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripePaymentsUI.xcarchive', **arguments)
-        emerge(file_path: archive_path + 'StripePaymentSheet.xcarchive', **arguments)
+      comparison = SizeReportCache.prepared_comparison
+      merge_base = comparison.fetch(:base)
+      modules = YAML.load_file('modules.yaml')['modules'].select { |m| m.key?('size_report') }
+      modules = SizeReportModules.select(modules, comparison)
+      modules = SizeReportModules.shard(modules)
+      if modules.empty?
+        UI.message('No affected SDKs assigned to this shard; skipping size archives.')
+        next
       end
+      names = modules.map { |m| m.fetch('framework_name') }
+      UI.message("Measuring affected SDKs: #{names.join(', ')}")
+      sh('bundle', 'exec', 'ruby', 'Tests/installation_tests/size_test/size_report.rb',
+         comparison.fetch(:head), merge_base, '--modules', names.join(','))
     end
   end
+
 
   lane :installation_cocoapods_without_frameworks_objc do
     Dir.chdir('..') do
@@ -169,16 +185,6 @@ platform :ios do
     )
   end
 
-  lane :installation_carthage do
-    Dir.chdir('..') do
-      sh('./Tests/installation_tests/carthage/setup.sh')
-    end
-    run_tests(
-      project: './Tests/installation_tests/carthage/CarthageTest.xcodeproj',
-      destination: "platform=iOS Simulator,name=#{DEFAULT_TEST_DEVICE},OS=#{DEFAULT_TEST_VERSION}"
-    )
-  end
-
   lane :installation_spm_objc do
     run_tests(
       workspace: './Tests/installation_tests/swift_package_manager/with_objc/SPMTest.xcworkspace',
@@ -193,6 +199,12 @@ platform :ios do
       destination: "platform=iOS Simulator,name=#{DEFAULT_TEST_DEVICE},OS=#{DEFAULT_TEST_VERSION}",
       scheme: 'SPMTest'
     )
+  end
+
+  lane :installation_spm_identity_trait do
+    Dir.chdir('..') do
+      sh('./ci_scripts/check_spm_identity_trait.sh')
+    end
   end
 
   lane :check_docs do

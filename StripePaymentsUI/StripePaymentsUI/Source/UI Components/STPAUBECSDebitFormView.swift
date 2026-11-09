@@ -7,13 +7,14 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// STPAUBECSDebitFormViewDelegate provides methods for STPAUBECSDebitFormView to inform its delegate
 /// of when the form has been completed.
+@MainActor @preconcurrency
 @objc public protocol STPAUBECSDebitFormViewDelegate: NSObjectProtocol {
     /// Called when the form transitions from complete to incomplete or vice-versa.
     /// - Parameters:
@@ -513,20 +514,6 @@ public class STPAUBECSDebitFormView: STPMultiFormTextField, STPMultiFormFieldDel
             return false
         }
     }
-
-    // MARK: - UITextViewDelegate
-    /// :nodoc:
-#if !canImport(CompositorServices)
-    @objc
-    public func textView(
-        _ textView: UITextView,
-        shouldInteractWith URL: URL,
-        in characterRange: NSRange,
-        interaction: UITextItemInteraction
-    ) -> Bool {
-        return true
-    }
-#endif
 
     // MARK: - STPFormTextFieldContainer (Overrides)
     /// :nodoc:

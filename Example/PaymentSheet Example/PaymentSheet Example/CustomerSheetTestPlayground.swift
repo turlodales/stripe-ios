@@ -4,7 +4,7 @@
 //
 //  ⚠️🏗 This is a playground for internal Stripe engineers to help us test things, and isn't
 //  an example of what you should do in a real app!
-//  Note: Do not import Stripe using `@_spi(STP)` in production.
+//  Note: Do not import Stripe using `@_spi(InternalOnlyAPI)` in production.
 //  This exposes internal functionality which may cause unexpected behavior if used directly.
 
 import Contacts
@@ -14,20 +14,45 @@ import StripePaymentSheet
 import SwiftUI
 import UIKit
 
-@available(iOS 15.0, *)
 struct CustomerSheetTestPlayground: View {
     @StateObject var playgroundController: CustomerSheetTestPlaygroundController
+    @StateObject var analyticsLogObserver: AnalyticsLogObserver = .shared
+    @State private var isViewReady = false
 
     init(settings: CustomerSheetTestPlaygroundSettings) {
         _playgroundController = StateObject(wrappedValue: CustomerSheetTestPlaygroundController(settings: settings))
     }
 
+    init() {
+        _playgroundController = StateObject(wrappedValue: CustomerSheetTestPlaygroundController())
+    }
+
     var body: some View {
-        VStack {
-            ScrollView {
+        if !isViewReady {
+            return AnyView(
                 VStack {
+                    ProgressView()
+                    Text("Loading playground...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear {
+                    DispatchQueue.main.async {
+                        isViewReady = true
+                    }
+                }
+            )
+        }
+
+        return AnyView(VStack {
+            ScrollView {
+                LazyVStack {
                     Group {
                         HStack {
+                            if ProcessInfo.processInfo.environment["UITesting"] != nil {
+                                AnalyticsLogForTesting(analyticsLog: $analyticsLogObserver.analyticsLog)
+                            }
                             Text("Backend").font(.headline)
                             Spacer()
                             Button {
@@ -38,7 +63,20 @@ struct CustomerSheetTestPlayground: View {
                             }.buttonStyle(.bordered)
                         }
                         SettingView(setting: $playgroundController.settings.customerMode)
-                        TextField("CustomerId", text: customerIdBinding)
+                        SettingView(setting: customerKeyTypeBinding)
+                        HStack {
+                            TextField("CustomerId", text: customerIdBinding)
+                                .autocorrectionDisabled()
+                            if playgroundController.settings.customerKeyType == .customerSession {
+                                Spacer()
+                                Button {
+                                    playgroundController.customerSessionSettingsTapped()
+                                } label: {
+                                    Text("CSSettings")
+                                        .font(.callout.smallCaps())
+                                }.buttonStyle(.bordered)
+                            }
+                        }
                     }
                     Group {
                         HStack {
@@ -51,13 +89,33 @@ struct CustomerSheetTestPlayground: View {
                             }.buttonStyle(.bordered)
                         }
                         SettingPickerView(setting: merchantCountryBinding)
-                        SettingView(setting: $playgroundController.settings.paymentMethodMode)
+                        if playgroundController.settings.merchantCountryCode == .custom {
+                            TextField("sk_(test/live)_...", text: customSecretKeyBinding)
+                                .autocapitalization(.none)
+                                .autocorrectionDisabled()
+                            TextField("pk_(test/live)_...", text: customPublishableKeyBinding)
+                                .autocapitalization(.none)
+                                .autocorrectionDisabled()
+                        }
+                        SettingView(setting: paymentMethodModeBinding)
                         SettingView(setting: $playgroundController.settings.applePay)
                         SettingView(setting: $playgroundController.settings.defaultBillingAddress)
                         SettingView(setting: $playgroundController.settings.preferredNetworksEnabled)
+                        SettingView(setting: $playgroundController.settings.cardBrandAcceptance)
                         SettingView(setting: $playgroundController.settings.autoreload)
                         TextField("headerTextForSelectionScreen", text: headerTextForSelectionScreenBinding)
                         SettingView(setting: $playgroundController.settings.allowsRemovalOfLastSavedPaymentMethod)
+                        SettingView(setting: $playgroundController.settings.opensCardScannerAutomatically)
+                        HStack {
+                            Text("Macros").font(.headline)
+                            Spacer()
+                            Button {
+                                playgroundController.didTapSetToUnsupported()
+                            } label: {
+                                Text("SetPMLink")
+                                    .font(.callout.smallCaps())
+                            }.buttonStyle(.bordered)
+                        }
                     }
                     Divider()
                     Group {
@@ -78,9 +136,31 @@ struct CustomerSheetTestPlayground: View {
             Divider()
             CustomerSheetButtons()
                 .environmentObject(playgroundController)
-        }
+        })
     }
 
+    var customerKeyTypeBinding: Binding<CustomerSheetTestPlaygroundSettings.CustomerKeyType> {
+        Binding<CustomerSheetTestPlaygroundSettings.CustomerKeyType> {
+            return playgroundController.settings.customerKeyType
+        } set: { newKeyType in
+            // If switching to customerSession preselect setupIntent
+            if playgroundController.settings.customerKeyType.rawValue != newKeyType.rawValue && newKeyType == .customerSession {
+                playgroundController.settings.paymentMethodMode = .setupIntent
+            }
+            playgroundController.settings.customerKeyType = newKeyType
+        }
+    }
+    var paymentMethodModeBinding: Binding<CustomerSheetTestPlaygroundSettings.PaymentMethodMode> {
+        Binding<CustomerSheetTestPlaygroundSettings.PaymentMethodMode> {
+            return playgroundController.settings.paymentMethodMode
+        } set: { newPaymentMethodMode in
+            // If switching to createAndAttach, ensure using legacy customer ephemeralKey
+            if playgroundController.settings.paymentMethodMode.rawValue != newPaymentMethodMode.rawValue && newPaymentMethodMode == .createAndAttach {
+                playgroundController.settings.customerKeyType = .legacy
+            }
+            playgroundController.settings.paymentMethodMode = newPaymentMethodMode
+        }
+    }
     var merchantCountryBinding: Binding<CustomerSheetTestPlaygroundSettings.MerchantCountry> {
         Binding<CustomerSheetTestPlaygroundSettings.MerchantCountry> {
             return playgroundController.settings.merchantCountryCode
@@ -88,6 +168,11 @@ struct CustomerSheetTestPlayground: View {
             // Reset customer id if country changes
             if playgroundController.settings.merchantCountryCode.rawValue != newCountry.rawValue {
                 playgroundController.settings.customerMode = .new
+            }
+            // Clear custom keys if we switch to non-custom merchant
+            if newCountry != .custom {
+                playgroundController.settings.customSecretKey = nil
+                playgroundController.settings.customPublishableKey = nil
             }
             playgroundController.settings.merchantCountryCode = newCountry
         }
@@ -107,6 +192,22 @@ struct CustomerSheetTestPlayground: View {
             playgroundController.settings.headerTextForSelectionScreen = (newString != "") ? newString : nil
         }
     }
+
+    var customSecretKeyBinding: Binding<String> {
+        Binding<String> {
+            return playgroundController.settings.customSecretKey ?? ""
+        } set: { newString in
+            playgroundController.settings.customSecretKey = newString
+        }
+    }
+
+    var customPublishableKeyBinding: Binding<String> {
+        Binding<String> {
+            return playgroundController.settings.customPublishableKey ?? ""
+        } set: { newString in
+            playgroundController.settings.customPublishableKey = newString
+        }
+    }
 }
 
 extension View {
@@ -115,7 +216,6 @@ extension View {
     }
 }
 
-@available(iOS 14.0, *)
 struct CustomerSheetButtons: View {
     @EnvironmentObject var playgroundController: CustomerSheetTestPlaygroundController
     @State var csIsPresented: Bool = false

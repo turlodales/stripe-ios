@@ -10,17 +10,23 @@ import Foundation
 import UIKit
 
 /**
- A convenience protocol for Elements that contain other Elements.
+ A protocol for Elements that contain other Elements. 
  It offers default implementations for the methods required to participate in the Element hierarchy.
  
  - Note:You still need to set your sub-element's delegates = self!
  */
-@_spi(STP) public protocol ContainerElement: Element, ElementDelegate {
+@_spi(InternalOnlyAPI) public protocol ContainerElement: Element, ElementDelegate {
     var elements: [Element] { get }
 }
 
 extension ContainerElement {
     // MARK: - Element
+    public var collectsUserInput: Bool {
+        // Returns true if any of the child elements collect user input
+        return elements.reduce(false) { partialResult, element in
+            element.collectsUserInput || partialResult
+        }
+    }
 
     public func beginEditing() -> Bool {
         guard !view.isHidden else {
@@ -53,12 +59,26 @@ extension ContainerElement {
             .dropFirst() // Drop `element` too
         for next in remainingElements {
             // Don't auto select hidden elements
-            if !(next is SectionElement.HiddenElement), next.beginEditing() {
+            if !(next is SectionElement.HiddenElement),
+                !next.view.isHidden,
+                next.beginEditing() {
                 UIAccessibility.post(notification: .screenChanged, argument: next.view)
                 return
             }
         }
         // Failed to become first responder
         delegate?.continueToNextField(element: self)
+    }
+}
+
+extension ContainerElement {
+    public var debugDescription: String {
+        return "<\(type(of: self)): \(Unmanaged.passUnretained(self).toOpaque())>" + subElementDebugDescription
+    }
+
+    public var subElementDebugDescription: String  {
+        elements.reduce("") { partialResult, element in
+            partialResult + "\n└─ \(String(describing: element).replacingOccurrences(of: "└─", with: "   └─"))"
+        }
     }
 }

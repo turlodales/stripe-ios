@@ -10,6 +10,23 @@ import Foundation
 
 class FlowRouter {
 
+    enum Flow: String {
+        case webInstantDebits = "web_instant_debits"
+        case nativeInstantDebits = "native_instant_debits"
+        case webFinancialConnections = "web_financial_connections"
+        case nativeFinancialConnections = "native_financial_connections"
+    }
+
+    private enum ExampleAppOverride: Equatable {
+        case native
+        case web
+        case none
+
+        var shouldUseNativeFlow: Bool {
+            self == .native
+        }
+    }
+
     private let synchronizePayload: FinancialConnectionsSynchronize
     private let analyticsClient: FinancialConnectionsAnalyticsClient
 
@@ -23,9 +40,18 @@ class FlowRouter {
         self.analyticsClient = analyticsClient
     }
 
-    // MARK: - Private
+    // MARK: - Public
 
-    private var killswitchActive: Bool {
+    var flow: Flow {
+        if synchronizePayload.manifest.isProductInstantDebits {
+            return shouldUseNativeInstantDebits ? .nativeInstantDebits : .webInstantDebits
+        } else {
+            logExposureIfNeeded()
+            return shouldUseNativeFinancialConnections ? .nativeFinancialConnections : .webFinancialConnections
+        }
+    }
+
+    var killswitchActive: Bool {
         // If the manifest is missing features map, fallback to webview.
         guard let features = synchronizePayload.manifest.features else { return true }
 
@@ -35,17 +61,24 @@ class FlowRouter {
         return killswitchValue
     }
 
-    private var experimentVariant: String? {
-        return synchronizePayload.manifest.experimentAssignments?[Constants.nativeExperiment]
+    // MARK: - Private
+
+    /// Returns `.native` if the FC example app has the native SDK selected, `.web` if the web SDK is selected, and `.none` otherwise.
+    private var exampleAppSdkOverride: ExampleAppOverride {
+        let key = "FINANCIAL_CONNECTIONS_EXAMPLE_APP_ENABLE_NATIVE"
+        guard let value = UserDefaults.standard.object(forKey: key) else {
+            return .none
+        }
+
+        // Launch arguments pass values as strings; direct sets use Bool
+        let isNative = (value as? Bool) ?? (value as? NSString)?.boolValue ?? false
+        return isNative ? .native : .web
     }
 
-    // MARK: - Public
-
-    var shouldUseNative: Bool {
-        if let isNativeEnabled = UserDefaults.standard.value(
-            forKey: "FINANCIAL_CONNECTIONS_EXAMPLE_APP_ENABLE_NATIVE"
-        ) as? Bool {
-            return isNativeEnabled
+    private var shouldUseNativeFinancialConnections: Bool {
+        // Override all other conditions if the example app has native or web selected.
+        guard case .none = exampleAppSdkOverride else {
+            return exampleAppSdkOverride.shouldUseNativeFlow
         }
 
         // if this version is killswitched by server, fallback to webview.
@@ -55,6 +88,19 @@ class FlowRouter {
         guard let experimentVariant = experimentVariant else { return false }
 
         return experimentVariant == Constants.nativeExperimentTreatment
+    }
+
+    private var shouldUseNativeInstantDebits: Bool {
+        // Override all other conditions if the example app has native or web selected.
+        guard case .none = exampleAppSdkOverride else {
+            return exampleAppSdkOverride.shouldUseNativeFlow
+        }
+
+        return !killswitchActive
+    }
+
+    private var experimentVariant: String? {
+        return synchronizePayload.manifest.experimentAssignments?[Constants.nativeExperiment]
     }
 
     func logExposureIfNeeded() {
@@ -76,7 +122,6 @@ class FlowRouter {
             assignmentEventId: assignmentEventId,
             accountholderToken: accountHolder
         )
-
     }
 }
 

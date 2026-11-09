@@ -7,8 +7,8 @@
 
 import AuthenticationServices
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol PartnerAuthViewControllerDelegate: AnyObject {
@@ -19,11 +19,15 @@ protocol PartnerAuthViewControllerDelegate: AnyObject {
     )
     func partnerAuthViewController(
         _ viewController: PartnerAuthViewController,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     )
     func partnerAuthViewController(
         _ viewController: PartnerAuthViewController,
         didReceiveError error: Error
+    )
+    func partnerAuthViewController(
+        _ viewController: PartnerAuthViewController,
+        didRequestNextPane nextPane: FinancialConnectionsSessionManifest.NextPane
     )
 }
 
@@ -51,11 +55,22 @@ final class PartnerAuthViewController: SheetViewController {
     private var legacyLoadingView: UIView?
     private var showLegacyBrowserOnViewDidAppear = false
 
+    var pane: FinancialConnectionsSessionManifest.NextPane {
+        return dataSource.isNetworkingRelinkSession ? .bankAuthRepair : .partnerAuth
+    }
+
+    // when true, we skip the prepane and open the institution's authentication flow as
+    // soon as the auth session is created. used when the user has already been told what
+    // to do by a previous pane (ex. the generic error pane's "try again").
+    private let autoLaunchAuthSession: Bool
+
     init(
         dataSource: PartnerAuthDataSource,
-        panePresentationStyle: PanePresentationStyle
+        panePresentationStyle: PanePresentationStyle,
+        autoLaunchAuthSession: Bool = false
     ) {
         self.dataSource = dataSource
+        self.autoLaunchAuthSession = autoLaunchAuthSession
         super.init(panePresentationStyle: panePresentationStyle)
     }
 
@@ -129,12 +144,28 @@ final class PartnerAuthViewController: SheetViewController {
             authSessionId: authSession.id
         )
 
+        if autoLaunchAuthSession, authSession.isOauthNonOptional {
+            dataSource.analyticsClient.log(
+                eventName: "auto_launch_auth_session",
+                parameters: [
+                    "requires_native_redirect": authSession.requiresNativeRedirect,
+                ],
+                pane: pane
+            )
+            // we have no prepane to show behind the browser, so fill the blank space with
+            // a spinner the same way the non-oauth flow does
+            insertLegacyLoadingView()
+            launchAuthSession(authSession)
+            return
+        }
+
         if authSession.isOauthNonOptional, let prepaneModel = authSession.display?.text?.oauthPrepane {
             prepaneViews = nil // the `deinit` of prepane views will remove views
             let prepaneViews = PrepaneViews(
                 prepaneModel: prepaneModel,
-                isRepairSession: false, // TODO(kgaidis): change this for repair sessions
+                hideSecondaryButton: dataSource.isNetworkingRelinkSession,
                 panePresentationStyle: panePresentationStyle,
+                appearance: dataSource.manifest.appearance,
                 didSelectURL: { [weak self] url in
                     self?.didSelectURLInTextFromBackend(url)
                 },
@@ -148,15 +179,24 @@ final class PartnerAuthViewController: SheetViewController {
                         pane: .partnerAuth
                     )
 
-                    if authSession.requiresNativeRedirect {
-                        self.openInstitutionAuthenticationNativeRedirect(authSession: authSession)
-                    } else {
-                        self.openInstitutionAuthenticationWebView(authSession: authSession)
-                    }
+                    self.launchAuthSession(authSession)
                 },
                 didSelectCancel: { [weak self] in
                     guard let self = self else { return }
-                    self.delegate?.partnerAuthViewControllerDidRequestToGoBack(self)
+                    let isModal = panePresentationStyle == .sheet
+
+                    self.dataSource.analyticsClient.log(
+                        eventName: isModal ? "click.prepane.cancel" : "click.prepane.choose_another_bank",
+                        pane: .partnerAuth
+                    )
+
+                    self.dataSource.cancelPendingAuthSessionIfNeeded()
+
+                    if isModal {
+                        self.delegate?.partnerAuthViewControllerDidRequestToGoBack(self)
+                    } else {
+                        self.delegate?.partnerAuthViewController(self, didRequestNextPane: .institutionPicker)
+                    }
                 }
             )
             self.prepaneViews = prepaneViews
@@ -173,6 +213,15 @@ final class PartnerAuthViewController: SheetViewController {
         } else {
             insertLegacyLoadingView()
 
+            launchAuthSession(authSession)
+        }
+    }
+
+    /// Hands the user off to the institution, either through the banking app or a browser.
+    private func launchAuthSession(_ authSession: FinancialConnectionsAuthSession) {
+        if authSession.requiresNativeRedirect {
+            openInstitutionAuthenticationNativeRedirect(authSession: authSession)
+        } else {
             openInstitutionAuthenticationWebView(authSession: authSession)
         }
     }
@@ -188,7 +237,7 @@ final class PartnerAuthViewController: SheetViewController {
         // note that this is purposefully separate from `showLoadingView`
         // function because it avoids animation glitches where
         // `showLoadingView(false)` can remove the loading view
-        let loadingView = SpinnerView()
+        let loadingView = SpinnerView(appearance: dataSource.manifest.appearance)
         self.legacyLoadingView = loadingView
         view.addAndPinSubviewToSafeArea(loadingView)
     }
@@ -207,12 +256,14 @@ final class PartnerAuthViewController: SheetViewController {
                 authSessionId: authSession.id
             )
 
-            if authSession.isOauthNonOptional {
+            if dataSource.isNetworkingRelinkSession {
+                self.pollAuthSession(authSession)
+            } else if authSession.isOauthNonOptional {
                 // for OAuth flows, we need to fetch OAuth results
                 self.authorizeAuthSession(authSession)
             } else {
                 // for legacy flows (non-OAuth), we do not need to fetch OAuth results, or call authorize
-                self.delegate?.partnerAuthViewController(self, didCompleteWithAuthSession: authSession)
+                self.didComplete(withAuthSession: authSession)
             }
         } else if status == "failure" {
             self.dataSource.recordAuthSessionEvent(
@@ -289,6 +340,7 @@ final class PartnerAuthViewController: SheetViewController {
         }
         let continueStateViews = ContinueStateViews(
             institutionImageUrl: institution.icon?.default,
+            appearance: dataSource.manifest.appearance,
             didSelectContinue: { [weak self] in
                 guard let self else { return }
                 self.dataSource.analyticsClient.log(
@@ -312,7 +364,8 @@ final class PartnerAuthViewController: SheetViewController {
         UIApplication.shared.open(
             url,
             options: [.universalLinksOnly: true]
-        ) { (didOpenBankingApp) in
+        ) { [weak self] (didOpenBankingApp) in
+            guard let self = self else { return }
             guard !didOpenBankingApp else {
                 // we pass control to the bank app
                 return
@@ -432,20 +485,18 @@ final class PartnerAuthViewController: SheetViewController {
         webAuthenticationSession.presentationContextProvider = self
         webAuthenticationSession.prefersEphemeralWebBrowserSession = true
 
-        if #available(iOS 13.4, *) {
-            if !webAuthenticationSession.canStart {
-                dataSource.recordAuthSessionEvent(
-                    eventName: "ios-browser-cant-start",
-                    authSessionId: authSession.id
-                )
-                // navigate back to bank picker so user can try again
-                //
-                // this may be an odd way to handle an issue, but trying again
-                // is potentially better than forcing user to close the whole
-                // auth session
-                navigateBack()
-                return  // skip starting
-            }
+        if !webAuthenticationSession.canStart {
+            dataSource.recordAuthSessionEvent(
+                eventName: "ios-browser-cant-start",
+                authSessionId: authSession.id
+            )
+            // navigate back to bank picker so user can try again
+            //
+            // this may be an odd way to handle an issue, but trying again
+            // is potentially better than forcing user to close the whole
+            // auth session
+            navigateBack()
+            return  // skip starting
         }
 
         if !webAuthenticationSession.start() {
@@ -492,28 +543,40 @@ final class PartnerAuthViewController: SheetViewController {
         dataSource
             .authorizeAuthSession(authSession)
             .observe(on: .main) { [weak self] result in
-                guard let self = self else { return }
-                switch result {
-                case .success(let authSession):
-                    self.delegate?.partnerAuthViewController(self, didCompleteWithAuthSession: authSession)
-
-                    // hide the loading view after a delay to prevent
-                    // the screen from flashing _while_ the transition
-                    // to the next screen takes place
-                    //
-                    // note that it should be impossible to view this screen
-                    // after a successful `authorizeAuthSession`, so
-                    // calling `showEstablishingConnectionLoadingView(false)` is
-                    // defensive programming anyway
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                        self?.showLoadingView(false)
-                    }
-                case .failure(let error):
-                    self.showLoadingView(false)  // important to come BEFORE showing error view so we avoid showing back button
-                    self.showErrorView(error)
-                    assert(self.navigationItem.hidesBackButton)
-                }
+                self?.handleAuthSessionRetrieved(result)
             }
+    }
+
+    private func pollAuthSession(_ authSession: FinancialConnectionsAuthSession) {
+        showLoadingView(true)
+        dataSource
+            .pollAuthSession(authSession)
+            .observe(on: .main) { [weak self] result in
+                self?.handleAuthSessionRetrieved(result)
+            }
+    }
+
+    private func handleAuthSessionRetrieved(_ result: Result<FinancialConnectionsAuthSession, any Error>) {
+        switch result {
+        case .success(let authSession):
+            self.didComplete(withAuthSession: authSession)
+
+            // hide the loading view after a delay to prevent
+            // the screen from flashing _while_ the transition
+            // to the next screen takes place
+            //
+            // note that it should be impossible to view this screen
+            // after a successful `authorizeAuthSession`, so
+            // calling `showEstablishingConnectionLoadingView(false)` is
+            // defensive programming anyway
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.showLoadingView(false)
+            }
+        case .failure(let error):
+            self.showLoadingView(false)  // important to come BEFORE showing error view so we avoid showing back button
+            self.showErrorView(error)
+            assert(self.navigationItem.hidesBackButton)
+        }
     }
 
     private func navigateBack() {
@@ -532,7 +595,7 @@ final class PartnerAuthViewController: SheetViewController {
             continueStateViews?.showLoadingView(show)
         } else {
             if show {
-                let loadingView = SpinnerView()
+                let loadingView = SpinnerView(appearance: dataSource.manifest.appearance)
                 self.loadingView = loadingView
                 view.addAndPinSubviewToSafeArea(loadingView)
             }
@@ -545,11 +608,12 @@ final class PartnerAuthViewController: SheetViewController {
             url: url,
             pane: .partnerAuth,
             analyticsClient: dataSource.analyticsClient,
-            handleStripeScheme: { urlHost in
+            handleURL: { urlHost, _ in
                 if urlHost == "data-access-notice" {
                     if let dataAccessNoticeModel = dataSource.pendingAuthSession?.display?.text?.oauthPrepane?.dataAccessNotice {
                         let dataAccessNoticeViewController = DataAccessNoticeViewController(
                             dataAccessNotice: dataAccessNoticeModel,
+                            appearance: dataSource.manifest.appearance,
                             didSelectUrl: { [weak self] url in
                                 self?.didSelectURLInTextFromBackend(url)
                             }
@@ -600,10 +664,7 @@ final class PartnerAuthViewController: SheetViewController {
                             authSessionId: authSession.id
                         )
                         // abstract auth handles calling `authorize`
-                        self.delegate?.partnerAuthViewController(
-                            self,
-                            didCompleteWithAuthSession: authSession
-                        )
+                        self.didComplete(withAuthSession: authSession)
                     } else {
                         completionHandler(false)
                     }
@@ -636,6 +697,28 @@ final class PartnerAuthViewController: SheetViewController {
                 ],
                 pane: .partnerAuth
             )
+    }
+
+    // Defensive programming to avoid completing the same auth session twice.
+    //
+    // There's been a series of odd edge-cases where the same auth session
+    // could complete twice, so this acts as future-proofing that this
+    // never happens again.
+    private var lastCompletedAuthSessionId: String?
+    private func didComplete(withAuthSession authSession: FinancialConnectionsAuthSession) {
+        if lastCompletedAuthSessionId != authSession.id {
+            lastCompletedAuthSessionId = authSession.id
+            delegate?.partnerAuthViewController(self, didCompleteWithAuthSession: authSession)
+        } else {
+            dataSource
+                .analyticsClient.log(
+                    eventName: "ios_double_complete_attempt",
+                    parameters: [
+                        "auth_session_id": authSession.id,
+                    ],
+                    pane: .partnerAuth
+                )
+        }
     }
 }
 

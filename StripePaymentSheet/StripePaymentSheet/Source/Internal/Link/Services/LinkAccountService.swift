@@ -8,7 +8,8 @@
 
 import Foundation
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
+@_exported @_spi(InternalOnlyAPI) import StripePayments
 
 /// Provides a method for looking up Link accounts by email.
 protocol LinkAccountServiceProtocol {
@@ -23,54 +24,161 @@ protocol LinkAccountServiceProtocol {
     ///
     /// - Parameters:
     ///   - email: Email address associated with the account.
+    ///   - emailSource: Details on the source of the email used.
+    ///   - doNotLogConsumerFunnelEvent: Whether or not this lookup call should be logged backend side.
+    ///   - requestSurface: The request surface to use for the API call. `.default` will map to `ios_payment_element`.
     ///   - completion: Completion block.
     func lookupAccount(
         withEmail email: String?,
+        emailSource: EmailSource,
+        doNotLogConsumerFunnelEvent: Bool,
+        requestSurface: LinkRequestSurface,
         completion: @escaping (Result<PaymentSheetLinkAccount?, Error>) -> Void
+    )
+
+    /// Looks up an account by link auth token.
+    /// - Parameters:
+    ///   - linkAuthTokenClientSecret: An encrypted one-time-use auth token that, upon successful call to this API, leaves the Link account’s consumer session in an already-verified state, allowing the client to skip verification.
+    ///   - requestSurface: The request surface to use for the API call. `.default` will map to `ios_payment_element`.
+    ///   - completion: Completion block.
+    func lookupLinkAuthToken(
+        _ linkAuthTokenClientSecret: String,
+        requestSurface: LinkRequestSurface,
+        completion: @escaping (Result<PaymentSheetLinkAccount?, Error>) -> Void
+    )
+
+    /// Looks up an account by Link Auth Intent ID.
+    ///
+    /// - Parameters:
+    ///   - linkAuthIntentID: The Link Auth Intent ID to look up.
+    ///   - requestSurface: The request surface to use for the API call. `.default` will map to `ios_payment_element`.
+    ///   - completion: Completion block.
+    func lookupLinkAuthIntent(
+        linkAuthIntentID: String,
+        requestSurface: LinkRequestSurface,
+        completion: @escaping (Result<LookupLinkAuthIntentResponse?, Error>) -> Void
     )
 }
 
 final class LinkAccountService: LinkAccountServiceProtocol {
 
+    private let analyticsHelper: LinkAnalyticsHelper
     let apiClient: STPAPIClient
+    let sessionID: String
+    let customerID: String?
+    let useMobileEndpoints: Bool
+    let canSyncAttestationState: Bool
+    let supportedVerificationTypes: [SupportedVerificationType]
+    let merchantLogoUrl: URL?
+    private var countryCode: String?
+
+    convenience init(
+        apiClient: STPAPIClient = .shared,
+        elementsSession: STPElementsSession,
+        analyticsHelper: LinkAnalyticsHelper
+    ) {
+        let shouldPassCustomerIdToLookup = elementsSession.linkSettings?.linkEnableDisplayableDefaultValuesInECE == true
+
+        self.init(
+            apiClient: apiClient,
+            useMobileEndpoints: elementsSession.linkSettings?.useAttestationEndpoints ?? false,
+            canSyncAttestationState: elementsSession.linkSettings?.attestationStateSyncEnabled ?? false,
+            supportedVerificationTypes: elementsSession.linkSupportedVerificationTypes,
+            sessionID: elementsSession.sessionID,
+            customerID: elementsSession.customer?.customerSession.customer,
+            shouldPassCustomerIdToLookup: shouldPassCustomerIdToLookup,
+            merchantLogoUrl: elementsSession.merchantLogoUrl,
+            analyticsHelper: analyticsHelper
+        )
+        countryCode = elementsSession.countryCode
+    }
 
     init(
-        apiClient: STPAPIClient = .shared
+        apiClient: STPAPIClient = .shared,
+        useMobileEndpoints: Bool,
+        canSyncAttestationState: Bool,
+        supportedVerificationTypes: [SupportedVerificationType] = SupportedVerificationType.nativeCapabilities(mfaAuthFlowEnabled: false),
+        sessionID: String,
+        customerID: String?,
+        shouldPassCustomerIdToLookup: Bool,
+        merchantLogoUrl: URL?,
+        analyticsHelper: LinkAnalyticsHelper
     ) {
+        self.analyticsHelper = analyticsHelper
         self.apiClient = apiClient
+        self.useMobileEndpoints = useMobileEndpoints
+        self.canSyncAttestationState = canSyncAttestationState
+        self.supportedVerificationTypes = supportedVerificationTypes
+        self.sessionID = sessionID
+        self.customerID = shouldPassCustomerIdToLookup ? customerID : nil
+        self.merchantLogoUrl = merchantLogoUrl
     }
 
     func lookupAccount(
         withEmail email: String?,
+        emailSource: EmailSource,
+        doNotLogConsumerFunnelEvent: Bool,
+        requestSurface: LinkRequestSurface = .default,
         completion: @escaping (Result<PaymentSheetLinkAccount?, Error>) -> Void
     ) {
+        guard LinkEmailHelper.canLookupEmail(email) else {
+            completion(.success(nil))
+            return
+        }
+
         ConsumerSession.lookupSession(
             for: email,
-            with: apiClient
+            emailSource: emailSource,
+            sessionID: sessionID,
+            customerID: customerID,
+            with: apiClient,
+            useMobileEndpoints: useMobileEndpoints,
+            canSyncAttestationState: canSyncAttestationState,
+            supportedVerificationTypes: supportedVerificationTypes,
+            doNotLogConsumerFunnelEvent: doNotLogConsumerFunnelEvent,
+            requestSurface: requestSurface
         ) { [apiClient] result in
             switch result {
             case .success(let lookupResponse):
-                STPAnalyticsClient.sharedClient.logLinkAccountLookupComplete(lookupResult: lookupResponse.responseType)
+                // TODO: Since success can include cases where we *don't* look up, we log "look up complete" even when no lookup was performed - is this intentional or desired?
+                self.analyticsHelper.logAccountLookupComplete(lookupResult: lookupResponse.responseType)
                 switch lookupResponse.responseType {
                 case .found(let session):
-                    completion(.success(
-                        PaymentSheetLinkAccount(
-                            email: session.consumerSession.emailAddress,
-                            session: session.consumerSession,
-                            publishableKey: session.publishableKey,
-                            apiClient: apiClient
-                        )
-                    ))
-                case .notFound:
-                    if let email = email {
-                        completion(.success(
-                            PaymentSheetLinkAccount(
-                                email: email,
-                                session: nil,
-                                publishableKey: nil,
-                                apiClient: self.apiClient
+                    completion(
+                        .success(
+                            self.configureAuth(
+                                PaymentSheetLinkAccount(
+                                    email: session.consumerSession.emailAddress,
+                                    session: session.consumerSession,
+                                    publishableKey: session.publishableKey,
+                                    displayablePaymentDetails: session.displayablePaymentDetails,
+                                    apiClient: apiClient,
+                                    useMobileEndpoints: self.useMobileEndpoints,
+                                    canSyncAttestationState: self.canSyncAttestationState,
+                                    supportedVerificationTypes: self.supportedVerificationTypes,
+                                    requestSurface: requestSurface
+                                ),
+                                settings: session.settings,
+                                lookupEmail: email,
+                                emailSource: emailSource
                             )
-                        ))
+                        )
+                    )
+                case .notFound(_, let suggestedEmail):
+                    if let email = email {
+                        let linkAccount = PaymentSheetLinkAccount(
+                            email: email,
+                            session: nil,
+                            publishableKey: nil,
+                            displayablePaymentDetails: nil,
+                            apiClient: self.apiClient,
+                            useMobileEndpoints: self.useMobileEndpoints,
+                            canSyncAttestationState: self.canSyncAttestationState,
+                            supportedVerificationTypes: self.supportedVerificationTypes,
+                            requestSurface: requestSurface
+                        )
+                        linkAccount.suggestedEmail = suggestedEmail
+                        completion(.success(linkAccount))
                     } else {
                         completion(.success(nil))
                     }
@@ -78,9 +186,165 @@ final class LinkAccountService: LinkAccountServiceProtocol {
                     completion(.success(nil))
                 }
             case .failure(let error):
-                STPAnalyticsClient.sharedClient.logLinkAccountLookupFailure(error: error)
+                self.analyticsHelper.logAccountLookupFailure(error: error)
                 completion(.failure(error))
             }
         }
+    }
+
+    func lookupAccount(
+        withEmail email: String?,
+        emailSource: EmailSource,
+        doNotLogConsumerFunnelEvent: Bool,
+        requestSurface: LinkRequestSurface = .default
+    ) async throws -> PaymentSheetLinkAccount? {
+        return try await withCheckedThrowingContinuation { continuation in
+            lookupAccount(withEmail: email, emailSource: emailSource, doNotLogConsumerFunnelEvent: doNotLogConsumerFunnelEvent, requestSurface: requestSurface) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    func lookupLinkAuthToken(
+        _ linkAuthTokenClientSecret: String,
+        requestSurface: LinkRequestSurface,
+        completion: @escaping (Result<PaymentSheetLinkAccount?, Error>) -> Void
+    ) {
+        ConsumerSession.lookupLinkAuthToken(
+            linkAuthTokenClientSecret,
+            sessionID: sessionID,
+            customerID: customerID,
+            useMobileEndpoints: useMobileEndpoints,
+            canSyncAttestationState: canSyncAttestationState,
+            supportedVerificationTypes: supportedVerificationTypes,
+            requestSurface: requestSurface
+        ) { [apiClient] result in
+            switch result {
+            case .success(let lookupResponse):
+                self.analyticsHelper.logAccountLookupComplete(lookupResult: lookupResponse.responseType)
+                switch lookupResponse.responseType {
+                case .found(let session):
+                    completion(.success(
+                        self.configureAuth(PaymentSheetLinkAccount(
+                            email: session.consumerSession.emailAddress,
+                            session: session.consumerSession,
+                            publishableKey: session.publishableKey,
+                            displayablePaymentDetails: session.displayablePaymentDetails,
+                            apiClient: apiClient,
+                            useMobileEndpoints: self.useMobileEndpoints,
+                            canSyncAttestationState: self.canSyncAttestationState,
+                            supportedVerificationTypes: self.supportedVerificationTypes,
+                            requestSurface: requestSurface
+                        ), settings: session.settings, lookupEmail: nil, emailSource: .prefilledEmail)
+                    ))
+                case .notFound, .noAvailableLookupParams:
+                    completion(.success(nil))
+                }
+            case .failure(let error):
+                self.analyticsHelper.logAccountLookupFailure(error: error)
+                completion(.failure(error))
+            }
+        }
+    }
+
+    /// Looks up an account by Link Auth Intent ID.
+    ///
+    /// - Parameters:
+    ///   - linkAuthIntentID: The Link Auth Intent ID to look up.
+    ///   - requestSurface: The request surface to use for the API call. `.default` will map to `ios_payment_element`.
+    ///   - completion: Completion block.
+    func lookupLinkAuthIntent(
+        linkAuthIntentID: String,
+        requestSurface: LinkRequestSurface = .default,
+        completion: @escaping (Result<LookupLinkAuthIntentResponse?, Error>) -> Void
+    ) {
+        ConsumerSession.lookupLinkAuthIntent(
+            linkAuthIntentID: linkAuthIntentID,
+            sessionID: sessionID,
+            customerID: customerID,
+            with: apiClient,
+            useMobileEndpoints: useMobileEndpoints,
+            canSyncAttestationState: canSyncAttestationState,
+            supportedVerificationTypes: supportedVerificationTypes,
+            requestSurface: requestSurface
+        ) { [weak self, apiClient] result in
+            guard let self else { return }
+            switch result {
+            case .success(let lookupResponse):
+                self.analyticsHelper.logAccountLookupComplete(lookupResult: lookupResponse.responseType)
+                switch lookupResponse.responseType {
+                case .found(let session):
+                    let linkAccount = PaymentSheetLinkAccount(
+                        email: session.consumerSession.emailAddress,
+                        session: session.consumerSession,
+                        publishableKey: session.publishableKey,
+                        displayablePaymentDetails: session.displayablePaymentDetails,
+                        apiClient: apiClient,
+                        useMobileEndpoints: self.useMobileEndpoints,
+                        canSyncAttestationState: self.canSyncAttestationState,
+                        supportedVerificationTypes: self.supportedVerificationTypes,
+                        requestSurface: requestSurface,
+                        createdFromAuthIntentID: true
+                    )
+                    linkAccount.authLookupSettings = session.settings
+                    linkAccount.authLookupEmail = nil
+                    linkAccount.authCountryCode = self.countryCode
+                    let consentViewModel = LinkConsentViewModel(
+                        email: session.consumerSession.emailAddress,
+                        merchantLogoURL: self.merchantLogoUrl,
+                        dataModel: session.consentDataModel
+                    )
+                    let response = LookupLinkAuthIntentResponse(linkAccount: linkAccount, consentViewModel: consentViewModel)
+                    completion(.success(response))
+                case .notFound:
+                    completion(.success(nil))
+                case .noAvailableLookupParams:
+                    completion(.success(nil))
+                }
+            case .failure(let error):
+                self.analyticsHelper.logAccountLookupFailure(error: error)
+                completion(.failure(error))
+            }
+        }
+    }
+    private func configureAuth(
+        _ account: PaymentSheetLinkAccount,
+        settings: ConsumerSession.LookupSettings?,
+        lookupEmail: String?,
+        emailSource: EmailSource
+    ) -> PaymentSheetLinkAccount {
+        account.authLookupSettings = settings
+        account.authLookupEmail = lookupEmail
+        account.authCountryCode = countryCode
+        if let lookupEmail {
+            let requestSurface = account.requestSurface
+            account.authSessionLookup = { completion in
+                ConsumerSession.lookupSession(
+                    for: lookupEmail,
+                    emailSource: emailSource,
+                    sessionID: self.sessionID,
+                    customerID: self.customerID,
+                    with: self.apiClient,
+                    useMobileEndpoints: self.useMobileEndpoints,
+                    canSyncAttestationState: self.canSyncAttestationState,
+                    supportedVerificationTypes: self.supportedVerificationTypes,
+                    doNotLogConsumerFunnelEvent: true,
+                    requestSurface: requestSurface
+                ) { result in
+                    completion(
+                        result.flatMap { response in
+                            guard case .found(let session) = response.responseType else {
+                                return .failure(
+                                    PaymentSheetError.unknown(
+                                        debugDescription: "No Link account found during authentication recovery"
+                                    )
+                                )
+                        }
+                        return .success(ConsumerSession.AuthResponse(consumerSession: session.consumerSession, settings: session.settings))
+                    })
+                }
+            }
+        }
+        return account
     }
 }

@@ -6,9 +6,9 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-import iOSSnapshotTestCase
 import StripeCoreTestUtils
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
+import UIKit
 
 final class ButtonSnapshotTest: STPSnapshotTestCase {
 

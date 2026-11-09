@@ -6,14 +6,15 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol NetworkingSaveToLinkVerificationViewControllerDelegate: AnyObject {
     func networkingSaveToLinkVerificationViewControllerDidFinish(
         _ viewController: NetworkingSaveToLinkVerificationViewController,
-        saveToLinkWithStripeSucceeded: Bool?
+        saveToLinkWithStripeSucceeded: Bool?,
+        customSuccessPaneMessage: String?
     )
     func networkingSaveToLinkVerificationViewController(
         _ viewController: NetworkingSaveToLinkVerificationViewController,
@@ -27,7 +28,7 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
     weak var delegate: NetworkingSaveToLinkVerificationViewControllerDelegate?
 
     private lazy var loadingView: SpinnerView = {
-        return SpinnerView()
+        return SpinnerView(appearance: dataSource.manifest.appearance)
     }()
     private lazy var otpView: NetworkingOTPView = {
         let otpView = NetworkingOTPView(dataSource: dataSource.networkingOTPDataSource)
@@ -46,7 +47,7 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .customBackgroundColor
+        view.backgroundColor = FinancialConnectionsAppearance.Colors.background
 
         otpView.startVerification()
     }
@@ -58,14 +59,8 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
         let paneLayoutView = PaneLayoutView(
             contentView: PaneLayoutView.createContentView(
                 iconView: nil,
-                title: STPLocalizedString(
-                    "Confirm it's you",
-                    "The title of a screen where users are informed that they can sign-in-to Link."
-                ),
-                subtitle: String(format: STPLocalizedString(
-                    "Enter the code sent to %@.",
-                    "The subtitle/description of a screen where users are informed that they have received a One-Type-Password (OTP) to their phone. '%@' gets replaced by a redacted phone number."
-                ), AuthFlowHelpers.formatRedactedPhoneNumber(redactedPhoneNumber)),
+                title: String.Localized.confirm_its_you,
+                subtitle: String(format: String.Localized.enter_code_sent_to, AuthFlowHelpers.formatRedactedPhoneNumber(redactedPhoneNumber)),
                 contentView: otpView
             ),
             footerView: PaneLayoutView.createFooterView(
@@ -79,10 +74,12 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
                             .log(eventName: "click.not_now", pane: .networkingSaveToLinkVerification)
                         self.delegate?.networkingSaveToLinkVerificationViewControllerDidFinish(
                             self,
-                            saveToLinkWithStripeSucceeded: nil
+                            saveToLinkWithStripeSucceeded: nil,
+                            customSuccessPaneMessage: nil
                         )
                     }
-                ) : nil
+                ) : nil,
+                appearance: dataSource.manifest.appearance
             ).footerView
         )
         paneLayoutView.addTo(view: view)
@@ -99,7 +96,8 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
     }
 
     private func markLinkVerified(
-        saveToLinkSucceeded: Bool
+        saveToLinkSucceeded: Bool,
+        customSuccessPaneMessage: String?
     ) {
         dataSource.markLinkVerified()
             .observe { [weak self] result in
@@ -108,7 +106,8 @@ final class NetworkingSaveToLinkVerificationViewController: UIViewController {
                 case .success:
                     self.delegate?.networkingSaveToLinkVerificationViewControllerDidFinish(
                         self,
-                        saveToLinkWithStripeSucceeded: saveToLinkSucceeded
+                        saveToLinkWithStripeSucceeded: saveToLinkSucceeded,
+                        customSuccessPaneMessage: customSuccessPaneMessage
                     )
                 case .failure(let error):
                     self.delegate?.networkingSaveToLinkVerificationViewController(
@@ -168,8 +167,10 @@ extension NetworkingSaveToLinkVerificationViewController: NetworkingOTPViewDeleg
             .observe { [weak self] result in
                 guard let self else { return }
                 let saveToLinkSucceeded: Bool
+                let customSuccessPaneMessage: String?
                 switch result {
-                case .success:
+                case .success(let _customSuccessPaneMessage):
+                    customSuccessPaneMessage = _customSuccessPaneMessage
                     self.dataSource
                         .analyticsClient
                         .log(
@@ -178,6 +179,7 @@ extension NetworkingSaveToLinkVerificationViewController: NetworkingOTPViewDeleg
                         )
                     saveToLinkSucceeded = true
                 case .failure(let error):
+                    customSuccessPaneMessage = nil
                     self.dataSource
                         .analyticsClient
                         .log(
@@ -194,7 +196,10 @@ extension NetworkingSaveToLinkVerificationViewController: NetworkingOTPViewDeleg
                     saveToLinkSucceeded = false
                 }
 
-                self.markLinkVerified(saveToLinkSucceeded: saveToLinkSucceeded)
+                self.markLinkVerified(
+                    saveToLinkSucceeded: saveToLinkSucceeded,
+                    customSuccessPaneMessage: customSuccessPaneMessage
+                )
             }
     }
 
@@ -209,17 +214,5 @@ extension NetworkingSaveToLinkVerificationViewController: NetworkingOTPViewDeleg
                 didReceiveTerminalError: error
             )
         }
-    }
-
-    func networkingOTPViewWillStartConsumerLookup(_ view: NetworkingOTPView) {
-        assertionFailure("we shouldn't call `lookup` for NetworkingSaveToLink")
-    }
-
-    func networkingOTPViewConsumerNotFound(_ view: NetworkingOTPView) {
-        assertionFailure("we shouldn't call `lookup` for NetworkingSaveToLink")
-    }
-
-    func networkingOTPView(_ view: NetworkingOTPView, didFailConsumerLookup error: Error) {
-        assertionFailure("we shouldn't call `lookup` for NetworkingSaveToLink")
     }
 }

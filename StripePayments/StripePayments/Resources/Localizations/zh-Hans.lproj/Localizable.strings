@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "银行";
-
 "Boleto" = "Boleto";
 
 "Card" = "银行卡";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "SEPA 借记";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "验证您的支付方式时失败——请重试";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "美国银行账户";
+"US bank account" = "美国银行账户";
 
 "Unknown" = "未知";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "微信支付";
 
-"giropay" = "Giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

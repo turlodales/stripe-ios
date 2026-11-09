@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (volitelné)";
+
+"(not accepted)" = "(nepřijímá se)";
 
 "Account number" = "Číslo účtu";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "Číslo BSB";
 
-"Billing address is same as shipping" = "Fakturační adresa je stejná jako dodací";
+"Bank account •••• %@" = "Bankovní účet •••• %@";
 
-"Cancel" = "Zrušit";
+"Billing address is same as shipping" = "Fakturační adresa je stejná jako dodací";
 
 "Card brand" = "Značka karty";
 
@@ -34,7 +38,7 @@
 
 "County" = "Okres";
 
-"Date is empty." = "Datum je prázdné.";
+"Date of Birth" = "Datum narození";
 
 "Department" = "Oddělení";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Neúplné telefonní číslo";
 
-"Invalid UPI ID" = "Neplatné UPI ID";
-
 "Island" = "Ostrov";
 
 "Last" = "Příjmení";
@@ -82,21 +84,19 @@
 
 "Parish" = "Obec";
 
-"Phone" = "Telefon";
-
 "Phone number" = "Telefonní číslo";
 
 "Postal code" = "Poštovní směrovací číslo";
 
 "Prefecture" = "Prefektura";
 
+"Processing..." = "Zpracování…";
+
 "Province" = "Provincie";
 
 "Remove" = "Odebrat";
 
-"Remove bank account" = "Odebrat bankovní účet";
-
-"Remove bank account ending in %@" = "Odebrat bankovní účet končící na %@";
+"Remove bank account?" = "Odebrat bankovní účet?";
 
 "Remove card" = "Odebrat kartu";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Vyberte značku karty (volitelné)";
 
+"Selection is empty." = "Výběr je prázdný.";
+
+"Something went wrong" = "Něco se pokazilo";
+
 "Sort code" = "Kód řazení";
 
 "State" = "Stát";
+
+"Submit" = "Odeslat";
 
 "Suburb" = "Předměstí";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Město nebo velkoměsto";
 
-"UPI ID" = "UPI ID";
-
 "Unable to parse phone number" = "Nelze analyzovat telefonní číslo";
 
 "Use rotor to access links" = "Přístup k odkazům pomocí rotoru";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Váš kód BLIK je neplatný.";
 
-"Your ZIP is incomplete." = "PSČ je neúplné.";
+"Your ZIP code is incomplete." = "Vaše PSČ není úplné.";
+
+"Your ZIP code is invalid." = "Vaše PSČ je neplatné.";
 
 "Your email is invalid." = "Váš e-mail je neplatný.";
 
 "Your payment information will not be saved." = "Vaše platební údaje nebudou uloženy.";
 
 "Your postal code is incomplete." = "Vaše poštovní směrovací číslo je neúplné.";
+
+"Your postal code is invalid." = "Poštovní směrovací číslo je neplatné";
 
 "ZIP" = "PSČ";

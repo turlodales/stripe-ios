@@ -6,23 +6,21 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 extension PaymentSheetFormFactory {
 
     func makeBLIK() -> FormElement {
         let contactInformationElement = makeContactInformationSection(nameRequiredByPaymentMethod: false, emailRequiredByPaymentMethod: false, phoneRequiredByPaymentMethod: false)
-        let billingAddressElement = configuration.billingDetailsCollectionConfiguration.address == .full
-            ? makeBillingAddressSection(countries: nil)
-            : nil
+        let billingAddressElement = makeBillingAddressSectionIfNecessary(requiredByPaymentMethod: false)
+            as? PaymentMethodElementWrapper<AddressSectionElement>
         let phoneElement = contactInformationElement?.elements.compactMap {
             $0 as? PaymentMethodElementWrapper<PhoneNumberElement>
         }.first
         connectBillingDetailsFields(
-            countryElement: nil,
             addressElement: billingAddressElement,
             phoneElement: phoneElement)
 
@@ -36,7 +34,9 @@ extension PaymentSheetFormFactory {
     }
 
     private func makeCodeField() -> PaymentMethodElementWrapper<TextFieldElement> {
-        return PaymentMethodElementWrapper(TextFieldElement.makeBlikCode(theme: theme)) { textField, params in
+        let previousCustomerInput = previousCustomerInput?.confirmPaymentMethodOptions.blikOptions?.code
+        let field = TextFieldElement.makeBlikCode(defaultValue: previousCustomerInput, theme: theme)
+        return PaymentMethodElementWrapper(field) { textField, params in
             let blikOptions = STPConfirmBLIKOptions(code: textField.text)
             params.confirmPaymentMethodOptions.blikOptions = blikOptions
             return params

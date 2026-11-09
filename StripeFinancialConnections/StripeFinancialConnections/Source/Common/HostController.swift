@@ -5,15 +5,83 @@
 //  Created by Vardges Avetisyan on 6/3/22.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
+
+/// An internal result type that helps us handle both
+/// Financial Connections and Instant Debits
+@_spi(InternalOnlyAPI) public enum HostControllerResult {
+    case completed(Completed)
+    case failed(error: Error)
+    case canceled
+
+    @_spi(InternalOnlyAPI) public enum Completed {
+        case financialConnections(StripeAPI.FinancialConnectionsSession)
+        case instantDebits(InstantDebitsLinkedBank)
+        case linkedAccount(id: String)
+        case paymentDetails(id: String)
+    }
+
+    var linkAccountSessionId: String? {
+        guard case .completed(let completed) = self else { return nil }
+        switch completed {
+        case .financialConnections(let session):
+            return session.id
+        case .instantDebits(let linkedBank):
+            return linkedBank.linkAccountSessionId
+        case .linkedAccount(let id):
+            return id
+        case .paymentDetails:
+            return nil
+        }
+    }
+}
+
+extension HostControllerResult {
+
+    /// Updates the `HostControllerResult` from the manifest to populate any fields that aren't part of the actual API response,
+    /// but that are still necessary to produce the correct result in the host surface.
+    func updateWith(_ manifest: FinancialConnectionsSessionManifest) -> Self {
+        guard case .completed(.financialConnections(let session)) = self else {
+            return self
+        }
+
+        let instantlyVerified = !manifest.manualEntryUsesMicrodeposits
+
+        let updatedSession = StripeAPI.FinancialConnectionsSession(
+            clientSecret: session.clientSecret,
+            id: session.id,
+            accounts: session.accounts,
+            livemode: session.livemode,
+            paymentAccount: session.paymentAccount?.setInstantlyVerifiedIfNeeded(instantlyVerified),
+            bankAccountToken: session.bankAccountToken,
+            status: session.status,
+            statusDetails: session.statusDetails
+        )
+
+        return .completed(.financialConnections(updatedSession))
+    }
+}
+
+private extension StripeAPI.FinancialConnectionsSession.PaymentAccount {
+
+    func setInstantlyVerifiedIfNeeded(_ value: Bool) -> Self {
+        guard case .bankAccount(var bankAccount) = self else {
+            return self
+        }
+
+        bankAccount.instantlyVerified = value
+        return .bankAccount(bankAccount)
+    }
+}
 
 protocol HostControllerDelegate: AnyObject {
 
     func hostController(
         _ hostController: HostController,
         viewController: UIViewController,
-        didFinish result: FinancialConnectionsSheet.Result
+        didFinish result: HostControllerResult,
+        linkAccountSessionId: String?
     )
 
     func hostController(
@@ -26,37 +94,56 @@ class HostController {
 
     // MARK: - Properties
 
-    private let api: FinancialConnectionsAPIClient
+    private let apiClient: any FinancialConnectionsAPI
     private let clientSecret: String
     private let returnURL: String?
+    private let configuration: FinancialConnectionsSheet.Configuration
+    private let elementsSessionContext: ElementsSessionContext?
+    private let preCollectedConsent: FinancialConnectionsPreCollectedConsent?
     private let analyticsClient: FinancialConnectionsAnalyticsClient
+    private let analyticsClientV1: STPAnalyticsClientProtocol
 
     private var nativeFlowController: NativeFlowController?
+    private var linkAccountSessionId: String?
     lazy var hostViewController = HostViewController(
+        analyticsClientV1: analyticsClientV1,
         clientSecret: clientSecret,
         returnURL: returnURL,
-        apiClient: api,
+        apiClient: apiClient,
+        preCollectedConsent: preCollectedConsent,
         delegate: self
     )
-    lazy var navigationController = FinancialConnectionsNavigationController(rootViewController: hostViewController)
+    lazy var navigationController: FinancialConnectionsNavigationController = {
+        let navigationController = FinancialConnectionsNavigationController(rootViewController: hostViewController)
+        configuration.style.configure(navigationController)
+        return navigationController
+    }()
 
     weak var delegate: HostControllerDelegate?
 
     // MARK: - Init
 
     init(
-        api: FinancialConnectionsAPIClient,
+        apiClient: any FinancialConnectionsAPI,
+        analyticsClientV1: STPAnalyticsClientProtocol,
         clientSecret: String,
         returnURL: String?,
+        configuration: FinancialConnectionsSheet.Configuration,
+        elementsSessionContext: ElementsSessionContext?,
+        preCollectedConsent: FinancialConnectionsPreCollectedConsent?,
         publishableKey: String?,
-        stripeAccount: String?
+        stripeAccount: String?,
+        analyticsClient: FinancialConnectionsAnalyticsClient = FinancialConnectionsAnalyticsClient()
     ) {
-        self.api = api
+        self.apiClient = apiClient
+        self.analyticsClientV1 = analyticsClientV1
         self.clientSecret = clientSecret
         self.returnURL = returnURL
-        self.analyticsClient = FinancialConnectionsAnalyticsClient()
+        self.configuration = configuration
+        self.elementsSessionContext = elementsSessionContext
+        self.preCollectedConsent = preCollectedConsent
+        self.analyticsClient = analyticsClient
         analyticsClient.setAdditionalParameters(
-            linkAccountSessionClientSecret: clientSecret,
             publishableKey: publishableKey,
             stripeAccount: stripeAccount
         )
@@ -70,58 +157,69 @@ extension HostController: HostViewControllerDelegate {
 
     func hostViewControllerDidFinish(_ viewController: HostViewController, lastError: Error?) {
         guard let error = lastError else {
-            delegate?.hostController(self, viewController: viewController, didFinish: .canceled)
+            delegate?.hostController(
+                self,
+                viewController: viewController,
+                didFinish: .canceled,
+                linkAccountSessionId: linkAccountSessionId
+            )
             return
         }
 
-        delegate?.hostController(self, viewController: viewController, didFinish: .failed(error: error))
+        delegate?.hostController(
+            self,
+            viewController: viewController,
+            didFinish: .failed(error: error),
+            linkAccountSessionId: linkAccountSessionId
+        )
     }
 
     func hostViewController(
         _ viewController: HostViewController,
         didFetch synchronizePayload: FinancialConnectionsSynchronize
     ) {
-        delegate?.hostController(self, didReceiveEvent: FinancialConnectionsEvent(name: .open))
+        guard !synchronizePayload.manifest.id.isEmpty else {
+            linkAccountSessionId = nil
+            hostViewControllerDidFinish(
+                viewController,
+                lastError: FinancialConnectionsSheetError.unknown(
+                    debugDescription: "The Financial Connections session is missing its identifier."
+                )
+            )
+            return
+        }
+        self.linkAccountSessionId = synchronizePayload.manifest.id
+        analyticsClient.setAdditionalParameters(fromManifest: synchronizePayload.manifest)
+        publish(FinancialConnectionsEventPayload(name: .open))
 
         let flowRouter = FlowRouter(
             synchronizePayload: synchronizePayload,
             analyticsClient: analyticsClient
         )
-        defer {
-            // no matter how we exit this function
-            // log exposure to one of the variants if appropriate.
-            flowRouter.logExposureIfNeeded()
-        }
 
-        guard flowRouter.shouldUseNative else {
+        let flow = flowRouter.flow
+        analyticsClientV1.log(
+            analytic: FinancialConnectionsSheetFlowDetermined(
+                linkAccountSessionId: synchronizePayload.manifest.id,
+                flow: flow,
+                killswitchActive: flowRouter.killswitchActive
+            ),
+            apiClient: apiClient.backingAPIClient
+        )
+
+        switch flow {
+        case .webInstantDebits, .webFinancialConnections:
             continueWithWebFlow(synchronizePayload.manifest)
-            return
+        case .nativeInstantDebits, .nativeFinancialConnections:
+            continueWithNativeFlow(synchronizePayload)
         }
-
-        navigationController.configureAppearanceForNative()
-
-        let dataManager = NativeFlowAPIDataManager(
-            manifest: synchronizePayload.manifest,
-            visualUpdate: synchronizePayload.visual,
-            returnURL: returnURL,
-            consentPaneModel: synchronizePayload.text?.consentPane,
-            apiClient: api,
-            clientSecret: clientSecret,
-            analyticsClient: analyticsClient
-        )
-        nativeFlowController = NativeFlowController(
-            dataManager: dataManager,
-            navigationController: navigationController
-        )
-        nativeFlowController?.delegate = self
-        nativeFlowController?.startFlow()
     }
 
     func hostViewController(
         _ hostViewController: HostViewController,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     ) {
-        delegate?.hostController(self, didReceiveEvent: event)
+        publish(event)
     }
 }
 
@@ -129,29 +227,65 @@ extension HostController: HostViewControllerDelegate {
 
 private extension HostController {
 
-    func continueWithWebFlow(_ manifest: FinancialConnectionsSessionManifest) {
-        delegate?.hostController(
-            self,
-            didReceiveEvent: FinancialConnectionsEvent(
-                name: .flowLaunchedInBrowser
-            )
+    func publish(_ payload: FinancialConnectionsEventPayload) {
+        guard let linkAccountSessionId, !linkAccountSessionId.isEmpty else {
+            return
+        }
+        let event = FinancialConnectionsEvent(
+            name: payload.name,
+            financialConnectionsSessionId: linkAccountSessionId,
+            metadata: payload.metadata
         )
+        analyticsClient.logExternalEvent(
+            event,
+            pane: FinancialConnectionsAnalyticsClient.paneFromViewController(navigationController.topViewController)
+        )
+        delegate?.hostController(self, didReceiveEvent: event)
+    }
 
-        let accountFetcher = FinancialConnectionsAccountAPIFetcher(api: api, clientSecret: clientSecret)
+    func continueWithWebFlow(_ manifest: FinancialConnectionsSessionManifest, prefillDetails: WebPrefillDetails? = nil) {
+        publish(FinancialConnectionsEventPayload(name: .flowLaunchedInBrowser))
+
+        let accountFetcher = FinancialConnectionsAccountAPIFetcher(api: apiClient, clientSecret: clientSecret)
         let sessionFetcher = FinancialConnectionsSessionAPIFetcher(
-            api: api,
+            api: apiClient,
             clientSecret: clientSecret,
             accountFetcher: accountFetcher
         )
         let webFlowViewController = FinancialConnectionsWebFlowViewController(
             clientSecret: clientSecret,
-            apiClient: api,
+            apiClient: apiClient,
             manifest: manifest,
             sessionFetcher: sessionFetcher,
-            returnURL: returnURL
+            returnURL: returnURL,
+            elementsSessionContext: elementsSessionContext,
+            prefillDetailsOverride: prefillDetails
         )
         webFlowViewController.delegate = self
         navigationController.setViewControllers([webFlowViewController], animated: true)
+    }
+
+    func continueWithNativeFlow(_ synchronizePayload: FinancialConnectionsSynchronize) {
+        navigationController.configureAppearanceForNative()
+
+        let dataManager = NativeFlowAPIDataManager(
+            manifest: synchronizePayload.manifest,
+            configuration: configuration,
+            visualUpdate: synchronizePayload.visual,
+            returnURL: returnURL,
+            consentPaneModel: synchronizePayload.text?.consentPane,
+            accountPickerPane: synchronizePayload.text?.accountPickerPane,
+            apiClient: apiClient,
+            clientSecret: clientSecret,
+            analyticsClient: analyticsClient,
+            elementsSessionContext: elementsSessionContext
+        )
+        nativeFlowController = NativeFlowController(
+            dataManager: dataManager,
+            navigationController: navigationController
+        )
+        nativeFlowController?.delegate = self
+        nativeFlowController?.startFlow()
     }
 }
 
@@ -161,16 +295,22 @@ extension HostController: FinancialConnectionsWebFlowViewControllerDelegate {
 
     func webFlowViewController(
         _ viewController: FinancialConnectionsWebFlowViewController,
-        didFinish result: FinancialConnectionsSheet.Result
+        didFinish result: HostControllerResult
     ) {
-        delegate?.hostController(self, viewController: viewController, didFinish: result)
+        let linkAccountSessionId = result.linkAccountSessionId ?? linkAccountSessionId
+        delegate?.hostController(
+            self,
+            viewController: viewController,
+            didFinish: result,
+            linkAccountSessionId: linkAccountSessionId
+        )
     }
 
     func webFlowViewController(
         _ webFlowViewController: UIViewController,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     ) {
-        delegate?.hostController(self, didReceiveEvent: event)
+        publish(event)
     }
 }
 
@@ -179,20 +319,34 @@ extension HostController: FinancialConnectionsWebFlowViewControllerDelegate {
 extension HostController: NativeFlowControllerDelegate {
     func nativeFlowController(
         _ nativeFlowController: NativeFlowController,
-        didFinish result: FinancialConnectionsSheet.Result
+        didFinish result: HostControllerResult
     ) {
         guard let viewController = navigationController.topViewController else {
             assertionFailure("Navigation stack is empty")
             return
         }
-        delegate?.hostController(self, viewController: viewController, didFinish: result)
+        let linkAccountSessionId = result.linkAccountSessionId ?? linkAccountSessionId
+        delegate?.hostController(
+            self,
+            viewController: viewController,
+            didFinish: result,
+            linkAccountSessionId: linkAccountSessionId
+        )
     }
 
     func nativeFlowController(
         _ nativeFlowController: NativeFlowController,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     ) {
-        delegate?.hostController(self, didReceiveEvent: event)
+        publish(event)
+    }
+
+    func nativeFlowController(
+        _ nativeFlowController: NativeFlowController,
+        shouldLaunchWebFlow manifest: FinancialConnectionsSessionManifest,
+        prefillDetails: WebPrefillDetails
+    ) {
+        continueWithWebFlow(manifest, prefillDetails: prefillDetails)
     }
 }
 
@@ -202,8 +356,8 @@ extension HostController: FinancialConnectionsAnalyticsClientDelegate {
 
     func analyticsClient(
         _ analyticsClient: FinancialConnectionsAnalyticsClient,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     ) {
-        delegate?.hostController(self, didReceiveEvent: event)
+        publish(event)
     }
 }

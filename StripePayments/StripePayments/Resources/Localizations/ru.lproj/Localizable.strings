@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Банк";
-
 "Boleto" = "Boleto";
 
 "Card" = "Карта";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "Списание средств SEPA";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Лимит времени для аутентификации метода оплаты истек. Попробуйте еще раз";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "Банковский счет в США";
+"US bank account" = "Банковский счет в США";
 
 "Unknown" = "Неизвестно";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

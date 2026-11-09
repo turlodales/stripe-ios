@@ -6,7 +6,7 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import XCTest
 
 @testable import StripeIdentity
@@ -20,7 +20,7 @@ final class VerificationSheetAnalyticsTest: XCTestCase {
         )
         XCTAssertNotNil(analytic.error)
 
-        let errorDict = analytic.error.serializeForLogging()
+        let errorDict = analytic.error.serializeForV2Logging()
         XCTAssertNil(errorDict["user_info"])
         XCTAssertEqual(errorDict["code"] as? Int, 1)
         XCTAssertEqual(

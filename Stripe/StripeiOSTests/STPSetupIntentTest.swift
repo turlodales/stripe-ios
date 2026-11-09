@@ -6,7 +6,7 @@
 //  Created by Yuki Tokuhiro on 6/27/19.
 //  Copyright © 2019 Stripe, Inc. All rights reserved.
 //
-@_spi(STP) @testable import StripePayments
+@_spi(InternalOnlyAPI) @testable import StripePayments
 
 class STPSetupIntentTest: XCTestCase {
     // MARK: - Description Tests
@@ -71,7 +71,7 @@ class STPSetupIntentTest: XCTestCase {
         XCTAssertEqual(setupIntent.status, STPSetupIntentStatus.requiresAction)
         XCTAssertEqual(setupIntent.usage, STPSetupIntentUsage.offSession)
 
-        XCTAssertEqual(setupIntent.paymentMethodTypes, [NSNumber(value: STPPaymentMethodType.card.rawValue)])
+        XCTAssertEqual(setupIntent.paymentMethodTypes, [STPPaymentMethodType.card])
 
         // lastSetupError
 
@@ -81,5 +81,24 @@ class STPSetupIntentTest: XCTestCase {
         XCTAssertEqual(setupIntent.lastSetupError?.message, "The latest attempt to set up the payment method has failed because authentication failed.")
         XCTAssertNotNil(setupIntent.lastSetupError?.paymentMethod)
         XCTAssertEqual(setupIntent.lastSetupError?.type, STPSetupIntentLastSetupErrorType.invalidRequest)
+    }
+
+    // MARK: STPSetupIntentStatus extension tests
+
+    func testStringFromStatus() {
+        let expected: [STPSetupIntentStatus: String] = [
+            .requiresPaymentMethod: "requires_payment_method",
+            .requiresConfirmation: "requires_confirmation",
+            .requiresAction: "requires_action",
+            .processing: "processing",
+            .succeeded: "succeeded",
+            .canceled: "canceled",
+            .unknown: "unknown",
+        ]
+
+        for (status, expectedString) in expected {
+            let resultString = STPSetupIntentStatus.string(from: status)
+            XCTAssertEqual(resultString, expectedString, "Expected \(status) to map to string '\(expectedString)', but got '\(resultString)'")
+        }
     }
 }

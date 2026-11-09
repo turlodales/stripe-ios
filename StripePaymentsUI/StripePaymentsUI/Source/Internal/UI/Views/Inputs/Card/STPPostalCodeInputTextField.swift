@@ -6,11 +6,11 @@
 //  Copyright © 2020 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
-@_spi(STP) public class STPPostalCodeInputTextField: STPInputTextField {
+@_spi(InternalOnlyAPI) public class STPPostalCodeInputTextField: STPInputTextField {
 
     var countryCode: String? = Locale.autoupdatingCurrent.stp_regionCode {
         didSet {
@@ -78,6 +78,11 @@ import UIKit
             keyboardType = .asciiCapableNumberPad
         } else {
             keyboardType = .numbersAndPunctuation
+        }
+        if #available(iOS 26.0, *) {
+            // Opt out of the iOS 26 floating number-pad popover, which on iPad can misposition
+            // itself over the form. Mirrors the Element-based form fix (#6615). (RUN_MOBILESDK-5453)
+            allowsNumberPadPopover = false
         }
     }
 

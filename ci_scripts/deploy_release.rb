@@ -2,6 +2,7 @@
 
 require_relative 'release_common'
 require_relative 'vm_tools'
+require_relative 'get_bundle_version'
 
 # This should generally be the minimum Xcode version supported by the App Store, as the
 # compiled XCFrameworks won't be usable on older versions.
@@ -18,8 +19,6 @@ def verify_xcode_version
   abort
 end
 
-verify_xcode_version
-
 @version = version_from_file
 
 @changelog = changelog(@version)
@@ -27,12 +26,24 @@ verify_xcode_version
 @cleanup_branchname = "releases/#{@version}_cleanup"
 
 def export_builds
-  # Delete Stripe.xcframework.zip if one exists
-  run_command('rm -f build/Stripe.xcframework.zip')
+  verify_xcode_version
+
+  # Delete entire build directory if it exists
+  run_command('rm -Rf build/')
 
   run_command('ci_scripts/export_builds.rb')
 
   raise 'build/Stripe.xcframework.zip not found. Did the build fail?' unless File.exist?('build/Stripe.xcframework.zip')
+end
+
+def export_builds_from_xcode_cloud
+  return if @is_dry_run
+  # Delete entire build directory if it exists
+  run_command('rm -Rf build/')
+
+  run_command('ci_scripts/export_builds_from_xcode_cloud.rb')
+
+  raise 'build/Stripe.xcframework.zip not found. Did we fail to fetch it from Xcode Cloud?' unless File.exist?('build/Stripe.xcframework.zip')
 end
 
 def approve_pr
@@ -79,6 +90,9 @@ end
 
 def upload_framework
   return if @is_dry_run
+  # Validate the downloaded xcframework bundle version before uploading
+  bundle_version = get_bundle_version('build/Stripe.xcframework.zip')
+  raise "build/Stripe.xcframework bundle version (#{bundle_version}) doesn't match the VERSION file (#{@version})!" unless bundle_version == @version
 
   # Use the reference to the release object from `create_release` if it exists,
   # otherwise fetch it.
@@ -90,14 +104,6 @@ def upload_framework
   )
 end
 
-def push_cocoapods
-  return if @is_dry_run
-
-  # Push the release to the CocoaPods trunk: ./ci_scripts/pod_tools.rb push
-  rputs 'Pushing the release to Cocoapods.'
-  run_command('ci_scripts/pod_tools.rb push')
-end
-
 def push_spm_mirror
   return if @is_dry_run
 
@@ -105,25 +111,20 @@ def push_spm_mirror
   run_command("ci_scripts/push_spm_mirror.rb --version #{@version}")
 end
 
-def sync_owner_list
-  unless @is_dry_run
-    # Sync the owner list for all pods with the Stripe pod.
-    run_command('ci_scripts/pod_tools.rb add-all-owners')
-  end
-
+def finish_deployment
   puts 'Done! Have a nice day!'.green
   notify_user
 end
 
+# CocoaPods publication and owner maintenance are explicit operations via pod_tools.rb.
 steps = [
-  method(:export_builds),
+  method(:export_builds_from_xcode_cloud),
   method(:approve_pr),
   method(:create_docs_pr),
   method(:push_tag),
   method(:create_release),
   method(:upload_framework),
-  method(:push_cocoapods),
   method(:push_spm_mirror),
-  method(:sync_owner_list)
+  method(:finish_deployment)
 ]
 execute_steps(steps, @step_index)

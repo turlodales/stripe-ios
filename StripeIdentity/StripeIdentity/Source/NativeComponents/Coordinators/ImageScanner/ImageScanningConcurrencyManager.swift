@@ -7,8 +7,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCameraCore
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCameraCore
+@_spi(InternalOnlyAPI) import StripeCore
 import Vision
 
 let kConcurrentImageScannerDefaultMaxConcurrentScans: Int = 2
@@ -18,6 +18,7 @@ protocol ImageScanningConcurrencyManagerProtocol {
     func scanImage<ScannerOutput>(
         with scanner: AnyImageScanner<ScannerOutput>,
         pixelBuffer: CVPixelBuffer,
+        sampleBuffer: CMSampleBuffer,
         cameraSession: CameraSessionProtocol,
         completeOn completionQueue: DispatchQueue,
         completion: @escaping (ScannerOutput) -> Void
@@ -56,14 +57,33 @@ final class ImageScanningConcurrencyManager: ImageScanningConcurrencyManagerProt
     /// Semaphore used to block the current thread until detectors have completed
     private let semaphore: DispatchSemaphore
 
+    private var amountOfFutures = 0
+    private var futureQueue: DispatchQueue = DispatchQueue(label: "com.stripe.identity.concurrent-image-scanner.futures")
+
     private let analyticsClient: IdentityAnalyticsClient
+    private let scannerName: IdentityAnalyticsClient.ScannerName
+    private let screenName: IdentityAnalyticsClient.ScreenName
+    private let sheetController: VerificationSheetControllerProtocol
 
     init(
-        analyticsClient: IdentityAnalyticsClient,
+        sheetController: VerificationSheetControllerProtocol,
+        scannerName: IdentityAnalyticsClient.ScannerName,
+        screenName: IdentityAnalyticsClient.ScreenName,
         maxConcurrentScans: Int = kConcurrentImageScannerDefaultMaxConcurrentScans
     ) {
-        self.analyticsClient = analyticsClient
+        self.analyticsClient = sheetController.analyticsClient
+        self.scannerName = scannerName
+        self.screenName = screenName
+        self.sheetController = sheetController
         self.semaphore = DispatchSemaphore(value: maxConcurrentScans)
+    }
+
+    deinit {
+        futureQueue.sync {
+            for _ in 0..<amountOfFutures {
+                self.semaphore.signal()
+            }
+        }
     }
 
     /// Scans a camera frame and calls a completion block with the scanned output
@@ -90,6 +110,7 @@ final class ImageScanningConcurrencyManager: ImageScanningConcurrencyManagerProt
     func scanImage<ScannerOutput>(
         with scanner: AnyImageScanner<ScannerOutput>,
         pixelBuffer: CVPixelBuffer,
+        sampleBuffer: CMSampleBuffer,
         cameraSession: CameraSessionProtocol,
         completeOn completionQueue: DispatchQueue,
         completion: @escaping (ScannerOutput) -> Void
@@ -112,29 +133,46 @@ final class ImageScanningConcurrencyManager: ImageScanningConcurrencyManagerProt
         }
 
         semaphore.wait()
-        concurrentQueue.async { [weak self] in
-            guard let self = self else { return }
+        let future = scanner.scanImage(
+            pixelBuffer: pixelBuffer,
+            sampleBuffer: sampleBuffer,
+            cameraProperties: cameraProperties
+        )
 
-            do {
-                let output = try scanner.scanImage(
-                    pixelBuffer: pixelBuffer,
-                    cameraProperties: cameraProperties
+        futureQueue.sync {
+            self.amountOfFutures += 1
+        }
+
+        future.observe(on: concurrentQueue) { result in
+            switch result {
+            case .success(let scannerOutput):
+                wrappedCompletion(scannerOutput)
+            case .failure(let error):
+                self.analyticsClient.logGenericError(
+                    error: error,
+                    additionalMetadata: [
+                        "error_context": "image_scan",
+                        "scanner_name": self.scannerName.rawValue,
+                        "screen_name": self.screenName.rawValue,
+                    ],
+                    sheetController: self.sheetController
                 )
-                wrappedCompletion(output)
-            } catch {
-                self.analyticsClient.logGenericError(error: error)
             }
 
             // Track when the scan ended
             let scanEndTime = Date()
 
             // Update stateful properties on perfQueue
-            self.perfQueue.async { [weak self] in
-                self?.perfLastScanEndTime = scanEndTime
-                self?.perfNumFramesScanned += 1
+            self.perfQueue.async {
+                self.perfLastScanEndTime = scanEndTime
+                self.perfNumFramesScanned += 1
             }
 
-            self.semaphore.signal()
+            self.futureQueue.sync {
+                self.amountOfFutures -= 1
+                self.semaphore.signal()
+            }
+
         }
     }
 

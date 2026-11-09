@@ -9,7 +9,7 @@
 import Foundation
 import UIKit
 
-@_spi(STP) public extension UIView {
+@_spi(InternalOnlyAPI) public extension UIView {
     /// - Note: This variant of `addAndPinSubview` respects the view's `directionalLayoutMargins` property.
     /// This is useful if your margins can change dynamically.
     func addAndPinSubview(_ view: UIView, directionalLayoutMargins: NSDirectionalEdgeInsets) {
@@ -60,7 +60,8 @@ import UIKit
         guard let userInfo = notification.userInfo,
               let animationCurveValue = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int,
               let animationDuration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
-              let animationCurve = UIView.AnimationCurve(rawValue: animationCurveValue) else {
+              let animationCurve = UIView.AnimationCurve(rawValue: animationCurveValue),
+              animationDuration > 0 else {
             // Just run the animation block as a fallback
             animations()
             return
@@ -99,5 +100,23 @@ import UIKit
                 }
             }
         }
+    }
+
+    static func makeSpacerView(width: CGFloat? = nil, height: CGFloat? = nil) -> UIView {
+        let spacerView = UIView(frame: .zero)
+        spacerView.translatesAutoresizingMaskIntoConstraints = false
+        if let width {
+            spacerView.widthAnchor.constraint(equalToConstant: width).isActive = true
+        }
+        if let height {
+            spacerView.heightAnchor.constraint(equalToConstant: height).isActive = true
+        }
+        return spacerView
+    }
+
+    var isFullyVisibleOnScreen: Bool {
+        guard let window = window, !isHidden, alpha > 0 else { return false }
+        let viewFrameInWindow = convert(bounds, to: window)
+        return window.bounds.contains(viewFrameInWindow)
     }
 }

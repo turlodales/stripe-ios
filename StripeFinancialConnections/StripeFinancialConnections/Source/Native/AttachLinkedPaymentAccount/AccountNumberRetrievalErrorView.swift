@@ -7,14 +7,15 @@
 
 import Foundation
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class AccountNumberRetrievalErrorView: UIView {
 
     init(
         institution: FinancialConnectionsInstitution,
+        appearance: FinancialConnectionsAppearance,
         didSelectAnotherBank: @escaping () -> Void,
         didSelectEnterBankDetailsManually: (() -> Void)?  // if nil, don't show button
     ) {
@@ -60,7 +61,8 @@ final class AccountNumberRetrievalErrorView: UIView {
                     } else {
                         return nil
                     }
-                }()
+                }(),
+                appearance: appearance
             ).footerView
         )
         paneLayoutView.addTo(view: self)
@@ -78,6 +80,7 @@ import SwiftUI
 private struct AccountNumberRetrievalErrorViewUIViewRepresentable: UIViewRepresentable {
 
     let institutionName: String
+    let appearance: FinancialConnectionsAppearance
     let didSelectEnterBankDetailsManually: (() -> Void)?
 
     func makeUIView(context: Context) -> AccountNumberRetrievalErrorView {
@@ -89,6 +92,7 @@ private struct AccountNumberRetrievalErrorViewUIViewRepresentable: UIViewReprese
                 icon: nil,
                 logo: nil
             ),
+            appearance: appearance,
             didSelectAnotherBank: {},
             didSelectEnterBankDetailsManually: didSelectEnterBankDetailsManually
         )
@@ -101,11 +105,13 @@ struct AccountNumberRetrievalErrorView_Previews: PreviewProvider {
     static var previews: some View {
         AccountNumberRetrievalErrorViewUIViewRepresentable(
             institutionName: "Chase",
+            appearance: .stripe,
             didSelectEnterBankDetailsManually: {}
         )
 
         AccountNumberRetrievalErrorViewUIViewRepresentable(
             institutionName: "Bank of America",
+            appearance: .stripe,
             didSelectEnterBankDetailsManually: nil
         )
     }

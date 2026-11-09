@@ -8,8 +8,8 @@
 //
 
 import StripeCoreTestUtils
-@testable @_spi(STP) import StripePayments
-@testable @_spi(STP) import StripePaymentsUI
+@testable @_spi(InternalOnlyAPI) import StripePayments
+@testable @_spi(InternalOnlyAPI) import StripePaymentsUI
 import UIKit
 import XCTest
 
@@ -42,7 +42,12 @@ class PaymentCardTextFieldBlockDelegate: NSObject, STPPaymentCardTextFieldDelega
 class STPPaymentCardTextFieldTest: XCTestCase {
     override class func setUp() {
         super.setUp()
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
+        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+    }
+
+    override class func tearDown() {
+        STPAPIClient.shared.publishableKey = nil // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+        super.tearDown()
     }
 
     func testIntrinsicContentSize() {
@@ -55,12 +60,12 @@ class STPPaymentCardTextFieldTest: XCTestCase {
 
         let iOS9SystemFont = UIFont.systemFont(ofSize: 18)
         textField.font = iOS9SystemFont
-        XCTAssertEqualWithAccuracy(textField.intrinsicContentSize.height, 44, accuracy: 0.1)
-        XCTAssertEqualWithAccuracy(textField.intrinsicContentSize.width, 253, accuracy: 1.0)
+        XCTAssertEqual(textField.intrinsicContentSize.height, 44, accuracy: 0.1)
+        XCTAssertEqual(textField.intrinsicContentSize.width, 253, accuracy: 1.0)
 
         textField.font = UIFont(name: "Avenir", size: 44)!
-        XCTAssertEqualWithAccuracy(textField.intrinsicContentSize.height, 62, accuracy: 0.1)
-        XCTAssertEqualWithAccuracy(textField.intrinsicContentSize.width, 472, accuracy: 0.1)
+        XCTAssertEqual(textField.intrinsicContentSize.height, 62, accuracy: 0.1)
+        XCTAssertEqual(textField.intrinsicContentSize.width, 472, accuracy: 0.1)
     }
 
     func testSetCard_numberUnknown() {
@@ -89,7 +94,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         let card = STPPaymentMethodCardParams()
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
         let imgData = sut.brandImageView.image?.pngData()
@@ -101,7 +106,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData! == imgData)
         }
         XCTAssertEqual(sut.numberField.text?.count, Int(0))
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text?.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -133,7 +138,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "378282246310005"
         sut.cvcField.text = "1234"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         XCTAssertTrue(sut.cvcField.validText)
         sut.numberField.text = "4242424242424242"
         XCTAssertFalse(sut.cvcField.validText)
@@ -208,7 +213,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         }
         XCTAssertEqual(sut.numberField.text, number)
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
-        XCTAssertEqual(sut.cvcField.placeholder, "CVV")
+        XCTAssertEqual(sut.cvcField.placeholder, "CVC")
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
     }
@@ -237,7 +242,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let number = "4242424242424242"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
 
@@ -249,7 +254,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -261,7 +266,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let number = "424242"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
 
@@ -274,7 +279,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -309,7 +314,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let card = STPPaymentMethodCardParams()
         let cvc = "123"
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
@@ -323,7 +328,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text!.count, Int(0))
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -337,7 +342,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
@@ -350,7 +355,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertTrue(sut.isValid)
@@ -364,7 +369,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
@@ -377,7 +382,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertTrue(sut.isValid)
@@ -390,7 +395,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
 
         let billingDetails = STPPaymentMethodBillingDetails()
@@ -407,7 +412,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertTrue(sut.isValid)
@@ -417,7 +422,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         let card = STPPaymentMethodCardParams()
         let params = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         sut.paymentMethodParams = params
@@ -445,17 +450,17 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         sut.cvcField.text = "123"
         XCTAssertEqual(sut.viewModel.cvc, sut.cvcField.text)
 
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         XCTAssertEqual(sut.viewModel.rawExpiration, sut.expirationField.text)
         XCTAssertEqual(sut.viewModel.expirationMonth, "10")
-        XCTAssertEqual(sut.viewModel.expirationYear, "99")
+        XCTAssertEqual(sut.viewModel.expirationYear, "50")
     }
 
     func testSettingTextUpdatesCardParams() {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         sut.postalCodeField.text = "90210"
 
         let card = sut.paymentMethodParams.card
@@ -463,7 +468,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         XCTAssertEqual(card?.number, "4242424242424242")
         XCTAssertEqual(card?.cvc, "123")
         XCTAssertEqual(card?.expMonth?.intValue ?? 0, 10)
-        XCTAssertEqual(card?.expYear?.intValue ?? 0, 99)
+        XCTAssertEqual(card?.expYear?.intValue ?? 0, 50)
         XCTAssertEqual(sut.paymentMethodParams.billingDetails!.address!.postalCode, "90210")
     }
 
@@ -496,7 +501,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         sut.postalCodeField.text = "90210"
 
         let params = sut.paymentMethodParams.card
@@ -504,14 +509,14 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         XCTAssertEqual(params?.number, "4242424242424242")
         XCTAssertEqual(params?.cvc, "123")
         XCTAssertEqual(params?.expMonth?.intValue ?? 0, 10)
-        XCTAssertEqual(params?.expYear?.intValue ?? 0, 99)
+        XCTAssertEqual(params?.expYear?.intValue ?? 0, 50)
     }
 
     func testEmptyPostalCodeVendsNilAddress() {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
 
         XCTAssertNil(sut.paymentMethodParams.billingDetails?.address?.postalCode)
         let params = sut.paymentMethodParams.card
@@ -519,14 +524,14 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         XCTAssertEqual(params?.number, "4242424242424242")
         XCTAssertEqual(params?.cvc, "123")
         XCTAssertEqual(params?.expMonth?.intValue ?? 0, 10)
-        XCTAssertEqual(params?.expYear?.intValue ?? 0, 99)
+        XCTAssertEqual(params?.expYear?.intValue ?? 0, 50)
     }
 
     func testAccessingCardParamsDuringSettingCardParams() {
         let delegate = PaymentCardTextFieldBlockDelegate()
         delegate.didChange = { textField in
             // delegate reads the `cardParams` for any reason it wants
-            textField.paymentMethodParams.card
+            _ = textField.paymentMethodParams.card
         }
         let sut = STPPaymentCardTextField()
         sut.delegate = delegate
@@ -589,7 +594,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         let card = STPPaymentMethodCardParams()
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
         let imgData = sut.brandImageView.image?.pngData()
         let expectedImgData = STPPaymentCardTextField.brandImage(for: .unknown)?.pngData()
@@ -600,7 +605,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text!.count, Int(0))
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -682,7 +687,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         }
         XCTAssertEqual(sut.numberField.text, number)
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
-        XCTAssertEqual(sut.cvcField.placeholder, "CVV")
+        XCTAssertEqual(sut.cvcField.placeholder, "CVC")
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
     }
@@ -710,7 +715,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let number = "4242424242424242"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
         let imgData = sut.brandImageView.image?.pngData()
@@ -721,7 +726,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -733,7 +738,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let number = "424242"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
         let imgData = sut.brandImageView.image?.pngData()
@@ -745,7 +750,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -779,7 +784,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let card = STPPaymentMethodCardParams()
         let cvc = "123"
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
@@ -792,7 +797,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text!.count, Int(0))
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertFalse(sut.isValid)
@@ -806,7 +811,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
@@ -818,7 +823,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertTrue(sut.isValid)
@@ -832,7 +837,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
@@ -844,7 +849,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         XCTAssertTrue(sut.isValid)
@@ -857,7 +862,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: STPPaymentMethodBillingDetails(postalCode: "90210", countryCode: "US"), metadata: nil)
 
@@ -869,7 +874,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertNil(sut.currentFirstResponderField())
         let isvalid = sut.isValid
@@ -900,7 +905,7 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         let sut = STPPaymentCardTextField()
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         let card = STPPaymentMethodCardParams()
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
@@ -920,7 +925,6 @@ class STPPaymentCardTextFieldTest: XCTestCase {
     }
 
     func testUsesPreferredNetworks() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
         let sut = STPPaymentCardTextField()
         sut.cbcEnabledOverride = true
         sut.preferredNetworks = [.visa]
@@ -939,8 +943,13 @@ class STPPaymentCardTextFieldTest: XCTestCase {
         waitForExpectations(timeout: 3.0)
     }
 
+    func testOBOCBC() {
+        let sut = STPPaymentCardTextField()
+        sut.onBehalfOf = "acct_abc123"
+        XCTAssertEqual(sut.viewModel.cbcController.onBehalfOf, "acct_abc123")
+    }
+
     func testFourDigitCVCNotAllowedUnknownCBCCard() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
         let sut = STPPaymentCardTextField()
         sut.cbcEnabledOverride = true
         sut.preferredNetworks = [.visa]
@@ -963,7 +972,12 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
 
     override class func setUp() {
         super.setUp()
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
+        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+    }
+
+    override class func tearDown() {
+        STPAPIClient.shared.publishableKey = nil // swiftlint:disable:this no_shared_api_client_mutation_in_tests
+        super.tearDown()
     }
 
     override func setUp() {
@@ -987,7 +1001,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
         let cvc = "123"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         card.cvc = cvc
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: billingDetails, metadata: nil)
 
@@ -999,7 +1013,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text, cvc)
         XCTAssertEqual(sut.postalCode, "90210")
         XCTAssertFalse(sut.isFirstResponder, "after `setCardParams:`, if all fields are valid, should resign firstResponder")
@@ -1012,7 +1026,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
         let number = "42"
         card.number = number
         card.expMonth = NSNumber(value: 10)
-        card.expYear = NSNumber(value: 99)
+        card.expYear = NSNumber(value: 50)
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
 
         let imgData = sut.brandImageView.image?.pngData()
@@ -1024,7 +1038,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
             XCTAssertTrue(expectedImgData == imgData)
         }
         XCTAssertEqual(sut.numberField.text, number)
-        XCTAssertEqual(sut.expirationField.text, "10/99")
+        XCTAssertEqual(sut.expirationField.text, "10/50")
         XCTAssertEqual(sut.cvcField.text!.count, Int(0))
         XCTAssertTrue(sut.cvcField.isFirstResponder, "after `setCardParams:`, when firstResponder becomes valid, first invalid field should become firstResponder")
         XCTAssertFalse(sut.isValid)
@@ -1055,7 +1069,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
     func testSetCard_empty_whileEditingNumber() {
         sut.numberField.text = "4242424242424242"
         sut.cvcField.text = "123"
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         XCTAssertTrue(sut.numberField.becomeFirstResponder(), "text field is not first responder")
         let card = STPPaymentMethodCardParams()
         sut.paymentMethodParams = STPPaymentMethodParams(card: card, billingDetails: nil, metadata: nil)
@@ -1110,7 +1124,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
             sut.currentFirstResponderField(),
             "Calling becomeFirstResponder does not change the currentFirstResponder")
 
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         sut.cvcField.text = "123"
 
         sut.resignFirstResponder()
@@ -1140,7 +1154,7 @@ class STPPaymentCardTextFieldUITests: XCTestCase {
             sut.currentFirstResponderField(),
             "Moves firstResponder back to expiration, because it's not valid anymore")
 
-        sut.expirationField.text = "10/99"
+        sut.expirationField.text = "10/50"
         sut.postalCodeField.text = "90210"
 
         sut.resignFirstResponder()

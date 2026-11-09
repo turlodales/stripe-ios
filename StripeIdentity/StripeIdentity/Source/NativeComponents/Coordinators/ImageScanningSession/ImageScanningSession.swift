@@ -7,9 +7,9 @@
 //
 
 import AVKit
-@_spi(STP) import StripeCameraCore
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCameraCore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 // MARK: - ScanningState
@@ -274,9 +274,10 @@ final class ImageScanningSession<
                     initialOrientation: UIDevice.current.orientation.videoOrientation,
                     focusMode: .continuousAutoFocus,
                     focusPointOfInterest: CGPoint(x: 0.5, y: 0.5),
+                    sessionPreset: .hd4K3840x2160,
                     outputSettings: [
                         (kCVPixelBufferPixelFormatTypeKey as String): Int(
-                            IDDetectorConstants.requiredPixelFormat
+                            IDDetectorConstants.mbRequiredPixelFormat
                         ),
                     ],
                     autoFocusRangeRestriction: .near
@@ -325,6 +326,7 @@ final class ImageScanningSession<
         concurrencyManager.scanImage(
             with: scanner,
             pixelBuffer: pixelBuffer,
+            sampleBuffer: sampleBuffer,
             cameraSession: cameraSession,
             completeOn: .main
         ) { [weak self] scannerOutput in
@@ -356,10 +358,6 @@ enum EmptyClassificationType: Equatable {
 }
 
 extension ImageScanningSession where ExpectedClassificationType == EmptyClassificationType {
-
-    func setStateScanned(capturedData: CapturedDataType) {
-        setStateScanned(expectedClassification: .empty, capturedData: capturedData)
-    }
 
     func startIfNeeded() {
         startIfNeeded(expectedClassification: .empty)

@@ -7,20 +7,31 @@
 //
 
 import AVKit
-@_spi(STP) import StripeCameraCore
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCameraCore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class DocumentCaptureViewController: IdentityFlowViewController {
 
     typealias DocumentImageScanningSession = ImageScanningSession<
         DocumentSide,
-        IDDetectorOutput?,
+        DocumentScannerOutput?,
         UIImage,
         DocumentScannerOutput?
     >
     typealias State = DocumentImageScanningSession.State
+
+    private enum CaptureMode: Int {
+        case live = 0
+        case manual = 1
+    }
+
+    private struct CapturedCameraFrame {
+        let image: CGImage
+        let scannerOutput: DocumentScannerOutput?
+        let exifMetadata: CameraExifMetadata?
+    }
 
     override var warningAlertViewModel: WarningAlertViewModel? {
         switch imageScanningSession.state {
@@ -50,40 +61,132 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
     // MARK: Views
 
     let documentCaptureView = DocumentCaptureView()
+    private lazy var captureModeControl: UISegmentedControl = {
+        let control = UISegmentedControl(items: [
+            String.Localized.liveCaptureMode,
+            String.Localized.manualCaptureMode,
+        ])
+        control.selectedSegmentIndex = 0
+        control.addTarget(
+            self,
+            action: #selector(didChangeCaptureMode(_:)),
+            for: .valueChanged
+        )
+        return control
+    }()
 
     // MARK: Computed Properties
+
+    private var isManualCaptureMode: Bool {
+        captureMode == .manual
+    }
+
+    private var shouldShowCaptureModeControl: Bool {
+        switch imageScanningSession.state {
+        case .initial, .scanning, .scanned, .saving:
+            return true
+        case .noCameraAccess, .cameraError, .timeout:
+            return false
+        }
+    }
+
+    private var captureModeControlIsEnabled: Bool {
+        switch imageScanningSession.state {
+        case .scanned, .saving, .noCameraAccess, .cameraError:
+            return false
+        case .initial, .scanning, .timeout:
+            return true
+        }
+    }
+
+    private var takePhotoButtonText: String {
+        STPLocalizedString(
+            "Take Photo",
+            "Button text for taking or retaking a manual identity document capture"
+        )
+    }
+
+    private var lastScanningInstructionText: String?
+    private var lastScanningInstructionTextUpdate = Date.distantPast
+
+    private func resetLastScanningInstructionText() {
+        resetScanningInstructionTextTimer?.invalidate()
+        lastScanningInstructionText = nil
+        lastScanningInstructionTextUpdate = Date.distantPast
+    }
+    private var resetScanningInstructionTextTimer: Timer?
 
     var viewModel: DocumentCaptureView.ViewModel {
         switch imageScanningSession.state {
         case .initial:
+            resetLastScanningInstructionText()
             return .scan(
                 .init(
                     scanningViewModel: .blank,
                     instructionalText: scanningInstructionText(
                         for: .front,
-                        idDetectorOutput: nil
+                        documentScannerOutput: nil,
+                        availableIDTypes: availableIDTypes
                     )
                 )
             )
-        case .scanning(let documentSide, let idDetectorOutput):
+        case .scanning(let documentSide, let documentScannerOutput):
+            if isManualCaptureMode {
+                resetLastScanningInstructionText()
+                return .scan(
+                    .init(
+                        scanningViewModel: .videoPreview(
+                            imageScanningSession.cameraSession,
+                            animateBorder: false
+                        ),
+                        instructionalText: scanningTextWithNoInput(
+                            availableIDTypes: availableIDTypes,
+                            for: documentSide
+                        )
+                    )
+                )
+            }
+            let newScanningInstructionText: String
+            let now = Date()
+            // update instruction text, at most once a second
+            if now.timeIntervalSince(lastScanningInstructionTextUpdate) > 1 {
+                newScanningInstructionText = scanningInstructionText(for: documentSide, documentScannerOutput: documentScannerOutput, availableIDTypes: availableIDTypes)
+                lastScanningInstructionText = newScanningInstructionText
+                lastScanningInstructionTextUpdate = now
+
+                resetScanningInstructionTextTimer?.invalidate()
+                resetScanningInstructionTextTimer  = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+                    self?.updateUI()
+                }
+            } else {
+                if let lastScanningInstructionText {
+                    newScanningInstructionText = lastScanningInstructionText
+                } else {
+                    newScanningInstructionText = scanningTextWithNoInput(availableIDTypes: availableIDTypes, for: documentSide)
+                }
+            }
             return .scan(
                 .init(
                     scanningViewModel:
                         .videoPreview(
-                            imageScanningSession.cameraSession, animateBorder: idDetectorOutput?.classification.matchesDocument(side: documentSide) ?? false
+                            imageScanningSession.cameraSession, animateBorder: documentScannerOutput?.matchesDocument(side: documentSide) ?? false
                         ),
-                    instructionalText: scanningInstructionText(for: documentSide, idDetectorOutput: idDetectorOutput)
+                    instructionalText: newScanningInstructionText
                 )
             )
         case .scanned(_, let image),
             .saving(_, let image):
+            resetLastScanningInstructionText()
             return .scan(
                 .init(
                     scanningViewModel: .scanned(image),
-                    instructionalText: DocumentCaptureViewController.scannedInstructionalText
+                    instructionalText: isManualCaptureMode
+                        ? DocumentCaptureViewController.imageTakenInstructionalText
+                        : DocumentCaptureViewController.scannedInstructionalText
                 )
             )
         case .noCameraAccess:
+            resetLastScanningInstructionText()
             return .error(
                 .init(
                     titleText: .Localized.noCameraAccessErrorTitleText,
@@ -91,6 +194,7 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
                 )
             )
         case .cameraError:
+            resetLastScanningInstructionText()
             return .error(
                 .init(
                     titleText: .Localized.cameraUnavailableErrorTitleText,
@@ -98,6 +202,7 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
                 )
             )
         case .timeout:
+            resetLastScanningInstructionText()
             return .error(
                 .init(
                     titleText: .Localized.timeoutErrorTitleText,
@@ -125,17 +230,28 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
         switch imageScanningSession.state {
         case .initial,
             .scanning:
-            return [.continueButton(state: .disabled, didTap: {})]
+            guard isManualCaptureMode else {
+                return [.continueButton(state: .disabled, didTap: {})]
+            }
+            return [
+                .init(
+                    text: takePhotoButtonText,
+                    state: latestCapturedCameraFrame == nil ? .disabled : .enabled,
+                    didTap: { [weak self] in
+                        self?.captureManualPhoto()
+                    }
+                ),
+            ]
 
         case .saving:
             return [.continueButton(state: .loading, didTap: {})]
 
         case .scanned(let documentSide, let image):
-            return [
-                .continueButton { [weak self] in
-                    self?.saveOrFlipDocument(scannedImage: image, documentSide: documentSide)
-                },
-            ]
+            let continueButton: IdentityFlowView.ViewModel.Button = .continueButton {
+                [weak self] in
+                self?.saveOrFlipDocument(scannedImage: image, documentSide: documentSide)
+            }
+            return [continueButton]
 
         case .noCameraAccess:
             var models = [IdentityFlowView.ViewModel.Button]()
@@ -161,45 +277,65 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
             )
             return models
         case .cameraError:
-            return [
-                .init(
-                    text: .Localized.upload_a_photo,
-                    didTap: { [weak self] in
-                        self?.transitionToFileUpload()
-                    }
-                ),
-            ]
+            if apiConfig.requireLiveCapture {
+                // Hide the upload button when live capture is required
+                return []
+            } else {
+                return [
+                    .init(
+                        text: .Localized.upload_a_photo,
+                        didTap: { [weak self] in
+                            self?.transitionToFileUpload()
+                        }
+                    ),
+                ]
+            }
         case .timeout(let documentSide):
-            return [
-                .init(
-                    text: .Localized.upload_a_photo,
-                    isPrimary: false,
-                    didTap: { [weak self] in
-                        self?.transitionToFileUpload()
-                    }
-                ),
-                .init(
-                    text: .Localized.try_again_button,
-                    isPrimary: true,
-                    didTap: { [weak self] in
-                        self?.imageScanningSession.startScanning(
-                            expectedClassification: documentSide
-                        )
-                    }
-                ),
-            ]
+            if apiConfig.requireLiveCapture {
+                // Only show "Try Again" when live capture is required
+                return [
+                    .init(
+                        text: .Localized.try_again_button,
+                        isPrimary: true,
+                        didTap: { [weak self] in
+                            self?.imageScanningSession.startScanning(
+                                expectedClassification: documentSide
+                            )
+                        }
+                    ),
+                ]
+            } else {
+                return [
+                    .init(
+                        text: .Localized.upload_a_photo,
+                        isPrimary: false,
+                        didTap: { [weak self] in
+                            self?.transitionToFileUpload()
+                        }
+                    ),
+                    .init(
+                        text: .Localized.try_again_button,
+                        isPrimary: true,
+                        didTap: { [weak self] in
+                            self?.imageScanningSession.startScanning(
+                                expectedClassification: documentSide
+                            )
+                        }
+                    ),
+                ]
+            }
         }
     }
 
     var titleText: String? {
         switch imageScanningSession.state {
         case .initial:
-            return titleText(for: .front)
+            return titleText(for: .front, availableIDTypes: availableIDTypes)
         case .scanning(let side, _),
             .scanned(let side, _):
-            return titleText(for: side)
+            return titleText(for: side, availableIDTypes: availableIDTypes)
         case .saving(let side, _):
-            return titleText(for: side)
+            return titleText(for: side, availableIDTypes: availableIDTypes)
         case .noCameraAccess,
             .cameraError,
             .timeout:
@@ -214,6 +350,12 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
 
     let apiConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage
     private var feedbackGenerator: UINotificationFeedbackGenerator?
+    private var captureMode: CaptureMode = .live
+    private var latestCapturedCameraFrame: CapturedCameraFrame?
+
+    private let availableIDTypes: [String]
+
+    private let bestFramePicker: BestFramePicker
 
     // MARK: Coordinators
     let documentUploader: DocumentUploaderProtocol
@@ -225,13 +367,18 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
         apiConfig: StripeAPI.VerificationPageStaticContentDocumentCapturePage,
         documentUploader: DocumentUploaderProtocol,
         imageScanningSession: DocumentImageScanningSession,
-        sheetController: VerificationSheetControllerProtocol
+        sheetController: VerificationSheetControllerProtocol,
+        avaialableIDTypes: [String],
+        bestFramePicker: BestFramePicker = .init(window: 1.0)
     ) {
         self.apiConfig = apiConfig
         self.documentUploader = documentUploader
         self.imageScanningSession = imageScanningSession
+        self.availableIDTypes = avaialableIDTypes
+        self.bestFramePicker = bestFramePicker
         super.init(sheetController: sheetController, analyticsScreenName: .documentCapture)
         imageScanningSession.setDelegate(delegate: self)
+        configureCaptureModeControl()
     }
 
     convenience init(
@@ -244,7 +391,9 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
         documentUploader: DocumentUploaderProtocol,
         anyDocumentScanner: AnyDocumentScanner,
         concurrencyManager: ImageScanningConcurrencyManagerProtocol? = nil,
-        appSettingsHelper: AppSettingsHelperProtocol = AppSettingsHelper.shared
+        appSettingsHelper: AppSettingsHelperProtocol = AppSettingsHelper.shared,
+        avaialableIDTypes: [String],
+        bestFramePicker: BestFramePicker = .init(window: 1.0)
     ) {
         self.init(
             apiConfig: apiConfig,
@@ -257,12 +406,16 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
                 scanner: anyDocumentScanner,
                 concurrencyManager: concurrencyManager
                     ?? ImageScanningConcurrencyManager(
-                        analyticsClient: sheetController.analyticsClient
+                        sheetController: sheetController,
+                        scannerName: .document,
+                        screenName: .documentCapture
                     ),
                 cameraPermissionsManager: cameraPermissionsManager,
                 appSettingsHelper: appSettingsHelper
             ),
-            sheetController: sheetController
+            sheetController: sheetController,
+            avaialableIDTypes: avaialableIDTypes,
+            bestFramePicker: bestFramePicker
         )
         updateUI()
     }
@@ -305,6 +458,7 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
     // MARK: - Configure
 
     func updateUI() {
+        updateCaptureModeControl()
         configure(
             backButtonTitle: STPLocalizedString(
                 "Scan",
@@ -312,7 +466,10 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
             ),
             viewModel: flowViewModel
         )
-        documentCaptureView.configure(with: viewModel)
+        documentCaptureView.configure(
+            with: viewModel,
+            topAccessoryView: shouldShowCaptureModeControl ? captureModeControl : nil
+        )
         generateFeedbackIfNeededForStateChange()
     }
 
@@ -343,6 +500,27 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
 
     }
 
+    private func configureCaptureModeControl() {
+        updateCaptureModeControl()
+    }
+
+    private func updateCaptureModeControl() {
+        guard shouldShowCaptureModeControl else {
+            return
+        }
+        captureModeControl.selectedSegmentIndex =
+            isManualCaptureMode ? CaptureMode.manual.rawValue : CaptureMode.live.rawValue
+        captureModeControl.isEnabled = captureModeControlIsEnabled
+    }
+
+    @objc
+    func didChangeCaptureMode(_ sender: UISegmentedControl) {
+        guard let captureMode = CaptureMode(rawValue: sender.selectedSegmentIndex) else {
+            return
+        }
+        setCaptureMode(captureMode)
+    }
+
     func transitionToFileUpload() {
         guard let sheetController = sheetController else { return }
 
@@ -351,10 +529,74 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
             sheetController: sheetController,
             documentUploader: documentUploader,
             cameraPermissionsManager: imageScanningSession.permissionsManager,
-            appSettingsHelper: imageScanningSession.appSettingsHelper
+            appSettingsHelper: imageScanningSession.appSettingsHelper,
+            availableIDTypes: availableIDTypes
         )
         sheetController.flowController.replaceCurrentScreen(
             with: uploadVC
+        )
+    }
+
+    private func setCaptureMode(_ captureMode: CaptureMode) {
+        guard self.captureMode != captureMode else {
+            updateUI()
+            return
+        }
+
+        self.captureMode = captureMode
+        bestFramePicker.reset()
+
+        switch imageScanningSession.state {
+        case .scanning(let documentSide, _):
+            if captureMode == .manual {
+                imageScanningSession.stopTimeoutTimer()
+                imageScanningSession.updateScanningState(nil)
+            } else {
+                imageScanningSession.startTimeoutTimer(
+                    expectedClassification: documentSide
+                )
+            }
+        case .timeout(let documentSide):
+            imageScanningSession.startScanning(expectedClassification: documentSide)
+        case .initial,
+            .scanned,
+            .saving,
+            .noCameraAccess,
+            .cameraError:
+            break
+        }
+
+        updateUI()
+    }
+
+    private func captureManualPhoto() {
+        guard isManualCaptureMode,
+            case .scanning(let documentSide, _) = imageScanningSession.state,
+            let latestCapturedCameraFrame
+        else {
+            return
+        }
+
+        documentUploader.uploadImages(
+            for: documentSide,
+            originalImage: latestCapturedCameraFrame.image,
+            documentScannerOutput: latestCapturedCameraFrame.scannerOutput,
+            exifMetadata: latestCapturedCameraFrame.exifMetadata,
+            method: .manualCapture
+        )
+
+        if case let .legacy(_, _, _, _, blurResult)? = latestCapturedCameraFrame
+            .scannerOutput
+        {
+            sheetController?.analyticsClient.updateBlurScore(
+                blurResult.variance,
+                for: documentSide
+            )
+        }
+
+        imageScanningSession.setStateScanned(
+            expectedClassification: documentSide,
+            capturedData: UIImage(cgImage: latestCapturedCameraFrame.image)
         )
     }
 
@@ -402,7 +644,7 @@ final class DocumentCaptureViewController: IdentityFlowViewController {
 extension DocumentCaptureViewController: ImageScanningSessionDelegate {
     typealias ExpectedClassificationType = DocumentSide
 
-    typealias ScanningStateType = IDDetectorOutput?
+    typealias ScanningStateType = DocumentScannerOutput?
 
     typealias CapturedDataType = UIImage
 
@@ -415,7 +657,9 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
         }
         sheetController.analyticsClient.logCameraError(
             sheetController: sheetController,
-            error: error
+            error: error,
+            screenName: analyticsScreenName,
+            cameraSource: .cameraSession
         )
     }
 
@@ -428,7 +672,9 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
         }
         sheetController.analyticsClient.logCameraPermissionsChecked(
             sheetController: sheetController,
-            isGranted: isGranted
+            isGranted: isGranted,
+            screenName: analyticsScreenName,
+            cameraSource: .cameraSession
         )
     }
 
@@ -439,6 +685,7 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
     }
 
     func imageScanningSessionDidReset(_ scanningSession: DocumentImageScanningSession) {
+        latestCapturedCameraFrame = nil
         documentUploader.reset()
     }
 
@@ -446,15 +693,21 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
         _ scanningSession: DocumentImageScanningSession,
         didTimeoutForClassification documentSide: DocumentSide
     ) {
-        sheetController?.analyticsClient.logDocumentCaptureTimeout(
-            documentSide: documentSide
-        )
+        if let sheetController {
+            sheetController.analyticsClient.logDocumentCaptureTimeout(
+                documentSide: documentSide,
+                sheetController: sheetController
+            )
+        }
     }
 
     func imageScanningSession(
         _ scanningSession: DocumentImageScanningSession,
         willStartScanningForClassification documentSide: DocumentSide
     ) {
+        // Reset best-frame window when a new side starts
+        bestFramePicker.reset()
+        latestCapturedCameraFrame = nil
         // Focus the accessibility VoiceOver back onto the capture view
         UIAccessibility.post(notification: .layoutChanged, argument: self.documentCaptureView)
 
@@ -470,15 +723,21 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
         scanningSession.concurrencyManager.getPerformanceMetrics(completeOn: .main) {
             [weak sheetController] averageFPS, numFramesScanned in
             guard let averageFPS = averageFPS else { return }
-            sheetController?.analyticsClient.logAverageFramesPerSecond(
-                averageFPS: averageFPS,
-                numFrames: numFramesScanned,
-                scannerName: .document
+            if let sheetController {
+                sheetController.analyticsClient.logAverageFramesPerSecond(
+                    averageFPS: averageFPS,
+                    numFrames: numFramesScanned,
+                    scannerName: .document,
+                    sheetController: sheetController
+                )
+            }
+        }
+        if let sheetController {
+            sheetController.analyticsClient.logModelPerformance(
+                mlModelMetricsTrackers: scanningSession.scanner.mlModelMetricsTrackers,
+                sheetController: sheetController
             )
         }
-        sheetController?.analyticsClient.logModelPerformance(
-            mlModelMetricsTrackers: scanningSession.scanner.mlModelMetricsTrackers
-        )
     }
 
     func imageScanningSessionDidStopScanning(_ scanningSession: DocumentImageScanningSession) {
@@ -492,9 +751,23 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
         exifMetadata: CameraExifMetadata?,
         expectedClassification documentSide: DocumentSide
     ) {
+        let hadCapturedCameraFrame = latestCapturedCameraFrame != nil
+        latestCapturedCameraFrame = .init(
+            image: image,
+            scannerOutput: scannerOutputOptional,
+            exifMetadata: exifMetadata
+        )
+        guard !isManualCaptureMode else {
+            imageScanningSession.stopTimeoutTimer()
+            imageScanningSession.updateScanningState(nil)
+            if !hadCapturedCameraFrame {
+                updateUI()
+            }
+            return
+        }
         // If scanningState matches, but scannerOutputOptional is nil, it means the previous frame
         // is a match, but the current frame is not match, reset the timer.
-        if case let .scanning(_, idDetectorOutput?) = imageScanningSession.state, idDetectorOutput.classification.matchesDocument(side: documentSide) && scannerOutputOptional == nil {
+        if case let .scanning(_, documentScannerOutput) = imageScanningSession.state, documentScannerOutput?.matchesDocument(side: documentSide) == true && scannerOutputOptional == nil {
             imageScanningSession.startTimeoutTimer(expectedClassification: documentSide)
         }
 
@@ -504,24 +777,39 @@ extension DocumentCaptureViewController: ImageScanningSessionDelegate {
             scannerOutput.isHighQuality(side: documentSide)
         else {
             imageScanningSession.updateScanningState(
-                scannerOutputOptional?.idDetectorOutput
+                scannerOutputOptional
             )
             return
         }
 
-        documentUploader.uploadImages(
-            for: documentSide,
-            originalImage: image,
-            documentScannerOutput: scannerOutput,
-            exifMetadata: exifMetadata,
-            method: .autoCapture
-        )
-        sheetController?.analyticsClient.updateBlurScore(scannerOutput.blurResult.variance, for: documentSide)
+        // Combine all detector outputs into a single quality score for ranking
+        let frameScore = scannerOutput.qualityScore(side: documentSide)
 
-        imageScanningSession.setStateScanned(
-            expectedClassification: documentSide,
-            capturedData: UIImage(cgImage: image)
-        )
+        switch bestFramePicker.consider(cgImage: image,
+                                        output: scannerOutput,
+                                        exif: exifMetadata,
+                                        score: frameScore) {
+        case .idle, .holding:
+            imageScanningSession.updateScanningState(scannerOutputOptional)
+            return
+        case .picked(let best):
+            switch best.output {
+            case .legacy(_, _, _, _, let blurResult):
+                documentUploader.uploadImages(
+                    for: documentSide,
+                    originalImage: best.cgImage,
+                    documentScannerOutput: best.output,
+                    exifMetadata: best.exif,
+                    method: .autoCapture
+                )
+                sheetController?.analyticsClient.updateBlurScore(blurResult.variance, for: documentSide)
+
+                imageScanningSession.setStateScanned(
+                    expectedClassification: documentSide,
+                    capturedData: UIImage(cgImage: best.cgImage)
+                )
+            }
+        }
     }
 }
 
@@ -538,6 +826,8 @@ extension DocumentCaptureViewController: IdentityDataCollecting {
     }
 
     func reset() {
+        captureMode = .live
+        latestCapturedCameraFrame = nil
         imageScanningSession.reset(to: .front)
         clearCollectedFields()
         isDecidingBack = false

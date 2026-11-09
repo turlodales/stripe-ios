@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 let HTTPMethodPOST = "POST"
 let HTTPMethodGET = "GET"
@@ -16,11 +16,11 @@ let JSONKeyObject = "object"
 
 /// - Note: The shape of this class is only for backwards compatibility with `STPAPIResponseDecodable` public API bindings.
 ///         If you're not dealing with `STPAPIResponseDecodable` objects, use STPAPIClient's `get`, `post`, etc. methods.
-@_spi(STP) public class APIRequest<ResponseType: STPAPIResponseDecodable>: NSObject {
-    @_spi(STP) public typealias STPAPIResponseBlock = (ResponseType?, HTTPURLResponse?, Error?) ->
+@_spi(InternalOnlyAPI) public class APIRequest<ResponseType: STPAPIResponseDecodable>: NSObject {
+    @_spi(InternalOnlyAPI) public typealias STPAPIResponseBlock = (ResponseType?, HTTPURLResponse?, Error?) ->
         Void
 
-    @_spi(STP) public class func post(
+    @_spi(InternalOnlyAPI) public class func post(
         with apiClient: STPAPIClient,
         endpoint: String,
         additionalHeaders: [String: String] = [:],
@@ -38,14 +38,14 @@ let JSONKeyObject = "object"
         // Perform request
         apiClient.urlSession.stp_performDataTask(
             with: request as URLRequest,
-            completionHandler: { body, response, error in
-                self.parseResponse(response, body: body, error: error, completion: completion)
+            completionHandler: { [includeRequestIDInDescription = apiClient.shouldIncludeRequestIDInErrorDescription] body, response, error in
+                self.parseResponse(response, method: "POST", body: body, error: error, includeRequestIDInDescription: includeRequestIDInDescription, completion: completion)
             }
         )
     }
 
     /// Async version
-    @_spi(STP) public class func post(
+    @_spi(InternalOnlyAPI) public class func post(
         with apiClient: STPAPIClient,
         endpoint: String,
         additionalHeaders: [String: String] = [:],
@@ -62,11 +62,12 @@ let JSONKeyObject = "object"
         }
     }
 
-    @_spi(STP) public class func getWith(
+    @_spi(InternalOnlyAPI) public class func getWith(
         _ apiClient: STPAPIClient,
         endpoint: String,
         additionalHeaders: [String: String] = [:],
         parameters: [String: Any],
+        timeout: TimeInterval? = nil,
         completion: @escaping STPAPIResponseBlock
     ) {
         // Build url
@@ -77,24 +78,29 @@ let JSONKeyObject = "object"
         request.stp_addParameters(toURL: parameters)
         request.httpMethod = HTTPMethodGET
 
+        if let timeout {
+            request.timeoutInterval = timeout
+        }
+
         // Perform request
         apiClient.urlSession.stp_performDataTask(
             with: request as URLRequest,
-            completionHandler: { body, response, error in
-                self.parseResponse(response, body: body, error: error, completion: completion)
+            completionHandler: { [includeRequestIDInDescription = apiClient.shouldIncludeRequestIDInErrorDescription] body, response, error in
+                self.parseResponse(response, method: "GET", body: body, error: error, includeRequestIDInDescription: includeRequestIDInDescription, completion: completion)
             }
         )
     }
 
     /// Async version
-    @_spi(STP) public class func getWith(
+    @_spi(InternalOnlyAPI) public class func getWith(
         _ apiClient: STPAPIClient,
         endpoint: String,
         additionalHeaders: [String: String] = [:],
+        timeout: TimeInterval? = nil,
         parameters: [String: Any]
     ) async throws -> ResponseType {
         return try await withCheckedThrowingContinuation { continuation in
-            getWith(apiClient, endpoint: endpoint, additionalHeaders: additionalHeaders, parameters: parameters) { responseObject, _, error in
+            getWith(apiClient, endpoint: endpoint, additionalHeaders: additionalHeaders, parameters: parameters, timeout: timeout) { responseObject, _, error in
                 guard let responseObject else {
                     continuation.resume(throwing: error ?? NSError.stp_genericFailedToParseResponseError())
                     return
@@ -104,7 +110,7 @@ let JSONKeyObject = "object"
         }
     }
 
-    @_spi(STP) public class func delete(
+    @_spi(InternalOnlyAPI) public class func delete(
         with apiClient: STPAPIClient,
         endpoint: String,
         additionalHeaders: [String: String] = [:],
@@ -122,23 +128,22 @@ let JSONKeyObject = "object"
         // Perform request
         apiClient.urlSession.stp_performDataTask(
             with: request as URLRequest,
-            completionHandler: { body, response, error in
-                self.parseResponse(response, body: body, error: error, completion: completion)
+            completionHandler: { [includeRequestIDInDescription = apiClient.shouldIncludeRequestIDInErrorDescription] body, response, error in
+                self.parseResponse(response, method: "DELETE", body: body, error: error, includeRequestIDInDescription: includeRequestIDInDescription, completion: completion)
             }
         )
     }
 
     class func parseResponse(
         _ response: URLResponse?,
+        method: String,
         body: Data?,
         error: Error?,
+        includeRequestIDInDescription: Bool = false,
         completion: @escaping (ResponseType?, HTTPURLResponse?, Error?) -> Void
     ) {
         // Derive HTTP URL response
-        var httpResponse: HTTPURLResponse?
-        if response is HTTPURLResponse {
-            httpResponse = response as? HTTPURLResponse
-        }
+        let httpResponse = response as? HTTPURLResponse
 
         // Wrap completion block with main thread dispatch
         let safeCompletion: ((ResponseType?, Error?) -> Void) = { responseObject, responseError in
@@ -157,43 +162,31 @@ let JSONKeyObject = "object"
         if let body = body {
             do {
                 jsonDictionary =
-                    try JSONSerialization.jsonObject(with: body, options: []) as? [AnyHashable: Any]
+                try JSONSerialization.jsonObject(with: body, options: []) as? [AnyHashable: Any]
             } catch {
-
             }
         }
 
-        // HACK:
-        // STPEmptyStripeResponse will always parse successfully and never return an error, as we're
-        // not looking at the HTTP error code or the error dictionary.
-        // I'm afraid this will cause issues if anyone is depending on the old behavior, so let's treat
-        // STPEmptyStripeResponse as special.
-        // We probably always want errors to override object deserialization: re-evaluate
-        // this hack when building the new API client.
-        if ResponseType.self == STPEmptyStripeResponse.self {
-            if let error: Error =
-                NSError.stp_error(fromStripeResponse: jsonDictionary, httpResponse: httpResponse)
-            {
-                safeCompletion(nil, error)
-            } else if let responseObject = ResponseType.decodedObject(
-                fromAPIResponse: jsonDictionary
-            ) {
-                safeCompletion(responseObject, nil)
-            } else {
-                safeCompletion(nil, NSError.stp_genericFailedToParseResponseError())
-            }
-            return
+        #if DEBUG
+        if let httpResponse,
+           let requestId = httpResponse.value(forHTTPHeaderField: "request-id"),
+           let url = httpResponse.value(forKey: "URL") as? URL {
+            print("[Stripe SDK]: \(method) \"\(url.relativePath)\" \(httpResponse.statusCode) \(requestId)")
         }
-        // END OF STPEmptyStripeResponse HACK
+        #endif
 
-        if let responseObject = ResponseType.decodedObject(fromAPIResponse: jsonDictionary) {
+        if
+            let httpResponse, (200...299).contains(httpResponse.statusCode),
+            let responseObject = ResponseType.decodedObject(fromAPIResponse: jsonDictionary)
+        {
             safeCompletion(responseObject, nil)
         } else {
-            let error: Error =
-                NSError.stp_error(fromStripeResponse: jsonDictionary, httpResponse: httpResponse)
-                ?? NSError.stp_genericFailedToParseResponseError()
+            let error = NSError.stp_error(
+                fromStripeResponse: jsonDictionary,
+                httpResponse: httpResponse,
+                includeRequestIDInDescription: includeRequestIDInDescription
+            )
             safeCompletion(nil, error)
         }
     }
-
 }

@@ -5,23 +5,35 @@
 //  Created by David Estes on 4/13/22.
 //
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
 import Foundation
 import iOSSnapshotTestCase
-
-let TEST_DEVICE_MODEL = "iPhone13,1" // iPhone 12 mini
-let TEST_DEVICE_OS_VERSION = "16.4"
 
 open class STPSnapshotTestCase: FBSnapshotTestCase {
 
     open override func setUp() {
         super.setUp()
-        let deviceModel = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"]!
-        recordMode = ProcessInfo.processInfo.environment["STP_RECORD_SNAPSHOTS"] != nil
-        if deviceModel != TEST_DEVICE_MODEL || UIDevice.current.systemVersion != TEST_DEVICE_OS_VERSION {
-            continueAfterFailure = false
-            XCTFail("You must run snapshot tests on \(TEST_DEVICE_MODEL) running \(TEST_DEVICE_OS_VERSION). You are running these tests on a \(deviceModel) on \(UIDevice.current.systemVersion).")
+        recordMode = true
+    }
+
+    open override func getReferenceImageDirectory(withDefault dir: String?) -> String {
+        return ProcessInfo.processInfo.environment["SNAPSHOT_RECORD_DIR"] ?? "/tmp/snapshot-records"
+    }
+
+    open override func record(_ issue: XCTIssue) {
+        if recordMode && issue.compactDescription.contains("record mode") {
+            return
         }
+        super.record(issue)
+    }
+
+    var isIOS26: Bool {
+        let majorVersion = UIDevice.current.systemVersion.split(separator: ".").first.flatMap { Int($0) } ?? 0
+        #if compiler(>=6.2.1)
+        return majorVersion >= 26
+        #else
+        return false
+        #endif
     }
 
     // Calls FBSnapshotVerifyView with a default 2% per-pixel color differentiation, as M1 and Intel machines render shadows differently.
@@ -31,9 +43,19 @@ open class STPSnapshotTestCase: FBSnapshotTestCase {
         suffixes: NSOrderedSet = FBSnapshotTestCaseDefaultSuffixes(),
         perPixelTolerance: CGFloat = 0.02,
         overallTolerance: CGFloat = 0,
+        autoSizingHeightForWidth: CGFloat? = nil,
         file: StaticString = #file,
         line: UInt = #line
     ) {
+        let ios26Identifier = identifier.map { "\($0)_iOS26" } ?? "iOS26"
+        let identifier = isIOS26 ? ios26Identifier : identifier
+
+        if let autoSizingHeightForWidth {
+            view.autosizeHeight(width: autoSizingHeightForWidth)
+        }
+        if view.hasAmbiguousLayout {
+            XCTFail("Snapshot test failed: \(view.debugDescription) has ambiguous layout. \nHorizontal: \(view.constraintsAffectingLayout(for: .horizontal)) \nVertical: \(view.constraintsAffectingLayout(for: .vertical))", file: file, line: line)
+        }
         FBSnapshotVerifyView(
             view,
             identifier: identifier,
@@ -56,6 +78,7 @@ open class STPSnapshotTestCase: XCTestCase {
         suffixes: NSOrderedSet = NSOrderedSet(),
         perPixelTolerance: CGFloat = 0.02,
         overallTolerance: CGFloat = 0,
+        autoSizingHeightForWidth: CGFloat? = nil,
         file: StaticString = #file,
         line: UInt = #line
     ) {

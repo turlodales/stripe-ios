@@ -9,12 +9,11 @@ import Foundation
 import SwiftUI
 import UIKit
 
-@available(iOS 14.0, *)
 final class PlaygroundViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // create
-        let hostingController = UIHostingController(rootView: PlaygroundMainView())
+        let hostingController = UIHostingController(rootView: PlaygroundView())
 
         // add to subview
         view.addSubview(hostingController.view)

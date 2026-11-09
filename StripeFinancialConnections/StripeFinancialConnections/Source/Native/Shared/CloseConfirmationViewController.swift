@@ -6,14 +6,17 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class CloseConfirmationViewController: SheetViewController {
 
+    private let appearance: FinancialConnectionsAppearance
     private let didSelectClose: () -> Void
 
-    init(didSelectClose: @escaping () -> Void) {
+    init(appearance: FinancialConnectionsAppearance, didSelectClose: @escaping () -> Void) {
+        self.appearance = appearance
         self.didSelectClose = didSelectClose
         super.init()
     }
@@ -28,7 +31,9 @@ final class CloseConfirmationViewController: SheetViewController {
             withContentView: PaneLayoutView.createContentView(
                 iconView: RoundedIconView(
                     image: .image(.panel_arrow_right),
-                    style: .circle
+                    style: .circle,
+                    appearance: appearance,
+                    imageFlipsForRightToLeftLayoutDirection: true
                 ),
                 title: STPLocalizedString(
                     "Exit without connecting?",
@@ -43,7 +48,7 @@ final class CloseConfirmationViewController: SheetViewController {
             ),
             footerView: PaneLayoutView.createFooterView(
                 primaryButtonConfiguration: PaneLayoutView.ButtonConfiguration(
-                    title: "Cancel", // TODO: when Financial Connections starts supporting localization, change this to `String.Localized.cancel`
+                    title: String.Localized.cancel,
                     action: { [weak self] in
                         self?.dismiss(animated: true)
                     }
@@ -68,7 +73,8 @@ final class CloseConfirmationViewController: SheetViewController {
                             }
                         )
                     }
-                )
+                ),
+                appearance: appearance
             ).footerView
         )
     }

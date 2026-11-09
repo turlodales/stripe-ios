@@ -1,0 +1,205 @@
+# LLM-CONTEXT.md
+
+This file provides guidance to LLM-based coding agents when working with code in this repository.
+
+## Simulator Setup
+
+The test runner (`ci_scripts/run_tests.rb`) handles simulator setup automatically. `ci_scripts/setup_simulator.sh` selects the runtime for the active Xcode version: iOS 16.4 through Xcode 26 and iOS 18.5 with Xcode 27 and later.
+
+Invoke `ci_scripts/run_tests.rb` directly as shown below. Do not prefix it with `ruby` or `bundle exec`; the runner has no bundled dependencies, and direct invocation lets agent environments grant it the simulator access it needs.
+
+If simulator setup reports `CoreSimulatorService` connection failures or permission errors under `~/Library/Logs/CoreSimulator`, rerun the same direct command with permission to access CoreSimulator. These errors do not mean the requested runtime is missing.
+
+**If simulator issues occur**, clear the cache and retry:
+```bash
+./ci_scripts/setup_simulator.sh --clear-cache
+```
+
+## Build Commands
+
+### Test Runner
+
+`ci_scripts/run_tests.rb` is the primary way to run tests locally. It handles simulator setup, scheme resolution, and xcodebuild invocation.
+
+```bash
+# Run a single test (scheme is inferred from the target name)
+ci_scripts/run_tests.rb --test StripeCoreTests/URLEncoderTest/testQueryStringFromParameters
+
+# Run all tests for a specific scheme
+ci_scripts/run_tests.rb --scheme StripePaymentSheet
+
+# Run all framework tests
+ci_scripts/run_tests.rb --all
+
+# Record snapshot reference images and update if meaningfully different
+ci_scripts/record_snapshots.rb
+
+# Preview snapshot changes without updating reference images
+ci_scripts/record_snapshots.rb --dry-run
+
+# Record network responses (tests will fail during recording)
+ci_scripts/run_tests.rb --record-network --test StripePaymentsTests/STPCardFunctionalTest
+
+# Run UI tests
+ci_scripts/run_tests.rb --ui
+
+# Retry flaky tests (up to 5 times)
+ci_scripts/run_tests.rb --scheme StripeCore --retry
+
+# Preview the xcodebuild command without executing
+ci_scripts/run_tests.rb --scheme StripeCore --dry-run
+
+# Build without running tests
+ci_scripts/run_tests.rb --scheme StripePaymentSheet --build-only
+
+# Inspect failures from the last test run
+ci_scripts/run_tests.rb --failures
+
+# Inspect failures from a specific xcresult bundle
+ci_scripts/run_tests.rb --failures /path/to/result.xcresult
+
+# Use a custom result bundle path
+ci_scripts/run_tests.rb --scheme StripeCore --result-bundle-path /tmp/my-results.xcresult
+
+# Full usage
+ci_scripts/run_tests.rb --help
+```
+
+### iOS 26 Tests
+
+- Place the literal comment `// @iOS26` directly before an XCTest class to select all its test methods, or before an individual `func test…()` to select only that method for the additional iOS 26 run. This supports snapshot and behavioral tests; annotated tests still run in the normal older-iOS suite. Put Swift attributes such as `@MainActor` above the comment so the parser sees the declaration next.
+- `ci_scripts/generate_ios26_testplan.rb` generates `selectedTests` in `Stripe/AllStripeFrameworks-iOS26.xctestplan` from these comments. The `AllStripeFrameworks-iOS26` scheme runs it as a test pre-action, and Bitrise also runs it explicitly. Update annotations rather than hand-editing the generated selections.
+- For a targeted local run, set `DEVICE_ID_FROM_USER_SETTINGS` to an iOS 26 simulator UUID and use `ci_scripts/run_tests.rb --scheme AllStripeFrameworks-iOS26 --test Target/Class/testMethod`. The scheme alone does not override the runner's older default runtime.
+- `STPSnapshotVerifyView` automatically adds an `_iOS26` identifier on iOS 26+ when compiled with Swift 6.2.1+, keeping those reference images separate. CI records them through `ci_scripts/record_snapshots.rb --version 26.4.1`, which also uses the annotations to select tests.
+
+### Inspecting Test Failures
+
+When tests fail, the runner saves an xcresult bundle and prints an inspection hint. Use `--failures` to get a structured summary:
+
+```bash
+ci_scripts/run_tests.rb --failures
+```
+
+This prints:
+- Test summary with pass/fail/skip counts
+- Failure messages for each failed test
+- Re-run commands for each failed test
+- Paths to exported failure screenshot attachments
+
+**For LLM agents**: after a test failure, run `--failures` and view any exported screenshot paths. Analyzing the screenshots alongside the failure messages helps determine root cause (e.g. snapshot mismatches, unexpected UI state).
+
+### CI Commands (Fastlane)
+
+These are used by CI and can also be run locally:
+- **Run main tests**: `bundle exec fastlane stripeios_tests`
+- **Run StripeConnect tests**: `bundle exec fastlane stripeconnect_tests`
+- **Run all integration tests**: `bundle exec fastlane integration_all`
+- **Run 3DS2 tests**: `bundle exec fastlane threeds2_tests`
+
+### Manual xcodebuild
+
+When you need raw xcodebuild commands, always source the simulator setup first and suppress warnings for test targets:
+```bash
+source ci_scripts/setup_simulator.sh && xcodebuild test \
+  -workspace Stripe.xcworkspace \
+  -scheme StripePaymentSheet \
+  -destination "id=$DEVICE_ID_FROM_USER_SETTINGS,arch=arm64" \
+  -quiet SWIFT_SUPPRESS_WARNINGS=YES SWIFT_TREAT_WARNINGS_AS_ERRORS=NO
+```
+
+## Code Quality
+
+### Code Formatting and Linting
+The project has an automated hook (`.claude/settings.json`) that runs format and lint checks before every git commit or push. This ensures code quality standards are maintained automatically.
+
+If you need to run these checks manually:
+- **Format modified files**: `ci_scripts/format_modified_files.sh`
+- **Lint modified files**: `ci_scripts/lint_modified_files.sh`
+
+Do not write in code comments (such as file headers) that code was generated by an LLM.
+
+- Use `stpAssert`/`stpAssertionFailure` only for SDK-internal invariants that indicate a Stripe SDK bug or unreachable internal state, not for invalid merchant input, unsupported public configuration, or integration misuse. For merchant-facing issues, use Swift `assert`/`assertionFailure` or return/throw the appropriate integration error.
+- The `InternalOnlyAPI` SPI (`@_spi(InternalOnlyAPI)`) is used to expose APIs to other Stripe modules, never to external users of the SDK. Accordingly, treat `@_spi(InternalOnlyAPI) public` APIs as non-public for most intents and purposes.
+
+**Branch Requirements**: If you are on the `master` branch, you MUST check out a new branch before making commits.
+
+### Filing PRs
+When using the GitHub `gh` command, ALWAYS set `GH_HOST=github.com`. For example: `GH_HOST=github.com gh pr create --title [...]`
+
+In the PR description's `## Testing` section:
+
+- If no new test coverage was added, write `No new tests.`
+- If new test coverage was added, describe each new test in plain, simple English.
+- Don't use test commands or test names as the test description.
+
+### Changelog Entries
+Record only non-negligible user-facing changes in the CHANGELOG (`StripeInternal` SPIs are considered non-public APIs and users don't use them). If you are not sure if something belongs in the CHANGELOG, use existing entries as a standard and err on the side of including. However, always ask for confirmation before adding a CHANGELOG entry. Use the Dante skill to write CHANGELOG entries.
+
+## Project Architecture
+
+### Module Structure
+The Stripe iOS SDK is organized as a multi-module framework with clear dependency hierarchies:
+
+**Core Dependencies:**
+- `StripeCore` - Foundational networking, utilities, analytics
+- `StripeUICore` - Shared UI components and themes
+- `Stripe3DS2` - 3D Secure 2.0 authentication
+
+**Payment Modules:**
+- `StripePayments` - Core payment APIs (depends on StripeCore, Stripe3DS2)
+- `StripePaymentsUI` - Payment UI components (depends on StripePayments, StripeUICore)
+- `StripePaymentSheet` - Prebuilt payment flow (depends on StripePaymentsUI, StripeApplePay). (This is the main product we work on.)
+- `StripeApplePay` - Apple Pay integration (depends on StripeCore)
+
+**Specialized Modules:**
+- `StripeIdentity` - Identity verification (depends on StripeCore, StripeUICore, StripeCameraCore)
+- `StripeFinancialConnections` - Bank account linking (depends on StripeCore, StripeUICore)
+- `StripeConnect` - Connect embedded components (depends on StripeCore, StripeUICore, StripeFinancialConnections)
+- `StripeCardScan` - Card scanning functionality (depends on StripeCore)
+
+**Legacy Stripe Module:**
+- `Stripe` - Legacy umbrella framework including most modules plus additional issuing features.
+
+### Key Workspaces and Projects
+- **Main workspace**: `Stripe.xcworkspace` - Contains all modules and examples
+- **Individual projects**: Each module has its own `.xcodeproj`
+- **Test configurations**: Located in `BuildConfigurations/` directories
+
+### Package Manager Support
+- **Swift Package Manager**: Defined in `Package.swift` with iOS 13+ minimum deployment
+- **CocoaPods**: Individual `.podspec` files for each module
+
+## Development Workflow
+
+### Requirements
+- Xcode 15+ required
+- iOS 13+ minimum deployment target
+- Bundle/Fastlane for automation
+
+### Testing Strategy
+- Comprehensive unit tests for each module in corresponding `*Tests/` directories
+- Snapshot tests for UI components using FBSnapshotTestCase; always record to a temp dir, CI auto-commits meaningful changes via `ci_scripts/record_snapshots.rb`
+- Integration tests with real backend APIs (marked as functional tests)
+- Example apps for manual testing in `Example/` directory
+- When adding/rewriting tests, use `// Given <setup>` / `// When <action>` / `// Then <assertion>` comments where helpful. You may use `// ...and <other setup/action/assertion>` when a section of code is doing multiple things to avoid having a single comment explain too much code.
+
+### Dependencies Installation
+Run `bundle install && bundle exec fastlane stripeios_tests` initially to install test dependencies.
+
+### Special Testing Notes
+- Legacy iOS versions: Separate fastlane lanes for iOS 13-16 compatibility testing
+
+### Acronyms and Terms
+- AP = Adaptive Pricing
+- CS = Checkout Session (`CheckoutSession`), the server-backed source of truth for checkout state, or Customer Session (`CustomerSession`), depending on context
+- Mobile Checkout Elements (also Checkout Elements) = the native Checkout Session integration for composing a checkout from Stripe Elements and merchant-owned UI
+- Checkout SDK / `CheckoutElementsController` = the client-side coordinator that loads and observes a CS, serializes updates from the merchant and Elements, exposes session state, and confirms the checkout
+- ECE = Express Checkout Element, the element for one-click payment methods such as Apple Pay and Google Pay outside of Payment Element
+- EPE = EmbeddedPaymentElement
+- PE = Payment Element; in Checkout Elements, this is a single payment-method collection surface that can be embedded or presented as a sheet
+- PS.FC = FlowController (PaymentSheet.FlowController)
+- FC = FinancialConnections, or occasionally FlowController (see above)
+- MPE = Mobile Payment Element, an umbrella term for EmbeddedPaymentElement, PaymentSheet, and FlowController
+- AE = Address Element; SAE = Shipping Address Element
+- CSE = Currency Selector Element, the Adaptive Pricing currency control
+- SPM = Saved Payment Method

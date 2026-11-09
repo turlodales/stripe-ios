@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol PhoneCountryCodePickerViewDelegate: AnyObject {
@@ -180,13 +180,11 @@ private struct PhoneCountryCodePickerViewUIViewRepresentable: UIViewRepresentabl
 
 struct PhoneCountryCodePickerView_Previews: PreviewProvider {
     static var previews: some View {
-        if #available(iOS 14.0, *) {
-            VStack(spacing: 0) {
-                PhoneCountryCodePickerViewUIViewRepresentable()
-                Spacer()
-            }
-            .padding(.horizontal, 40)
+        VStack(spacing: 0) {
+            PhoneCountryCodePickerViewUIViewRepresentable()
+            Spacer()
         }
+        .padding(.horizontal, 40)
     }
 }
 

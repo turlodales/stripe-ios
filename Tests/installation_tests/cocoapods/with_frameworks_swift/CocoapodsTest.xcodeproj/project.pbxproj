@@ -23,6 +23,7 @@
 		4742C059F665CFC7DCA1F5E7 /* Pods_CocoapodsTestTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CB77BD5684F4D2D9A0D0C84 /* Pods_CocoapodsTestTests.framework */; };
 		97B81EE096E3ACE2BD4586CB /* Pods_CocoapodsTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 10A8A8E54E50DA92954DBD23 /* Pods_CocoapodsTest.framework */; };
 		C2984D60341022E6C81D522A /* Pods_TestExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D211A1CC8B6956EC39B892D1 /* Pods_TestExtension.framework */; };
+		D96BB31F9D486F5E8FEDD716 /* Stripe3DS2LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AD6C8042BE99BB30F0B2E9 /* Stripe3DS2LocalizationTests.swift */; };
 		E63B8ECE27DDBA49000A7243 /* StripeIdentityAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E63B8ECD27DDBA49000A7243 /* StripeIdentityAssetTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -89,6 +90,7 @@
 		DBBB45F516CB66B33ABB66D4 /* Pods-TestExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TestExtension.release.xcconfig"; path = "Target Support Files/Pods-TestExtension/Pods-TestExtension.release.xcconfig"; sourceTree = "<group>"; };
 		E63B8ECD27DDBA49000A7243 /* StripeIdentityAssetTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = StripeIdentityAssetTests.swift; path = ../../../shared_unit_tests/StripeIdentity/StripeIdentityAssetTests.swift; sourceTree = "<group>"; };
 		F036394C53326F3BEFC7635B /* Pods-CocoapodsTestTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CocoapodsTestTests.release.xcconfig"; path = "Target Support Files/Pods-CocoapodsTestTests/Pods-CocoapodsTestTests.release.xcconfig"; sourceTree = "<group>"; };
+		F2AD6C8042BE99BB30F0B2E9 /* Stripe3DS2LocalizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Stripe3DS2LocalizationTests.swift; path = ../../shared_unit_tests/Stripe3DS2/Stripe3DS2LocalizationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +131,7 @@
 				04E6FCB41B714933000C8759 /* Products */,
 				F9BDE2672C6EFAED4A918CA1 /* Frameworks */,
 				A5DE36B429DC025494B62E88 /* Pods */,
+				F2AD6C8042BE99BB30F0B2E9 /* Stripe3DS2LocalizationTests.swift */,
 			);
 			sourceTree = "<group>";
 			wrapsLines = 0;
@@ -372,9 +375,11 @@
 				"${BUILT_PRODUCTS_DIR}/StripeApplePay/StripeApplePay.framework",
 				"${BUILT_PRODUCTS_DIR}/StripeCameraCore/StripeCameraCore.framework",
 				"${BUILT_PRODUCTS_DIR}/StripeCardScan/StripeCardScan.framework",
+				"${BUILT_PRODUCTS_DIR}/StripeConnect/StripeConnect.framework",
 				"${BUILT_PRODUCTS_DIR}/StripeCore/StripeCore.framework",
 				"${BUILT_PRODUCTS_DIR}/StripeFinancialConnections/StripeFinancialConnections.framework",
 				"${BUILT_PRODUCTS_DIR}/StripeIdentity/StripeIdentity.framework",
+				"${BUILT_PRODUCTS_DIR}/StripeIssuing/StripeIssuing.framework",
 				"${BUILT_PRODUCTS_DIR}/StripePaymentSheet/StripePaymentSheet.framework",
 				"${BUILT_PRODUCTS_DIR}/StripePayments/StripePayments.framework",
 				"${BUILT_PRODUCTS_DIR}/StripePaymentsUI/StripePaymentsUI.framework",
@@ -386,9 +391,11 @@
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeApplePay.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeCameraCore.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeCardScan.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeConnect.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeCore.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeFinancialConnections.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeIdentity.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripeIssuing.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripePaymentSheet.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripePayments.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/StripePaymentsUI.framework",
@@ -485,6 +492,7 @@
 				E63B8ECE27DDBA49000A7243 /* StripeIdentityAssetTests.swift in Sources */,
 				317C500127604CA8003771D7 /* PodAnalyticsTests.swift in Sources */,
 				3B9672E227414B070027F66A /* ModelTests.swift in Sources */,
+				D96BB31F9D486F5E8FEDD716 /* Stripe3DS2LocalizationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -584,7 +592,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 8.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -630,7 +638,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 8.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
@@ -646,7 +654,7 @@
 				DEVELOPMENT_TEAM = Y28TH9SHX7;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				INFOPLIST_FILE = CocoapodsTest/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jflinter.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -663,7 +671,7 @@
 				DEVELOPMENT_TEAM = Y28TH9SHX7;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				INFOPLIST_FILE = CocoapodsTest/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jflinter.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -682,7 +690,7 @@
 					"$(inherited)",
 				);
 				INFOPLIST_FILE = CocoapodsTestTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jflinter.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -698,7 +706,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				INFOPLIST_FILE = CocoapodsTestTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jflinter.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";

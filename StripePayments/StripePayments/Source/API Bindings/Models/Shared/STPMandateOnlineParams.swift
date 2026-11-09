@@ -19,7 +19,10 @@ public class STPMandateOnlineParams: NSObject {
 
     @objc public var additionalAPIParameters: [AnyHashable: Any] = [:]
 
-    @objc @_spi(STP) public var inferFromClient: NSNumber?
+    @objc @_spi(InternalOnlyAPI) public var inferFromClient: NSNumber?
+
+    /// :nodoc:
+    @objc private(set) public var allResponseFields: [AnyHashable: Any] = [:]
 
     /// Initializes an STPMandateOnlineParams.
     /// - Parameter ipAddress: The IP address from which the Mandate was accepted by the customer.
@@ -32,6 +35,19 @@ public class STPMandateOnlineParams: NSObject {
     ) {
         self.ipAddress = ipAddress
         self.userAgent = userAgent
+        self.allResponseFields = [:]
+        super.init()
+    }
+
+    /// Internal initializer for decoded objects
+    internal init(
+        ipAddress: String,
+        userAgent: String,
+        allResponseFields: [AnyHashable: Any]
+    ) {
+        self.ipAddress = ipAddress
+        self.userAgent = userAgent
+        self.allResponseFields = allResponseFields
         super.init()
     }
 }
@@ -64,5 +80,24 @@ extension STPMandateOnlineParams: STPFormEncodable {
     @objc
     public class func rootObjectName() -> String? {
         return "online"
+    }
+}
+
+extension STPMandateOnlineParams: STPAPIResponseDecodable {
+    @objc
+    @_spi(InternalOnlyAPI) public static func decodedObject(fromAPIResponse response: [AnyHashable: Any]?) -> Self? {
+        guard let response = response else {
+            return nil
+        }
+        let dict = response.stp_dictionaryByRemovingNulls()
+
+        let ipAddress = dict.stp_string(forKey: "ip_address") ?? ""
+        let userAgent = dict.stp_string(forKey: "user_agent") ?? ""
+
+        return STPMandateOnlineParams(
+            ipAddress: ipAddress,
+            userAgent: userAgent,
+            allResponseFields: response
+        ) as? Self
     }
 }

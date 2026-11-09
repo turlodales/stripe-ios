@@ -6,11 +6,11 @@
 //  Copyright © 2019 Stripe, Inc. All rights reserved.
 //
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPThreeDSUICustomizationTest: XCTestCase {
     func testPropertiesPassedThrough() {
@@ -116,14 +116,14 @@ class STPThreeDSUICustomizationTest: XCTestCase {
 
         // Other
         customization.backgroundColor = UIColor.red
-        customization.activityIndicatorViewStyle = UIActivityIndicatorView.Style.whiteLarge
+        customization.activityIndicatorViewStyle = UIActivityIndicatorView.Style.large
         customization.blurStyle = UIBlurEffect.Style.dark
 
         XCTAssertEqual(UIColor.red, customization.backgroundColor)
         XCTAssertEqual(customization.backgroundColor, customization.uiCustomization.backgroundColor)
 
         XCTAssertEqual(
-            UIActivityIndicatorView.Style.whiteLarge,
+            UIActivityIndicatorView.Style.large,
             customization.activityIndicatorViewStyle
         )
         XCTAssertEqual(

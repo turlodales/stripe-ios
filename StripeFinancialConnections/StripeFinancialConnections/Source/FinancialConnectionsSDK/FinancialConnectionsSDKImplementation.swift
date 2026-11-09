@@ -5,13 +5,13 @@
 //  Created by Vardges Avetisyan on 2/24/22.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
 /**
  NOTE: If you change the name of this class, make sure to also change it FinancialConnectionsSDKAvailability file
  */
-@_spi(STP)
+@_spi(InternalOnlyAPI)
 public class FinancialConnectionsSDKImplementation: FinancialConnectionsSDKInterface {
 
     required public init() {}
@@ -20,42 +20,71 @@ public class FinancialConnectionsSDKImplementation: FinancialConnectionsSDKInter
         apiClient: STPAPIClient,
         clientSecret: String,
         returnURL: String?,
+        existingConsumer: FinancialConnectionsConsumer?,
+        hasRequestedDataPermissions: Bool,
+        style: FinancialConnectionsStyle,
+        elementsSessionContext: ElementsSessionContext?,
+        preCollectedConsent: FinancialConnectionsPreCollectedConsent?,
+        linkBrand: LinkBrand?,
         onEvent: ((StripeCore.FinancialConnectionsEvent) -> Void)?,
         from presentingViewController: UIViewController,
         completion: @escaping (FinancialConnectionsSDKResult) -> Void
     ) {
+        var configuration = FinancialConnectionsSheet.Configuration()
+        switch style {
+        case .automatic: configuration.style = .automatic
+        case .alwaysLight: configuration.style = .alwaysLight
+        case .alwaysDark: configuration.style = .alwaysDark
+        }
+        configuration.linkBrand = linkBrand
+
         let financialConnectionsSheet = FinancialConnectionsSheet(
             financialConnectionsSessionClientSecret: clientSecret,
-            returnURL: returnURL
+            returnURL: returnURL,
+            configuration: configuration
         )
         financialConnectionsSheet.apiClient = apiClient
+        financialConnectionsSheet.existingConsumer = existingConsumer
+        financialConnectionsSheet.hasRequestedDataPermissions = hasRequestedDataPermissions
+        financialConnectionsSheet.elementsSessionContext = elementsSessionContext
+        financialConnectionsSheet.preCollectedConsent = preCollectedConsent
         financialConnectionsSheet.onEvent = onEvent
+
         // Captures self explicitly until the callback is invoked
         financialConnectionsSheet.present(
             from: presentingViewController,
             completion: { result in
                 switch result {
-                case .completed(let session):
-                    guard let paymentAccount = session.paymentAccount else {
-                        completion(
-                            .failed(
-                                error: FinancialConnectionsSheetError.unknown(
-                                    debugDescription: "PaymentAccount is not set on FinancialConnectionsSession"
+                case .completed(let hostControllerResult):
+                    switch hostControllerResult {
+                    case .financialConnections(let session):
+                        guard let paymentAccount = session.paymentAccount else {
+                            completion(
+                                .failed(
+                                    error: FinancialConnectionsSheetError.unknown(
+                                        debugDescription: "PaymentAccount is not set on FinancialConnectionsSession"
+                                    )
                                 )
                             )
-                        )
-                        return
-                    }
-                    if let linkedBank = self.linkedBankFor(paymentAccount: paymentAccount, session: session) {
-                        completion(.completed(linkedBank: linkedBank))
-                    } else {
-                        completion(
-                            .failed(
-                                error: FinancialConnectionsSheetError.unknown(
-                                    debugDescription: "Unknown PaymentAccount is set on FinancialConnectionsSession"
+                            return
+                        }
+                        if let linkedBank = self.linkedBankFor(paymentAccount: paymentAccount, session: session) {
+                            completion(.completed(.financialConnections(linkedBank)))
+                        } else {
+                            completion(
+                                .failed(
+                                    error: FinancialConnectionsSheetError.unknown(
+                                        debugDescription: "Unknown PaymentAccount is set on FinancialConnectionsSession"
+                                    )
                                 )
                             )
-                        )
+                        }
+                    case .instantDebits(let instantDebitsLinkedBank):
+                        completion(.completed(.instantDebits(instantDebitsLinkedBank)))
+                    case .linkedAccount(let id):
+                        completion(.completed(.linkedAccount(id: id)))
+                    case .paymentDetails(let id):
+                        completion(.completed(.paymentDetails(id: id)))
                     }
                 case .canceled:
                     completion(.cancelled)
@@ -71,11 +100,11 @@ public class FinancialConnectionsSDKImplementation: FinancialConnectionsSDKInter
     private func linkedBankFor(
         paymentAccount: StripeAPI.FinancialConnectionsSession.PaymentAccount,
         session: StripeAPI.FinancialConnectionsSession
-    ) -> LinkedBank? {
+    ) -> FinancialConnectionsLinkedBank? {
         switch paymentAccount {
         case .linkedAccount(let linkedAccount):
-            return LinkedBankImplementation(
-                with: session.id,
+            return FinancialConnectionsLinkedBank(
+                sessionId: session.id,
                 accountId: linkedAccount.id,
                 displayName: linkedAccount.displayName,
                 bankName: linkedAccount.institutionName,
@@ -83,43 +112,16 @@ public class FinancialConnectionsSDKImplementation: FinancialConnectionsSDKInter
                 instantlyVerified: true
             )
         case .bankAccount(let bankAccount):
-            return LinkedBankImplementation(
-                with: session.id,
+            return FinancialConnectionsLinkedBank(
+                sessionId: session.id,
                 accountId: bankAccount.id,
                 displayName: bankAccount.bankName,
                 bankName: bankAccount.bankName,
                 last4: bankAccount.last4,
-                instantlyVerified: false
+                instantlyVerified: bankAccount.instantlyVerified
             )
         case .unparsable:
             return nil
         }
-    }
-
-}
-
-// MARK: - LinkedBank Implementation
-struct LinkedBankImplementation: LinkedBank {
-    public let sessionId: String
-    public let accountId: String
-    public let displayName: String?
-    public let bankName: String?
-    public let last4: String?
-    public let instantlyVerified: Bool
-
-    public init(
-        with sessionId: String,
-        accountId: String,
-        displayName: String?,
-        bankName: String?,
-        last4: String?,
-        instantlyVerified: Bool
-    ) {
-        self.sessionId = sessionId
-        self.accountId = accountId
-        self.displayName = displayName
-        self.bankName = bankName
-        self.last4 = last4
-        self.instantlyVerified = instantlyVerified
     }
 }

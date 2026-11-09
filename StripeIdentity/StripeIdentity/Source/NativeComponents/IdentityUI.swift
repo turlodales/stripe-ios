@@ -6,8 +6,8 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// Stores common UI values used throughout Identity
@@ -19,8 +19,28 @@ struct IdentityUI {
         preferredFont(forTextStyle: .title1, weight: .bold)
     }
 
+    private static let bodyFontSize: CGFloat = 16
+
+    static var bodyFont: UIFont {
+        bodyFont(withWeight: .regular)
+    }
+
+    static func bodyFont(withWeight weight: UIFont.Weight) -> UIFont {
+        let font: UIFont
+        if let customFont = UILabel.appearance().font {
+            let descriptor = customFont.fontDescriptor.addingAttributes([
+                .traits: [UIFontDescriptor.TraitKey.weight: weight],
+            ])
+            font = UIFont(descriptor: descriptor, size: bodyFontSize)
+        } else {
+            font = UIFont.systemFont(ofSize: bodyFontSize, weight: weight)
+        }
+
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font)
+    }
+
     static var instructionsFont: UIFont {
-        preferredFont(forTextStyle: .subheadline)
+        bodyFont
     }
 
     static func preferredFont(
@@ -75,10 +95,10 @@ struct IdentityUI {
     static let scanningViewLabelMinHeightNumberOfLines: Int = 3
     static let scanningViewLabelBottomPadding: CGFloat = 24
 
-    static let identityElementsUITheme: ElementsUITheme = {
-        var identityElementsUITheme = ElementsUITheme.default
+    static let identityElementsUITheme: ElementsAppearance = {
+        var identityElementsUITheme = ElementsAppearance.default
 
-        var fonts = ElementsUITheme.Font()
+        var fonts = ElementsAppearance.Font()
         fonts.subheadline = preferredFont(forTextStyle: .body).withSize(14)
         fonts.subheadlineBold = preferredFont(forTextStyle: .body, weight: .bold).withSize(14)
         fonts.sectionHeader = preferredFont(forTextStyle: .body, weight: .semibold).withSize(13)

@@ -19,6 +19,7 @@
       ],
       "privacy_policy": "<a href='https://stripe.com/privacy'>Stripe Privacy Policy</a> • <a href='https://aywang.me'>Andrew's Audio Privacy Policy</a>",
       "scroll_to_continue_button_text": "Scroll to continue",
+      "subtitle": "Complete a one-time identity check to enable withdrawals.",
       "time_estimate": null,
       "title": "Continue Document Verification"
     },
@@ -186,6 +187,8 @@
       "title": "Andrew's Audio works with Stripe to verify your identity"
     },
     "id": "VS_123",
+    "is_stripe": false,
+    "skip_success_page": false,
     "livemode": true,
     "object": "identity.verification_page",
     "requirements": {
@@ -216,6 +219,7 @@
         },
         "num_samples": 8,
         "sample_interval": 250,
+        "decline_and_continue_button_text": "Decline and continue",
         "training_consent_text": "Allow Stripe to use your images to improve our biometric verification technology. You can remove Stripe's permissions at any time by contacting Stripe. <a href='https://stripe.com/privacy-center/legal#stripe-identity'>Learn how Stripe uses data</a>"
     },
     "status": "requires_input",
@@ -225,5 +229,15 @@
         "button_text": "Complete",
         "title": "Verification pending"
     },
-    "unsupported_client": false
+    "unsupported_client": false,
+    "user_session_id": "testUserSession",
+    "experiments": [
+      {
+          "experiment_name": "experiment1",
+          "event_name": "screen_presented",
+          "event_metadata": {
+              "screen_name": "live_capture"
+          }
+      }
+    ]
 }

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 protocol FinancialConnectionsAccountFetcher {
     func fetchAccounts(
@@ -18,12 +18,12 @@ class FinancialConnectionsAccountAPIFetcher: FinancialConnectionsAccountFetcher 
 
     // MARK: - Properties
 
-    private let api: FinancialConnectionsAPIClient
+    private let api: FinancialConnectionsAPI
     private let clientSecret: String
 
     // MARK: - Init
 
-    init(api: FinancialConnectionsAPIClient, clientSecret: String) {
+    init(api: FinancialConnectionsAPI, clientSecret: String) {
         self.api = api
         self.clientSecret = clientSecret
     }

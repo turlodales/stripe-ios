@@ -8,31 +8,31 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class AnalyticsHelperTests: XCTestCase {
 
     func test_getDuration() {
         let (sut, timeReference) = makeSUT()
 
-        sut.startTimeMeasurement(.checkout)
+        sut.startTimeMeasurement(.linkPopup)
 
         // Advance the clock by 10 seconds.
         timeReference.advanceBy(10)
-        XCTAssertEqual(sut.getDuration(for: .checkout), 10)
+        XCTAssertEqual(sut.getDuration(for: .linkPopup), 10)
 
         // Advance the clock by 5 seconds.
         timeReference.advanceBy(5)
-        XCTAssertEqual(sut.getDuration(for: .checkout), 15)
+        XCTAssertEqual(sut.getDuration(for: .linkPopup), 15)
     }
 
     func test_getDuration_returnsNilWhenNotStarted() {
         let (sut, _) = makeSUT()
-        XCTAssertNil(sut.getDuration(for: .checkout))
+        XCTAssertNil(sut.getDuration(for: .linkPopup))
     }
 
 }

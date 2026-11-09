@@ -7,8 +7,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 
 /// Factory to create form elements needed for the 'Individual' screen of the
 /// Identity flow where the user is asked to enter additional personal information.
@@ -94,6 +94,7 @@ struct IdentityElementsFactory {
             countries: countries,
             locale: locale,
             addressSpecProvider: addressSpecProvider,
+            disableAutocomplete: true,
             theme: IdentityUI.identityElementsUITheme
         )
     }
@@ -117,7 +118,8 @@ extension IDNumberTextFieldConfiguration {
     ) {
         self.init(
             type: spec?.type,
-            label: spec?.label ?? String.Localized.personal_id_number
+            label: spec?.label ?? String.Localized.personal_id_number,
+            defaultValue: nil
         )
     }
 }

@@ -6,14 +6,17 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class RoundedIconView: UIView {
 
     enum ImageType {
+        /// A local image. Images live in `/Resources/Images`, and defined in `/Source/Helpers/Image.swift`.
         case image(Image)
-        case imageUrl(String?)
+
+        /// A remote image from a given URL, and an optional local image to use as a placeholder.
+        case imageUrl(String?, placeholder: Image? = nil)
     }
 
     enum Style {
@@ -21,7 +24,12 @@ final class RoundedIconView: UIView {
         case circle
     }
 
-    init(image: ImageType, style: Style) {
+    init(
+        image: ImageType,
+        style: Style,
+        appearance: FinancialConnectionsAppearance,
+        imageFlipsForRightToLeftLayoutDirection: Bool = false
+    ) {
         super.init(frame: .zero)
         let diameter: CGFloat = 56
         let cornerRadius: CGFloat
@@ -32,7 +40,7 @@ final class RoundedIconView: UIView {
             cornerRadius = diameter / 2
         }
 
-        backgroundColor = .brand25
+        backgroundColor = appearance.colors.iconBackground
         layer.cornerRadius = cornerRadius
 
         translatesAutoresizingMaskIntoConstraints = false
@@ -42,16 +50,19 @@ final class RoundedIconView: UIView {
         ])
 
         let iconImageView = UIImageView()
-        iconImageView.tintColor = .iconActionPrimary
+        iconImageView.tintColor = appearance.colors.iconTint
         switch image {
         case .image(let image):
             iconImageView.image = image.makeImage(template: true)
-        case .imageUrl(let imageUrl):
+        case .imageUrl(let imageUrl, let placeholder):
             iconImageView.setImage(
                 with: imageUrl,
-                placeholder: nil,
+                placeholder: placeholder?.makeImage(template: true),
                 useAlwaysTemplateRenderingMode: true
             )
+        }
+        if imageFlipsForRightToLeftLayoutDirection {
+            iconImageView.image = iconImageView.image?.imageFlippedForRightToLeftLayoutDirection()
         }
         addSubview(iconImageView)
         iconImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -76,11 +87,13 @@ private struct RoundedIconViewUIViewRepresentable: UIViewRepresentable {
 
     let image: Image
     let style: RoundedIconView.Style
+    let appearance: FinancialConnectionsAppearance
 
     func makeUIView(context: Context) -> RoundedIconView {
         RoundedIconView(
             image: .image(image),
-            style: style
+            style: style,
+            appearance: appearance
         )
     }
 
@@ -95,13 +108,29 @@ struct RoundedIconView_Previews: PreviewProvider {
 
                 RoundedIconViewUIViewRepresentable(
                     image: .search,
-                    style: .rounded
+                    style: .rounded,
+                    appearance: .stripe
+                )
+                .frame(width: 56, height: 56)
+
+                RoundedIconViewUIViewRepresentable(
+                    image: .search,
+                    style: .rounded,
+                    appearance: .link
                 )
                 .frame(width: 56, height: 56)
 
                 RoundedIconViewUIViewRepresentable(
                     image: .cancel_circle,
-                    style: .circle
+                    style: .circle,
+                    appearance: .stripe
+                )
+                .frame(width: 56, height: 56)
+
+                RoundedIconViewUIViewRepresentable(
+                    image: .cancel_circle,
+                    style: .circle,
+                    appearance: .link
                 )
                 .frame(width: 56, height: 56)
 

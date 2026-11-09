@@ -9,11 +9,11 @@ import StripeCoreTestUtils
 import UIKit
 import XCTest
 
-@_spi(STP)@testable import StripeCore
-@_spi(STP) @testable import StripePayments
-@_spi(STP) @testable import StripePaymentSheet
-@_spi(STP) @testable import StripePaymentsUI
-@_spi(STP)@testable import StripeUICore
+@_spi(InternalOnlyAPI)@testable import StripeCore
+@_spi(InternalOnlyAPI) @testable import StripePayments
+@_spi(AppearanceAPIAdditionsPreview) @_spi(InternalOnlyAPI) @testable import StripePaymentSheet
+@_spi(InternalOnlyAPI) @testable import StripePaymentsUI
+@_spi(InternalOnlyAPI)@testable import StripeUICore
 
 // For backend example
 class StubCustomerAdapter: CustomerAdapter {
@@ -53,12 +53,7 @@ class StubCustomerAdapter: CustomerAdapter {
 
 class CustomerSheetSnapshotTests: STPSnapshotTestCase {
 
-    private let backendCheckoutUrl = URL(
-        string: "https://stripe-mobile-payment-sheet-test-playground-v6.glitch.me/checkout"
-    )!
-
     private var cs: CustomerSheet!
-
     private var window: UIWindow {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 428, height: 1026))
         window.isHidden = false
@@ -81,6 +76,16 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         verify(cs.bottomSheetViewController.view!)
     }
 
+    func testRightToLeft() {
+        stubSessions(paymentMethods: "\"card\"")
+        prepareCS(configuration: configuration())
+        presentCS(darkMode: false)
+        let view = cs.bottomSheetViewController.view!
+        view.forceRightToLeftLayout()
+        view.layoutIfNeeded()
+        verify(view)
+    }
+
     func testNoSavedPMsDarkMode() {
         stubSessions(paymentMethods: "\"card\"")
         prepareCS(configuration: configuration())
@@ -91,6 +96,15 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
     func testNoSavedPMsCustomAppearance() {
         stubSessions(paymentMethods: "\"card\"")
         prepareCS(configuration: configuration(appearance: .snapshotTestTheme))
+        presentCS(darkMode: false)
+        verify(cs.bottomSheetViewController.view!)
+    }
+
+    func testNoSavedPMsCustomSectionSpacing() {
+        stubSessions(paymentMethods: "\"card\"")
+        var appearance = PaymentSheet.Appearance()
+        appearance.sectionSpacing = 40.0
+        prepareCS(configuration: configuration(appearance: appearance))
         presentCS(darkMode: false)
         verify(cs.bottomSheetViewController.view!)
     }
@@ -464,6 +478,7 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         return STPPaymentMethod.decodedObject(fromAPIResponse: [
             "id": "pm_123card",
             "type": "card",
+            "created": "12345",
             "card": [
                 "last4": "4242",
                 "brand": "visa",
@@ -478,6 +493,18 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         prepareCS(configuration: configuration(applePayEnabled: true), customerAdapter: customerAdapter)
         presentCS(darkMode: false)
         verify(cs.bottomSheetViewController.view!)
+    }
+
+    func testOneSavedCardPMRightToLeft() {
+        stubSessions(paymentMethods: "\"card\"")
+        let customerAdapter = StubCustomerAdapter()
+        customerAdapter.paymentMethods = [stubbedPaymentMethod()]
+        prepareCS(configuration: configuration(applePayEnabled: true), customerAdapter: customerAdapter)
+        presentCS(darkMode: false)
+        let view = cs.bottomSheetViewController.view!
+        view.forceRightToLeftLayout()
+        view.layoutIfNeeded()
+        verify(view)
     }
 
     func testOneSavedCardPMDarkMode() {
@@ -503,6 +530,41 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         let customerAdapter = StubCustomerAdapter()
         customerAdapter.paymentMethods = Array(repeating: stubbedPaymentMethod(), count: 20)
         prepareCS(configuration: configuration(applePayEnabled: true), customerAdapter: customerAdapter)
+        presentCS(darkMode: false)
+        verify(cs.bottomSheetViewController.view!)
+    }
+
+    func testCustomSheetCornerRadius() {
+        stubSessions(paymentMethods: "\"card\"")
+        let customerAdapter = StubCustomerAdapter()
+        customerAdapter.paymentMethods = [stubbedPaymentMethod()]
+        var appearance = PaymentSheet.Appearance()
+        appearance.sheetCornerRadius = 0.0
+        prepareCS(configuration: configuration(applePayEnabled: true, appearance: appearance), customerAdapter: customerAdapter)
+        presentCS(darkMode: false)
+        verify(cs.bottomSheetViewController.view!)
+    }
+
+    func testCustomSheetCornerRadiusLarge() {
+        stubSessions(paymentMethods: "\"card\"")
+        let customerAdapter = StubCustomerAdapter()
+        customerAdapter.paymentMethods = [stubbedPaymentMethod()]
+        var appearance = PaymentSheet.Appearance()
+        appearance.sheetCornerRadius = 24.0
+        prepareCS(configuration: configuration(applePayEnabled: true, appearance: appearance), customerAdapter: customerAdapter)
+        presentCS(darkMode: false)
+        verify(cs.bottomSheetViewController.view!)
+    }
+
+    func testCustomerSheetIconStyleOutlined() {
+        stubSessions(paymentMethods: "\"us_bank_account\"")
+        let customerAdapter = StubCustomerAdapter()
+        customerAdapter.paymentMethods = [STPPaymentMethod._testUSBankAccount()]
+
+        var configuration = configuration(applePayEnabled: false)
+        configuration.appearance.iconStyle = .outlined
+
+        prepareCS(configuration: configuration, customerAdapter: customerAdapter)
         presentCS(darkMode: false)
         verify(cs.bottomSheetViewController.view!)
     }
@@ -540,6 +602,7 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         config.applePayEnabled = applePayEnabled
         config.appearance = appearance
         config.apiClient = stubbedAPIClient()
+        config.apiClient.publishableKey = "pk_test_123456789"
         config.defaultBillingDetails = defaultBillingDetails
         config.billingDetailsCollectionConfiguration = billingDetailsCollectionConfiguration
 
@@ -549,7 +612,6 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
         configuration: CustomerSheet.Configuration,
         customerAdapter: CustomerAdapter = StubCustomerAdapter()
     ) {
-        StripeAPI.defaultPublishableKey = "pk_test_123456789"
         self.cs = CustomerSheet(configuration: configuration, customer: customerAdapter)
     }
 
@@ -564,34 +626,25 @@ class CustomerSheetSnapshotTests: STPSnapshotTestCase {
 
         cs.present(from: vc) { _ in }
 
-        // Payment sheet usually takes anywhere between 50ms-200ms (but once in a while 2-3 seconds).
+        // Customer sheet usually takes anywhere between 50ms-200ms (but once in a while 2-3 seconds).
         // to present with the expected content. When the sheet is presented, it initially shows a loading screen,
         // and when it is done loading, the loading screen is replaced with the expected content.
-        // Therefore, the following code polls every 50 milliseconds to check if the LoadingViewController
-        // has been removed.  If the LoadingViewController is not there (or we reach the maximum number of times to poll),
+        // Therefore, the following code polls every 0.1 seconds to check if the LoadingViewController
+        // has been removed. If the LoadingViewController is not there (or we reach the maximum number of times to poll),
         // we assume the content has been loaded and continue.
-        let presentingExpectation = XCTestExpectation(description: "Presenting payment sheet")
-        DispatchQueue.global(qos: .background).async {
-            var isLoading = true
-            var count = 0
-            while isLoading && count < 10 {
-                count += 1
-                DispatchQueue.main.sync {
-                    guard
-                        (self.cs.bottomSheetViewController.contentStack.first as? LoadingViewController)
-                            != nil
-                    else {
-                        isLoading = false
-                        presentingExpectation.fulfill()
-                        return
-                    }
-                }
-                if isLoading {
-                    usleep(50000)  // 50ms
+        let loadFinishedExpectation = XCTestExpectation(description: "Load finished")
+        func pollForLoadingFinished() {
+            if !(cs.bottomSheetViewController.contentStack.first is LoadingViewController) {
+                loadFinishedExpectation.fulfill()
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    guard self != nil else { return }
+                    pollForLoadingFinished()
                 }
             }
         }
-        wait(for: [presentingExpectation], timeout: 10.0)
+        pollForLoadingFinished()
+        wait(for: [loadFinishedExpectation], timeout: 5)
 
         cs.bottomSheetViewController.presentationController!.overrideTraitCollection = UITraitCollection(
             preferredContentSizeCategory: preferredContentSizeCategory
@@ -657,12 +710,14 @@ fileprivate extension PaymentSheet.Appearance {
 
         appearance.cornerRadius = 0.0
         appearance.borderWidth = 2.0
+        appearance.sheetCornerRadius = 20.0
         appearance.shadow = PaymentSheet.Appearance.Shadow(
             color: .orange,
             opacity: 0.5,
             offset: CGSize(width: 0, height: 2),
             radius: 4
         )
+        appearance.formInsets = NSDirectionalEdgeInsets(top: 30, leading: 50, bottom: 70, trailing: 10)
 
         // Customize the colors
         var colors = PaymentSheet.Appearance.Colors()

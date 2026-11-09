@@ -40,10 +40,37 @@ static NSString * const STPTestingJPPublishableKey =
 // Test account in France
 static NSString * const STPTestingFRPublishableKey =
     @"pk_test_51JtgfQKG6vc7r7YCU0qQNOkDaaHrEgeHgGKrJMNfuWwaKgXMLzPUA1f8ZlCNPonIROLOnzpUnJK1C1xFH3M3Mz8X00Q6O4GfUt";
+// Test account in Spain
+static NSString * const STPTestingESPublishableKey =
+    @"pk_test_51UAYPpERR7vmXYYfQCFmwWj2zkbVaeClb25LoYGZENFiKFF6PCoelE3lmqvwIJyR3cuSymwmVOI6aOoRviJEoO1y00afTTU0XO";
 // Test account in Thailand
 static NSString * const STPTestingTHPublishableKey =
     @"pk_test_51NpEAWBgCYKNuUnnoBpaJZQYWOO6UpLtcioKggla08zpvDDy0cjfGKZdl5BsU8Gm5ilJNCqT7laCsqvyc0LndskG00pnPnJSpD";
 
+// Test account for Naira card and Naira bank transfer
+static NSString * const STPTestingNGPublishableKey =
+    @"pk_test_51PnmqMFoDYfWw3n43Igi4AQCH3GIizmq8WAm2AI5zA7vIlyG4mGqhRxFLmCjg38KOl6sJCr4T33FY2qWBunwXZYX00dOs0ukCL";
+// Test account for Naira Wallet
+static NSString * const STPTestingNGWalletPublishableKey =
+    @"pk_test_51QSODeDVpqbmmLClhGlSJmLpCSqphqTUx0CAPuiO4R9lbpQ1p4lEVXwGR4I3trSK9nce7F9m98Q4TspvrQ9gKZ0s00Z7wMj6Bf";
+// Test account for Mondu
+static NSString * const STPTestingMonduPublishableKey =
+    @"pk_test_51RQcmLL2ttF1aQ6KGGG8Qea5S4gvjnfOhUijlYg0TXy9LRhFAAMcUcHxyKT9CwbXn7A1uPoU6OJi0icb4SI0kFAQ0010GQbZsl";
+// Test account in Germany
+// Account token: acct_1PSnNaAlz2yHYCNZ
+// Scenario link: https://admin.corp.stripe.com/scenarios?runId=scnrun*AZAoKlcYbwAAAIDN
+static NSString * const STPTestingDEPublishableKey =
+    @"pk_test_51PSnNaAlz2yHYCNZgjajit4L8Hl1rDDPPCj9XhHNZWRSi4vwHhrHIbTgstLJptPSzwQVl1HlyqhwWRs1rBJHag8W00sM0SOXIL";
+
+// Test account in Italy
+// Account token: acct_1PSnETIFbdis1OxT
+// Scenario link: https://admin.corp.stripe.com/scenarios?runId=scnrun*AZAoIbaznQAAAJ96
+static NSString * const STPTestingITPublishableKey =
+    @"pk_test_51PSnETIFbdis1OxTALF4Z8ugUQpVS06UQDVahMSmwrbEYphjNYitXtOSqMPVKfzl3jukg6gLLrtZNnPlDrRbDpMd00U0tId6iv";
+
+// Sandbox w/ payments orchestration rules, under US account
+// See https://dashboard.stripe.com/acct_1T4pKXFRhicYlEF7/test/orchestration/rules/extn_test_61UEDJ3udBbhjozqU41FRhicYlEF7A4u/edit
+static NSString * const STPTestingPaymentsOrchestrationPublishableKey = @"pk_test_51T4pKXFRhicYlEF7yTT9Yv7W56S32foU0UlbE0zujkJOVEokHszMyuHi4k376ss1m4k57xym5wfWThb2Jek58K6y00fx7nEpgW";
 @interface STPTestingAPIClient : NSObject
 
 + (instancetype)sharedClient;

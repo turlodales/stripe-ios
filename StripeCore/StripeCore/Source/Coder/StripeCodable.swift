@@ -50,6 +50,13 @@ public protocol SafeEnumDecodable: Decodable {
 /// :nodoc:
 public protocol SafeEnumCodable: Encodable, SafeEnumDecodable {}
 
+/// A protocol for enums whose raw API string values should be preserved
+/// even when the value is unknown to the SDK.
+/// Unlike SafeEnumCodable, the raw string is never lost — use with `ParsedEnum`.
+/// :nodoc:
+@_spi(InternalOnlyAPI) public protocol SafeParsedEnumCodable: RawRepresentable, CaseIterable, Hashable
+    where RawValue == String {}
+
 extension UnknownFieldsDecodable {
     /// A dictionary containing all response fields from the original JSON,
     /// including unknown fields.
@@ -98,7 +105,7 @@ extension UnknownFieldsEncodable {
 }
 
 extension Encodable {
-    func encodeJSONDictionary(includingUnknownFields: Bool = true) throws -> [String: Any] {
+    @_spi(InternalOnlyAPI) public func encodeJSONDictionary(includingUnknownFields: Bool = true) throws -> [String: Any] {
         let encoder = StripeJSONEncoder()
         return try encoder.encodeJSONDictionary(
             self,
@@ -107,7 +114,7 @@ extension Encodable {
     }
 }
 
-@_spi(STP) public enum UnknownFieldsCodableFloats: String {
+@_spi(InternalOnlyAPI) public enum UnknownFieldsCodableFloats: String {
     case PositiveInfinity = "Inf"
     case NegativeInfinity = "-Inf"
     case NaN = "nan"
@@ -121,7 +128,7 @@ public protocol UnknownFieldsCodable: UnknownFieldsEncodable, UnknownFieldsDecod
 /// Use the `additionalParameters` and `allResponseFields` accessors instead.
 /// :nodoc:
 public struct NonEncodableParameters {
-    @_spi(STP) public internal(set) var storage: [String: Any] = [:]
+    @_spi(InternalOnlyAPI) public internal(set) var storage: [String: Any] = [:]
 }
 
 extension NonEncodableParameters: Decodable {

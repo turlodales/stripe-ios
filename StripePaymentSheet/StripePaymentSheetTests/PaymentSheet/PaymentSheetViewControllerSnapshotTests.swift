@@ -5,26 +5,36 @@
 //  Created by Yuki Tokuhiro on 9/7/23.
 //
 
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import StripeCoreTestUtils
-@_spi(STP) @testable import StripePaymentSheet
+@_spi(InternalOnlyAPI) @testable import StripePaymentSheet
 
 import XCTest
 
+@MainActor
 final class PaymentSheetViewControllerSnapshotTests: STPSnapshotTestCase {
+    func makeTestLoadResult(savedPaymentMethods: [STPPaymentMethod]) -> PaymentSheetLoader.LoadResult {
+        return .init(
+            intent: ._testValue(),
+            elementsSession: ._testValue(paymentMethodTypes: ["card"], isLinkPassthroughModeEnabled: false),
+            savedPaymentMethods: savedPaymentMethods,
+            paymentMethodTypes: [.stripe(.card)],
+            paymentMethodMessagingPromotionsHelper: ._testValue(),
+            paymentMethodOrientation: .horizontal,
+            customerProvider: CustomerProvider(customer: nil)
+        )
+    }
 
     func testSavedScreen_card() {
         let paymentMethods = [
             STPPaymentMethod._testCard(),
         ]
         let sut = PaymentSheetViewController(
-            intent: ._testValue(),
-            savedPaymentMethods: paymentMethods,
-            configuration: ._testValue_MostPermissive(),
-            isApplePayEnabled: false,
-            isLinkEnabled: false,
-            isCVCRecollectionEnabled: false,
-            delegate: self
+            configuration: ._testValue_MostPermissive(isApplePayEnabled: false),
+            loadResult: makeTestLoadResult(savedPaymentMethods: paymentMethods),
+            analyticsHelper: ._testValue(),
+            delegate: self,
+            previousPaymentOption: nil
         )
         sut.view.autosizeHeight(width: 375)
         STPSnapshotVerifyView(sut.view)
@@ -35,13 +45,11 @@ final class PaymentSheetViewControllerSnapshotTests: STPSnapshotTestCase {
             STPPaymentMethod._testUSBankAccount(),
         ]
         let sut = PaymentSheetViewController(
-            intent: ._testValue(),
-            savedPaymentMethods: paymentMethods,
-            configuration: ._testValue_MostPermissive(),
-            isApplePayEnabled: false,
-            isLinkEnabled: false,
-            isCVCRecollectionEnabled: false,
-            delegate: self
+            configuration: ._testValue_MostPermissive(isApplePayEnabled: false),
+            loadResult: makeTestLoadResult(savedPaymentMethods: paymentMethods),
+            analyticsHelper: ._testValue(),
+            delegate: self,
+            previousPaymentOption: nil
         )
         sut.view.autosizeHeight(width: 375)
         STPSnapshotVerifyView(sut.view)
@@ -52,13 +60,11 @@ final class PaymentSheetViewControllerSnapshotTests: STPSnapshotTestCase {
             STPPaymentMethod._testSEPA(),
         ]
         let sut = PaymentSheetViewController(
-            intent: ._testValue(),
-            savedPaymentMethods: paymentMethods,
-            configuration: ._testValue_MostPermissive(),
-            isApplePayEnabled: false,
-            isLinkEnabled: false,
-            isCVCRecollectionEnabled: false,
-            delegate: self
+            configuration: ._testValue_MostPermissive(isApplePayEnabled: false),
+            loadResult: makeTestLoadResult(savedPaymentMethods: paymentMethods),
+            analyticsHelper: ._testValue(),
+            delegate: self,
+            previousPaymentOption: nil
         )
         sut.view.autosizeHeight(width: 375)
         STPSnapshotVerifyView(sut.view)
@@ -66,21 +72,21 @@ final class PaymentSheetViewControllerSnapshotTests: STPSnapshotTestCase {
 }
 
 extension PaymentSheetViewControllerSnapshotTests: PaymentSheetViewControllerDelegate {
-    func paymentSheetViewControllerFinishedOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController, completion: (() -> Void)?) {
+    func paymentSheetViewControllerFinishedOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol, completion: (() -> Void)?) {
     }
-    func paymentSheetViewControllerCanceledOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController, completion: (() -> Void)?) {
+    func paymentSheetViewControllerCanceledOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol, completion: (() -> Void)?) {
     }
-    func paymentSheetViewControllerFailedOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController, result: StripePaymentSheet.PaymentSheetResult, completion: (() -> Void)?) {
+    func paymentSheetViewControllerFailedOnPay(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol, result: StripePaymentSheet.PaymentSheetResult, completion: (() -> Void)?) {
     }
-    func paymentSheetViewControllerShouldConfirm(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController, with paymentOption: StripePaymentSheet.PaymentOption, completion: @escaping (StripePaymentSheet.PaymentSheetResult, StripeCore.STPAnalyticsClient.DeferredIntentConfirmationType?) -> Void) {
-    }
-
-    func paymentSheetViewControllerDidFinish(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController, result: StripePaymentSheet.PaymentSheetResult) {
+    func paymentSheetViewControllerShouldConfirm(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol, with paymentOption: StripePaymentSheet.PaymentOption, completion: @escaping (StripePaymentSheet.PaymentSheetResult, StripeCore.STPAnalyticsClient.DeferredIntentConfirmationType?) -> Void) {
     }
 
-    func paymentSheetViewControllerDidCancel(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController) {
+    func paymentSheetViewControllerDidFinish(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol, result: StripePaymentSheet.PaymentSheetResult) {
     }
 
-    func paymentSheetViewControllerDidSelectPayWithLink(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewController) {
+    func paymentSheetViewControllerDidCancel(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol) {
+    }
+
+    func paymentSheetViewControllerDidSelectPayWithLink(_ paymentSheetViewController: StripePaymentSheet.PaymentSheetViewControllerProtocol) {
     }
 }

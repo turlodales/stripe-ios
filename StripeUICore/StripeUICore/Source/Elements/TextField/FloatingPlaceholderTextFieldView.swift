@@ -19,7 +19,7 @@ class FloatingPlaceholderTextFieldView: UIView {
     // MARK: - Views
 
     private let textField: UITextField
-    private let theme: ElementsUITheme
+    private let theme: ElementsAppearance
     private lazy var placeholderLabel: UILabel = {
         let label = UILabel()
         label.textColor = theme.colors.placeholderText
@@ -38,7 +38,7 @@ class FloatingPlaceholderTextFieldView: UIView {
 
     // MARK: - Initializers
 
-    public init(textField: UITextField, theme: ElementsUITheme = .default) {
+    public init(textField: UITextField, theme: ElementsAppearance = .default) {
         self.textField = textField
         self.theme = theme
         super.init(frame: .zero)
@@ -56,6 +56,11 @@ class FloatingPlaceholderTextFieldView: UIView {
         didSet {
             textField.isUserInteractionEnabled = isUserInteractionEnabled
         }
+    }
+
+    override var accessibilityIdentifier: String? {
+        get { return textField.accessibilityIdentifier }
+        set { assertionFailure() } // swiftlint:disable:this unused_setter_value
     }
 
     override var accessibilityValue: String? {
@@ -106,15 +111,28 @@ class FloatingPlaceholderTextFieldView: UIView {
         // Arrange placeholder
         placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(placeholderLabel)
-        // Change anchorPoint so scale transforms occur from the leading edge instead of the center
-        placeholderLabel.layer.anchorPoint = effectiveUserInterfaceLayoutDirection == .leftToRight
-            ? CGPoint(x: 0, y: 0.5)
-            : CGPoint(x: 1, y: 0.5)
         NSLayoutConstraint.activate([
-            // Note placeholder's anchorPoint.x = 0 redefines its 'center' to the left
-            placeholderLabel.centerXAnchor.constraint(equalTo: textField.leadingAnchor),
+            placeholderLeadingConstraint,
             placeholderCenterYConstraint,
         ])
+        updateLayoutDirection()
+    }
+
+    private lazy var placeholderLeadingConstraint = placeholderLabel.centerXAnchor.constraint(equalTo: textField.leadingAnchor)
+    private var lastLayoutDirection: UIUserInterfaceLayoutDirection?
+
+    private func updateLayoutDirection() {
+        let layoutDirection = effectiveUserInterfaceLayoutDirection
+        guard layoutDirection != lastLayoutDirection else { return }
+        lastLayoutDirection = layoutDirection
+        let isRightToLeft = layoutDirection == .rightToLeft
+        // Scale the floating label from the start of its text instead of its center.
+        placeholderLabel.layer.anchorPoint = CGPoint(x: isRightToLeft ? 1 : 0, y: 0.5)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateLayoutDirection()
     }
 
     // MARK: - Animate placeholder

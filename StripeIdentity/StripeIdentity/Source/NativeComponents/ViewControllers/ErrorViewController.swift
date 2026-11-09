@@ -6,8 +6,8 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class ErrorViewController: IdentityFlowViewController {
@@ -174,11 +174,18 @@ extension ErrorViewController {
         guard case .error(let error) = model else {
             return
         }
-        sheetController?.analyticsClient.logGenericError(
-            error: error,
-            filePath: filePath,
-            line: line
-        )
+        if let sheetController = sheetController {
+            sheetController.analyticsClient.logGenericError(
+                error: error,
+                additionalMetadata: [
+                    "error_context": "error_screen",
+                    "screen_name": analyticsScreenName.rawValue,
+                ],
+                filePath: filePath,
+                line: line,
+                sheetController: sheetController
+            )
+        }
     }
 }
 

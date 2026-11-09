@@ -6,10 +6,12 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 final class LinkInlineSignupElement: Element {
+    let collectsUserInput: Bool = true
 
     private let signupView: LinkInlineSignupView
 
@@ -34,18 +36,35 @@ final class LinkInlineSignupElement: Element {
         return viewModel.action
     }
 
+    func updateBrand(_ brand: LinkBrand) {
+        signupView.updateBrand(brand)
+    }
+
     convenience init(
-        configuration: PaymentSheet.Configuration,
+        configuration: PaymentElementConfiguration,
+        brand: LinkBrand,
         linkAccount: PaymentSheetLinkAccount?,
         country: String?,
-        showCheckbox: Bool
+        showCheckbox: Bool,
+        accountService: LinkAccountServiceProtocol,
+        resolvedLinkBrand: @escaping (PaymentSheetLinkAccount?) -> LinkBrand,
+        allowsDefaultOptIn: Bool,
+        signupOptInFeatureEnabled: Bool,
+        signupOptInInitialValue: Bool,
+        analyticsHelper: PaymentSheetAnalyticsHelper? = nil
     ) {
         self.init(viewModel: LinkInlineSignupViewModel(
             configuration: configuration,
+            brand: brand,
             showCheckbox: showCheckbox,
-            accountService: LinkAccountService(apiClient: configuration.apiClient),
+            accountService: accountService,
+            resolvedLinkBrand: resolvedLinkBrand,
+            allowsDefaultOptIn: allowsDefaultOptIn,
+            signupOptInFeatureEnabled: signupOptInFeatureEnabled,
+            signupOptInInitialValue: signupOptInInitialValue,
             linkAccount: linkAccount,
-            country: country
+            country: country,
+            analyticsHelper: analyticsHelper
         ))
     }
 

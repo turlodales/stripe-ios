@@ -8,11 +8,11 @@
 
 import OHHTTPStubs
 import OHHTTPStubsSwift
-@_spi(STP) import StripeCoreTestUtils
+@_spi(InternalOnlyAPI) import StripeCoreTestUtils
 import XCTest
 
 // swift-format-ignore
-@testable @_spi(STP) import StripeCore
+@testable @_spi(InternalOnlyAPI) import StripeCore
 
 @testable import StripeIdentity
 
@@ -75,9 +75,27 @@ final class IdentityAPIClientTest: APIStubbedTestCase {
     }
 
     func testUpdateVerificationPageData() throws {
-        let mockVerificationData = VerificationPageDataUpdateMock.default
+        try testUpdateVerificationPageData(
+            with: VerificationPageDataUpdateMock.default,
+            expectedMediaPipeAvailable: FaceGeometryDetectorFactory.isAvailable
+        )
+    }
+
+    func testUpdateVerificationPageDataWithoutFaceOmitsMediaPipeAvailability() throws {
+        try testUpdateVerificationPageData(
+            with: VerificationPageDataUpdateMock.frontOnly,
+            expectedMediaPipeAvailable: nil
+        )
+    }
+
+    private func testUpdateVerificationPageData(
+        with mockVerificationData: StripeAPI.VerificationPageDataUpdate,
+        expectedMediaPipeAvailable: Bool?
+    ) throws {
+        var expectedParameters = try mockVerificationData.encodeJSONDictionary()
+        expectedParameters["media_pipe_available"] = expectedMediaPipeAvailable
         let encodedMockVerificationData = URLEncoder.queryString(
-            from: try mockVerificationData.encodeJSONDictionary()
+            from: expectedParameters
         )
 
         let mockVerificationPageData = VerificationPageDataMock.response200
@@ -191,7 +209,7 @@ final class IdentityAPIClientTest: APIStubbedTestCase {
         stub { urlRequest in
             XCTAssertEqual(
                 urlRequest.url?.absoluteString.hasSuffix(
-                    "v1/identity/verification_pages/\(IdentityAPIClientTest.mockId)?"
+                    "v1/identity/verification_pages/\(IdentityAPIClientTest.mockId)?app_identifier=\(Bundle.main.bundleIdentifier ?? "")&media_pipe_available=\(FaceGeometryDetectorFactory.isAvailable)"
                 ),
                 true
             )
@@ -264,7 +282,7 @@ private func verifyHeaders(
     )
     XCTAssertEqual(
         urlRequest.allHTTPHeaderFields?["Stripe-Version"],
-        "2020-08-27; identity_client_api=v5",
+        "2020-08-27; identity_client_api=v8",
         file: file,
         line: line
     )

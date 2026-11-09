@@ -8,20 +8,19 @@
 
 import StripeCoreTestUtils
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPCardBINMetadataTests: XCTestCase {
     func testAPICall() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
-
         let expectation = self.expectation(description: "Retrieve card metadata")
 
         // 625035 is a randomly selected UnionPay BIN
         STPBINRange.retrieve(
+            apiClient: STPAPIClient(publishableKey: STPTestingDefaultPublishableKey),
             forPrefix: "625035",
             completion: { result in
                 let cardMetadata = try! result.get()
@@ -34,11 +33,11 @@ class STPCardBINMetadataTests: XCTestCase {
     }
 
     func testLoadingInBINRange() {
-        STPAPIClient.shared.publishableKey = STPTestingDefaultPublishableKey
-
         let expectation = self.expectation(description: "Retrieve card metadata")
         let hardCodedBinRanges = STPBINController.shared.allRanges()
-        STPBINController.shared.retrieveBINRanges(forPrefix: "625035") { result in
+        STPBINController.shared.retrieveBINRanges(
+            apiClient: STPAPIClient(publishableKey: STPTestingDefaultPublishableKey),
+            forPrefix: "625035") { result in
             let ranges = try! result.get()
             XCTAssertTrue(ranges.count > 0)
             XCTAssertTrue(

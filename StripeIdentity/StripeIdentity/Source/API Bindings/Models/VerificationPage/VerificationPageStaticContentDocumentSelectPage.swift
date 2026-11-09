@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI {
 
@@ -15,6 +15,10 @@ extension StripeAPI {
         let buttonText: String
         let idDocumentTypeAllowlist: [String: String]
         let title: String
+
+        var idDocumentTypeAllowlistKeys: [String] {
+            return Array(idDocumentTypeAllowlist.keys)
+        }
     }
 
 }

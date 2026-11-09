@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol LoadingViewControllerDelegate: AnyObject {
@@ -18,21 +18,21 @@ protocol LoadingViewControllerDelegate: AnyObject {
 /// For internal SDK use only
 @objc(STP_Internal_LoadingViewController)
 class LoadingViewController: UIViewController, BottomSheetContentViewController {
+
+    enum Constants {
+        static let defaultLoadingViewHeight: CGFloat = 244
+    }
+
     lazy var navigationBar: SheetNavigationBar = {
-        let navigationBar = SheetNavigationBar(isTestMode: isTestMode,
-                                               appearance: appearance)
+        let navigationBar = SheetNavigationBar(appearance: appearance)
         navigationBar.delegate = self
         return navigationBar
     }()
 
     let appearance: PaymentSheet.Appearance
-    let isTestMode: Bool
 
     var requiresFullScreen: Bool {
         return false
-    }
-    func didFinishAnimatingHeight() {
-        // no-op
     }
     func didTapOrSwipeToDismiss() {
         delegate?.shouldDismiss(self)
@@ -42,10 +42,9 @@ class LoadingViewController: UIViewController, BottomSheetContentViewController 
     let activityIndicator = UIActivityIndicatorView(style: .medium)
     weak var delegate: LoadingViewControllerDelegate?
 
-    init(delegate: LoadingViewControllerDelegate, appearance: PaymentSheet.Appearance, isTestMode: Bool, loadingViewHeight: CGFloat) {
+    init(delegate: LoadingViewControllerDelegate, appearance: PaymentSheet.Appearance, loadingViewHeight: CGFloat = Constants.defaultLoadingViewHeight) {
         self.delegate = delegate
         self.appearance = appearance
-        self.isTestMode = isTestMode
         self.loadingViewHeight = loadingViewHeight
         super.init(nibName: nil, bundle: nil)
     }
@@ -58,6 +57,11 @@ class LoadingViewController: UIViewController, BottomSheetContentViewController 
         super.viewDidLoad()
 
         activityIndicator.color = appearance.colors.background.contrastingColor
+        if #available(iOS 17.0, *) {
+            registerForTraitChanges([UITraitUserInterfaceStyle.self], handler: { (self: Self, _: UITraitCollection) in
+                self.activityIndicator.color = self.appearance.colors.background.contrastingColor
+            })
+        }
         [activityIndicator].forEach {
             view.addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -71,6 +75,16 @@ class LoadingViewController: UIViewController, BottomSheetContentViewController 
         ])
         activityIndicator.startAnimating()
     }
+
+#if !os(visionOS)
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if #unavailable(iOS 17.0) {
+            activityIndicator.color = appearance.colors.background.contrastingColor
+        }
+    }
+#endif
+
 }
 
 extension LoadingViewController: SheetNavigationBarDelegate {

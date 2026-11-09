@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Banka";
-
 "Boleto" = "Boleto";
 
 "Card" = "Karta";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "SEPA inkaso";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Vypršal čas autentifikácie vášho spôsobu platby -- skúste znova";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "Americký bankový účet";
+"US bank account" = "Americký bankový účet";
 
 "Unknown" = "Neznáme";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

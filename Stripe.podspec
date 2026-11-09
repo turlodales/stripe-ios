@@ -3,7 +3,7 @@ Pod::Spec.new do |s|
 
   # Do not update s.version directly.
   # Instead, update the VERSION file and run ./ci_scripts/update_version.sh
-  s.version                        = '23.25.1'
+  s.version                        = '26.16.1'
 
   s.summary                        = 'Accept online payments using Stripe.'
   s.license                        = { :type => 'MIT', :file => 'LICENSE' }
@@ -14,13 +14,14 @@ Pod::Spec.new do |s|
   s.requires_arc                   = true
   s.platform                       = :ios
   s.swift_version		               = '5.0'
-  s.ios.deployment_target          = '13.0'
+  s.ios.deployment_target          = '15.0'
   s.weak_framework                 = 'SwiftUI'
   s.source_files                   = 'Stripe/StripeiOS/Source/*.swift'
-  s.ios.resource_bundle            = { 'StripeBundle' => 'Stripe/StripeiOS/Resources/**/*.{lproj,png,xcassets}' }
+  s.ios.resource_bundle            = { 'StripeBundle' => ['Stripe/StripeiOS/Resources/**/*.{lproj,png,xcassets}', 'Stripe/StripeiOS/PrivacyInfo.xcprivacy'] }
   s.dependency                       'StripeCore', s.version.to_s
   s.dependency                       'StripeUICore', s.version.to_s
   s.dependency                       'StripeApplePay', s.version.to_s
   s.dependency                       'StripePayments', s.version.to_s
   s.dependency                       'StripePaymentsUI', s.version.to_s
+  s.dependency                       'StripeIssuing', s.version.to_s
 end

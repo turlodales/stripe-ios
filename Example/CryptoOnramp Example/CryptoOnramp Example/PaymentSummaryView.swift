@@ -1,0 +1,399 @@
+//
+//  PaymentSummaryView.swift
+//  CryptoOnramp Example
+//
+//  Created by Michael Liberatore on 9/24/25.
+//
+
+import SwiftUI
+
+@_spi(CryptoOnrampAlpha)
+import StripeCryptoOnramp
+
+@_spi(InternalOnlyAPI)
+import StripePayments
+
+/// A view used to display a payment summary, from which the user can complete checkout.
+struct PaymentSummaryView: View {
+
+    /// Error used to interrupt checkout when wallet ownership verification is required.
+    private struct WalletOwnershipVerificationRequiredError: Error {
+
+        /// The response that indicated wallet ownership verification is required.
+        let response: CreateOnrampSessionResponse
+    }
+
+    /// The coordinator to use for completing checkout.
+    let coordinator: CryptoOnrampCoordinator
+
+    /// The response from creating an onramp session in a prior step.
+    let onrampSessionResponse: CreateOnrampSessionResponse
+
+    /// A description of the payment method selected in a prior step.
+    let selectedPaymentMethodDescription: String
+
+    /// When a bank account was used, this specifies the speed at which funds will be delivered.
+    /// If a bank account was not used, the value should always be `.instant`.
+    let settlementSpeed: CreateOnrampSessionRequest.SettlementSpeed
+
+    /// Called upon completing checkout successfully.
+    let onCheckoutSuccess: (_ successMessage: String) -> Void
+
+    @Environment(\.isLoading) private var isLoading
+
+    @State private var authenticationContext = WindowAuthenticationContext()
+    @State private var alert: Alert?
+    @State private var pendingWalletOwnershipVerificationContext: WalletOwnershipVerificationContext?
+    @State private var isPresentingWalletOwnershipVerificationAlert = false
+    @State private var walletOwnershipVerificationSession: WalletOwnershipVerificationSession?
+
+    private var isPresentingAlert: Binding<Bool> {
+        Binding(get: {
+            alert != nil
+        }, set: { newValue in
+            if !newValue {
+                alert = nil
+            }
+        })
+    }
+
+    private var processingTimeText: String {
+        switch settlementSpeed {
+        case .instant:
+            "Instant"
+        case .standard:
+            "2–3 business days, up to 5"
+        }
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(.tint)
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: "cart.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .offset(x: -0.5, y: 1)
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Adding")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(onrampSessionResponse.totalText)
+                    .font(.title3)
+                    .bold()
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - View
+
+    var body: some View {
+        FoldAvoidingScrollView(alignment: .top, avoidsHorizontalFolds: false) { _ in
+            VStack(alignment: .leading, spacing: 16) {
+                header
+
+                VStack(spacing: 0) {
+                    makeSummaryRow(
+                        title: "You Receive",
+                        value: onrampSessionResponse.amountToReceiveText
+                    )
+
+                    Divider()
+
+                    makeSummaryRow(
+                        title: "Fees",
+                        value: onrampSessionResponse.totalFeesText
+                    )
+
+                    Divider()
+
+                    makeSummaryRow(
+                        title: "Pay With",
+                        value: selectedPaymentMethodDescription
+                    )
+
+                    Divider()
+
+                    makeSummaryRow(
+                        title: "Processing Time",
+                        value: processingTimeText
+                    )
+
+                    Divider()
+
+                    makeSummaryRow(
+                        title: "Deposit To",
+                        value: onrampSessionResponse.depositToText
+                    )
+
+                    Divider()
+
+                    makeSummaryRow(
+                        title: "Provider",
+                        value: "Stripe"
+                    )
+                }
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
+
+                Text("By confirming, you agree to the Terms and Conditions and acknowledge the Privacy Policy.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .horizontallyCenteredContent()
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Review")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            Button("Confirm") {
+                checkout()
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isLoading.wrappedValue)
+            .opacity(isLoading.wrappedValue ? 0.5 : 1)
+            .horizontallyCenteredContent()
+            .padding()
+            .background(Color(.systemGroupedBackground))
+            .avoidingActiveFold()
+        }
+        .alert(
+            alert?.title ?? "Error",
+            isPresented: isPresentingAlert,
+            presenting: alert,
+            actions: { _ in
+                Button("OK") {}
+            }, message: { alert in
+                Text(alert.message)
+            }
+        )
+        .walletOwnershipVerificationRequiredAlert(
+            isPresented: $isPresentingWalletOwnershipVerificationAlert,
+            onVerify: {
+                verifyPendingWalletOwnership()
+            },
+            onCancel: {
+                pendingWalletOwnershipVerificationContext = nil
+            }
+        )
+        .sheet(item: $walletOwnershipVerificationSession) { session in
+            WalletOwnershipVerificationSheet(
+                session: session,
+                coordinator: coordinator
+            ) {
+                pendingWalletOwnershipVerificationContext = nil
+                checkout()
+            }
+        }
+    }
+
+    // MARK: - PaymentSummaryView
+
+    @ViewBuilder
+    private func makeSummaryRow(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private func checkout() {
+        isLoading.wrappedValue = true
+
+        Task {
+            do {
+                let checkoutResult = try await coordinator.performCheckout(
+                    onrampSessionId: onrampSessionResponse.id,
+                    authenticationContext: authenticationContext
+                ) { onrampSessionId in
+                    let result = try await APIClient.shared.checkout(onrampSessionId: onrampSessionId)
+                    if result.requiresWalletOwnershipVerification {
+                        throw WalletOwnershipVerificationRequiredError(response: result)
+                    }
+                    return result.clientSecret
+                }
+
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    switch checkoutResult {
+                    case .completed:
+                        let amount = onrampSessionResponse.amountToReceiveText
+                        if let network = onrampSessionResponse.transactionDetails.destinationNetwork?.localizedCapitalized {
+                            onCheckoutSuccess("You’ve added \(amount) to your \(network) wallet.")
+                        } else {
+                            onCheckoutSuccess("You’ve added \(amount) to your wallet.")
+                        }
+                    case .canceled:
+                        break
+                    @unknown default:
+                        break
+                    }
+                }
+            } catch let error as WalletOwnershipVerificationRequiredError {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    if let context = WalletOwnershipVerificationContext(
+                        transactionDetails: error.response.transactionDetails,
+                        isTestMode: !error.response.livemode
+                    ) {
+                        pendingWalletOwnershipVerificationContext = context
+                        isPresentingWalletOwnershipVerificationAlert = true
+                    } else {
+                        alert = WalletOwnershipVerification.unavailableAlert
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading.wrappedValue = false
+                    alert = Alert(title: "Checkout failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func verifyPendingWalletOwnership() {
+        guard let context = pendingWalletOwnershipVerificationContext else {
+            alert = WalletOwnershipVerification.unavailableAlert
+            return
+        }
+
+        WalletOwnershipVerification.requestChallenge(
+            context: context,
+            coordinator: coordinator,
+            isLoading: isLoading,
+            alert: $alert
+        ) { session in
+            walletOwnershipVerificationSession = session
+        }
+    }
+}
+
+private class WindowAuthenticationContext: NSObject, STPAuthenticationContext {
+    func authenticationPresentingViewController() -> UIViewController {
+        UIApplication.shared.findTopNavigationController() ?? UIViewController()
+    }
+}
+
+private extension CreateOnrampSessionResponse {
+    static let currencyFormatterWithoutSymbol: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale.current
+        formatter.currencySymbol = ""
+        return formatter
+    }()
+
+    var totalText: String {
+        let amount = Double(sourceTotalAmount) ?? 0
+        return formattedSourceAmount(amount)
+    }
+
+    var amountToReceiveText: String {
+        guard let destinationAmount = transactionDetails.destinationAmount,
+              let destinationCurrency = transactionDetails.destinationCurrency,
+              let amount = Double(destinationAmount) else {
+            return "Unavailable"
+        }
+        let formattedAmount = Self.currencyFormatterWithoutSymbol.string(from: NSNumber(value: amount)) ?? "$0"
+        return "\(formattedAmount) \(destinationCurrency)"
+    }
+
+    var totalFeesText: String {
+        guard let networkFeeAmount = transactionDetails.fees?.networkFeeAmount,
+              let transactionFeeAmount = transactionDetails.fees?.transactionFeeAmount,
+              let networkFee = Double(networkFeeAmount),
+              let transactionFee = Double(transactionFeeAmount) else {
+            return "Unavailable"
+        }
+        let total = networkFee + transactionFee
+        return formattedSourceAmount(total)
+    }
+
+    var depositToText: String {
+        guard let destinationNetwork = transactionDetails.destinationNetwork,
+              let address = transactionDetails.walletAddress else {
+            return "Unavailable"
+        }
+        let network = destinationNetwork.localizedCapitalized
+        let prefix = String(address.prefix(2))
+        let suffix = String(address.suffix(4))
+        return "\(network) • \(prefix)••••\(suffix)"
+    }
+
+    private func formattedSourceAmount(_ amount: Double) -> String {
+        guard let sourceCurrency = transactionDetails.sourceCurrency else {
+            return "Unavailable"
+        }
+        let sourceCurrencyCode = sourceCurrency.uppercased()
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale.current
+        formatter.currencyCode = sourceCurrencyCode
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(sourceCurrencyCode) \(amount)"
+    }
+}
+
+#Preview {
+    PreviewWrapperView { coordinator in
+        PaymentSummaryView(
+            coordinator: coordinator,
+            onrampSessionResponse: .init(
+                id: "0",
+                object: "",
+                clientSecret: "abc",
+                created: 0,
+                cryptoCustomerId: "crc_1234",
+                finishUrl: nil,
+                isApplePay: false,
+                kycDetailsProvided: true,
+                livemode: false,
+                metadata: nil,
+                paymentMethod: "Card",
+                preferredPaymentMethod: nil,
+                preferredRegion: nil,
+                redirectUrl: "",
+                skipQuoteScreen: false,
+                sourceTotalAmount: "10.61",
+                status: "",
+                transactionDetails: .init(
+                    destinationCurrency: "usdc",
+                    destinationAmount: "10.000000",
+                    destinationNetwork: "solana",
+                    fees: .init(
+                        networkFeeAmount: "0.01",
+                        transactionFeeAmount: "0.60"
+                    ),
+                    lastError: nil,
+                    lockWalletAddress: false,
+                    quoteExpiration: Date(),
+                    sourceCurrency: "usd",
+                    sourceAmount: "10.00",
+                    destinationCurrencies: [],
+                    destinationNetworks: [],
+                    transactionId: nil,
+                    transactionLimit: 74517,
+                    walletAddress: "0123451234512345123545"
+                ),
+                uiMode: "headless"
+            ),
+            selectedPaymentMethodDescription: "Apple Pay",
+            settlementSpeed: .instant,
+            onCheckoutSuccess: { _ in }
+        )
+    }
+}

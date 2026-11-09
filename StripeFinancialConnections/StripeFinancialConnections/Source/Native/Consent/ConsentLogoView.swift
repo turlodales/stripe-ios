@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 private let blurRadius = 3
@@ -15,24 +15,23 @@ private let ellipsisViewWidth: CGFloat = 32.0
 final class ConsentLogoView: UIView {
 
     private var multipleDotView: UIView?
+    private var shadowLayers: [CALayer] = []
 
-    init(merchantLogo: [String]) {
+    init(merchantLogo: [String], showsAnimatedDots: Bool) {
         super.init(frame: .zero)
         let horizontalStackView = UIStackView()
         horizontalStackView.axis = .horizontal
-        // spacing between logos + ellipsis view
-        horizontalStackView.spacing = 0
         horizontalStackView.alignment = .center
 
-        if merchantLogo.count == 2 || merchantLogo.count == 3 {
+        if (1...3).contains(merchantLogo.count) {
             for i in 0..<merchantLogo.count {
                 let urlString = merchantLogo[i]
-                horizontalStackView.addArrangedSubview(
-                    CreateRoundedLogoView(urlString: urlString)
-                )
+                let logoView = CreateRoundedLogoView(urlString: urlString)
+                self.shadowLayers.append(logoView.layer)
+                horizontalStackView.addArrangedSubview(logoView)
 
                 let isLastLogo = (i == merchantLogo.count - 1)
-                if !isLastLogo {
+                if !isLastLogo, showsAnimatedDots {
                     let ellipsisViewTuple = CreateEllipsisView(
                         leftLogoUrl:
                             merchantLogo[i],
@@ -46,6 +45,11 @@ final class ConsentLogoView: UIView {
                 }
             }
         }
+
+        if !showsAnimatedDots {
+            horizontalStackView.spacing = 16
+        }
+
         addAndPinSubview(
             CreateCenteringView(
                 centeredView: horizontalStackView
@@ -58,6 +62,11 @@ final class ConsentLogoView: UIView {
     }
 
     func animateDots() {
+#if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.environment["UITesting"] != nil {
+            return
+        }
+#endif
         guard let multipleDotView = multipleDotView else {
             return
         }
@@ -85,29 +94,16 @@ final class ConsentLogoView: UIView {
             }
         )
     }
-}
 
-private func CreateRoundedLogoView(urlString: String) -> UIView {
-    let cornerRadius: CGFloat = 16.0
-    let shadowContainerView = UIView()
-    shadowContainerView.layer.shadowColor = UIColor.black.cgColor
-    shadowContainerView.layer.shadowOpacity = 0.18
-    shadowContainerView.layer.shadowOffset = CGSize(width: 0, height: 3)
-    shadowContainerView.layer.shadowRadius = 5
-    shadowContainerView.layer.cornerRadius = cornerRadius
-    let radius: CGFloat = 72.0
-    let imageView = UIImageView()
-    imageView.contentMode = .scaleAspectFill
-    imageView.clipsToBounds = true
-    imageView.layer.cornerRadius = cornerRadius
-    imageView.setImage(with: urlString)
-    imageView.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-        imageView.widthAnchor.constraint(equalToConstant: radius),
-        imageView.heightAnchor.constraint(equalToConstant: radius),
-    ])
-    shadowContainerView.addAndPinSubview(imageView)
-    return shadowContainerView
+    // CGColor's need to be manually updated when the system theme changes.
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+
+        for shadow in shadowLayers {
+            shadow.shadowColor = FinancialConnectionsAppearance.Colors.shadow.cgColor
+        }
+    }
 }
 
 private func CreateEllipsisView(
@@ -339,23 +335,34 @@ import SwiftUI
 
 private struct ConsentLogoViewUIViewRepresentable: UIViewRepresentable {
 
+    var merchantLogo: [String]
+    var showsAnimatedDots: Bool
+
     func makeUIView(context: Context) -> ConsentLogoView {
         ConsentLogoView(
-            merchantLogo: [
-                "https://stripe-camo.global.ssl.fastly.net/a2f7a55341b7cdb849d5b2d68a465f95cc06ee6ec2449ea468b3623a61c17393/68747470733a2f2f66696c65732e7374726970652e636f6d2f6c696e6b732f4d44423859574e6a64463878546d5978575664445356553457474a6f52326c5966475a7358327870646d56664d58526f617a5a526454523354573144566a4a4e57584659526d6c3161464646303077384f5a645a3166",
-                "https://b.stripecdn.com/connections-statics-srv/assets/BrandIcon--stripe-4x.png",
-            ]
+            merchantLogo: merchantLogo,
+            showsAnimatedDots: showsAnimatedDots
         )
     }
 
     func updateUIView(_ uiView: ConsentLogoView, context: Context) {}
 }
 
+private let twoLogos = [
+    "https://stripe-camo.global.ssl.fastly.net/a2f7a55341b7cdb849d5b2d68a465f95cc06ee6ec2449ea468b3623a61c17393/68747470733a2f2f66696c65732e7374726970652e636f6d2f6c696e6b732f4d44423859574e6a64463878546d5978575664445356553457474a6f52326c5966475a7358327870646d56664d58526f617a5a526454523354573144566a4a4e57584659526d6c3161464646303077384f5a645a3166",
+    "https://b.stripecdn.com/connections-statics-srv/assets/BrandIcon--stripe-4x.png",
+]
+
 struct ConsentLogoView_Previews: PreviewProvider {
     static var previews: some View {
-        VStack(alignment: .center) {
-            ConsentLogoViewUIViewRepresentable()
+        VStack(alignment: .center, spacing: 24) {
+            ConsentLogoViewUIViewRepresentable(
+                merchantLogo: ["https://b.stripecdn.com/connections-statics-srv/assets/BrandIcon--stripe-4x.png"],
+                showsAnimatedDots: false
+            )
+            ConsentLogoViewUIViewRepresentable(merchantLogo: twoLogos, showsAnimatedDots: true)
             Spacer()
+            ConsentLogoViewUIViewRepresentable(merchantLogo: twoLogos, showsAnimatedDots: false)
         }
         .padding()
     }

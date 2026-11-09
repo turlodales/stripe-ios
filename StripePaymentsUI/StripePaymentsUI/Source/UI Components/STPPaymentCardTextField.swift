@@ -6,9 +6,9 @@
 //  Copyright (c) 2015 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeCore
-@_spi(STP) import StripePayments
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// STPPaymentCardTextField is a text field with similar properties to UITextField,
@@ -228,7 +228,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
         }
     }
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     private var _inputAccessoryView: UIView?
     /// This behaves identically to setting the inputAccessoryView for each child text field.
     @objc open override var inputAccessoryView: UIView? {
@@ -601,23 +601,24 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
         }
         let postalCodeRequested = viewModel.postalCodeRequested
         viewModel = STPPaymentCardTextFieldViewModel(brandUpdateHandler: { [weak self] in
-            self?.updateImage(for: .number)
+            guard let self else { return }
+            self.updateImage(for: .number)
+            self.onChange()
         })
         viewModel.postalCodeRequested = postalCodeRequested
         onChange()
         updateImage(for: .number)
         updateCVCPlaceholder()
-        weak var weakSelf = self
         layoutViews(
             toFocus: NSNumber(value: STPCardFieldType.postalCode.rawValue),
             becomeFirstResponder: true,
             animated: true
-        ) { _ in
-            guard let strongSelf = weakSelf else {
+        ) { [weak self] _ in
+            guard let self else {
                 return
             }
-            if strongSelf.isFirstResponder {
-                strongSelf.numberField.becomeFirstResponder()
+            if self.isFirstResponder {
+                self.numberField.becomeFirstResponder()
             }
         }
     }
@@ -727,7 +728,9 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
 
     @objc internal lazy var viewModel: STPPaymentCardTextFieldViewModel = {
         STPPaymentCardTextFieldViewModel(brandUpdateHandler: { [weak self] in
-            self?.updateImage(for: .number)
+            guard let self else { return }
+            self.updateImage(for: .number)
+            onChange()
         })
     }()
 
@@ -735,7 +738,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     @objc internal var internalBillingDetails: STPPaymentMethodBillingDetails?
     @objc internal var internalMetadata: [String: String]?
 
-    @objc @_spi(STP) public var allFields: [STPFormTextField] = []
+    @objc @_spi(InternalOnlyAPI) public var allFields: [STPFormTextField] = []
     private lazy var sizingField: STPFormTextField = {
         let field = build()
         field.formDelegate = nil
@@ -780,6 +783,15 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     let STPPaymentCardTextFieldDefaultInsets: CGFloat = 13
 
     let STPPaymentCardTextFieldMinimumPadding: CGFloat = 10
+
+    var cardElementAnalytics = CardElementAnalytics(widgetType: .paymentCardTextField)
+
+    open override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            cardElementAnalytics.reportShown()
+        }
+    }
 
     // MARK: initializers
     /// :nodoc:
@@ -900,10 +912,8 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     }
 
     func setupBrandTapGestureRecognizers() {
-        if #available(iOS 14.0, *) {
-            self.showsMenuAsPrimaryAction = true
-            self.isContextMenuInteractionEnabled = true
-        }
+        self.showsMenuAsPrimaryAction = true
+        self.isContextMenuInteractionEnabled = true
         brandImageView.addGestureRecognizer(
             UITapGestureRecognizer(
                 target: self,
@@ -967,7 +977,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
 
     static let placeholderGrayColor: UIColor = .systemGray2
 
-#if !canImport(CompositorServices)
+#if !os(visionOS)
     open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         if previousTraitCollection?.preferredContentSizeCategory
@@ -1575,6 +1585,12 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
         textField.adjustsFontForContentSizeCategory = true
         // setCountryCode: updates the postalCodeField keyboardType, this is safe
         textField.keyboardType = .asciiCapableNumberPad
+        if #available(iOS 26.0, *) {
+            // Opt out of the iOS 26 floating number-pad popover, which on iPad can misposition
+            // itself over the form or lead to showing two keyboards. Mirrors the Element-based
+            // form fix (#6615). (RUN_MOBILESDK-5453)
+            textField.allowsNumberPadPopover = false
+        }
         textField.textAlignment = .left
         textField.font = font
         textField.defaultColor = textColor
@@ -1748,6 +1764,8 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
             return
         }
 
+        cardElementAnalytics.reportInteraction()
+
         formTextField.validText = true
 
         switch fieldType {
@@ -1910,6 +1928,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     /// :nodoc:
     @objc
     open func textFieldDidBeginEditing(_ textField: UITextField) {
+        cardElementAnalytics.reportInteraction()
         let isMidSubviewEditingTransition = getAndUpdateSubviewEditingTransitionState(
             fromCall: .didBegin
         )
@@ -2286,7 +2305,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
 
     // MARK: Card brand choice
     // For internal testing
-    @_spi(STP) public var cbcEnabledOverride: Bool? {
+    @_spi(InternalOnlyAPI) public var cbcEnabledOverride: Bool? {
         get {
             viewModel.cbcController.cbcEnabledOverride
         }
@@ -2296,11 +2315,7 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     }
 
     func defaultCVCPlaceholder() -> String? {
-        if viewModel.brand == .amex {
-            return String.Localized.cvv
-        } else {
-            return String.Localized.cvc
-        }
+        return String.Localized.cvc
     }
 
     func updateCVCPlaceholder() {
@@ -2314,6 +2329,9 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
     }
 
     func onChange() {
+        if isValid {
+            cardElementAnalytics.reportFormCompleted()
+        }
         if delegate?.responds(
             to: #selector(STPPaymentCardTextFieldDelegate.paymentCardTextFieldDidChange(_:))
         )
@@ -2402,11 +2420,23 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
         }
         self.preferredNetworks = preferredNetworks.map { STPCardBrand(rawValue: $0.intValue) ?? .unknown }
     }
+
+    /// The account (if any) for which the funds of the intent are intended.
+    /// The Stripe account ID (if any) which is the business of record.
+    /// See [use cases](https://docs.stripe.com/connect/charges#on_behalf_of) to determine if this option is relevant for your integration.
+    /// This should match the [on_behalf_of](https://docs.stripe.com/api/payment_intents/create#create_payment_intent-on_behalf_of)
+    /// provided on the Intent used when confirming payment.
+    public var onBehalfOf: String? {
+        didSet {
+            viewModel.cbcController.onBehalfOf = onBehalfOf
+        }
+    }
 }
 
 /// This protocol allows a delegate to be notified when a payment text field's
 /// contents change, which can in turn be used to take further actions depending
 /// on the validity of its contents.
+@MainActor @preconcurrency
 @objc public protocol STPPaymentCardTextFieldDelegate: NSObjectProtocol {
     /// Called when either the card number, expiration, or CVC changes. At this point,
     /// one can call `isValid` on the text field to determine, for example,
@@ -2468,6 +2498,6 @@ open class STPPaymentCardTextField: UIControl, UIKeyInput, STPFormTextFieldDeleg
 private let kCardLoadingAnimationDelay: TimeInterval = 0.1
 
 /// :nodoc:
-@_spi(STP) extension STPPaymentCardTextField: STPAnalyticsProtocol {
-    @_spi(STP) public static var stp_analyticsIdentifier = "STPPaymentCardTextField"
+@_spi(InternalOnlyAPI) extension STPPaymentCardTextField: STPAnalyticsProtocol {
+    @_spi(InternalOnlyAPI) public static var stp_analyticsIdentifier = "STPPaymentCardTextField"
 }

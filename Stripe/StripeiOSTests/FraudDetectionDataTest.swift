@@ -8,11 +8,11 @@
 
 import XCTest
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class FraudDetectionDataTest: XCTestCase {
     func testResetsSIDIfExpired() {
@@ -27,5 +27,16 @@ class FraudDetectionDataTest: XCTestCase {
         FraudDetectionData.shared.sidCreationDate = Date()
         FraudDetectionData.shared.resetSIDIfExpired()
         XCTAssertNotNil(FraudDetectionData.shared.sid)
+    }
+
+    func testSettingUserDefaults() {
+        FraudDetectionData.shared.sid = "123"
+        FraudDetectionData.shared.sidCreationDate = Date()
+        FraudDetectionData.shared.muid = "123"
+        FraudDetectionData.shared.guid = "123"
+        UserDefaults.standard.fraudDetectionData = .shared
+        XCTAssertEqual(UserDefaults.standard.fraudDetectionData, .shared)
+        UserDefaults.standard.fraudDetectionData = nil
+        XCTAssertEqual(UserDefaults.standard.fraudDetectionData, nil)
     }
 }

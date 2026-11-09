@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (optional)";
+
+"(not accepted)" = "(not accepted)";
 
 "Account number" = "Account number";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB number";
 
-"Billing address is same as shipping" = "Billing address is same as shipping";
+"Bank account •••• %@" = "Bank account •••• %@";
 
-"Cancel" = "Cancel";
+"Billing address is same as shipping" = "Billing address is same as shipping";
 
 "Card brand" = "Card brand";
 
@@ -34,7 +38,7 @@
 
 "County" = "County";
 
-"Date is empty." = "Date is empty.";
+"Date of Birth" = "Date of Birth";
 
 "Department" = "Department";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Incomplete phone number";
 
-"Invalid UPI ID" = "Invalid UPI ID";
-
 "Island" = "Island";
 
 "Last" = "Last";
@@ -82,21 +84,19 @@
 
 "Parish" = "Parish";
 
-"Phone" = "Phone";
-
 "Phone number" = "Phone number";
 
 "Postal code" = "Postcode";
 
 "Prefecture" = "Prefecture";
 
+"Processing..." = "Processing...";
+
 "Province" = "Province";
 
 "Remove" = "Remove";
 
-"Remove bank account" = "Remove bank account";
-
-"Remove bank account ending in %@" = "Remove bank account ending in %@";
+"Remove bank account?" = "Remove bank account?";
 
 "Remove card" = "Remove card";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Select card brand (optional)";
 
+"Selection is empty." = "Selection is empty.";
+
+"Something went wrong" = "Something went wrong";
+
 "Sort code" = "Sort code";
 
 "State" = "State";
+
+"Submit" = "Submit";
 
 "Suburb" = "Suburb";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Town or city";
 
-"UPI ID" = "UPI ID";
-
 "Unable to parse phone number" = "Unable to parse phone number";
 
 "Use rotor to access links" = "Use rotor to access links";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Your BLIK code is invalid.";
 
-"Your ZIP is incomplete." = "Your ZIP is incomplete.";
+"Your ZIP code is incomplete." = "Your postcode is incomplete.";
+
+"Your ZIP code is invalid." = "Your postcode is invalid.";
 
 "Your email is invalid." = "Your email is invalid.";
 
 "Your payment information will not be saved." = "Your payment information will not be saved.";
 
 "Your postal code is incomplete." = "Your postcode is incomplete.";
+
+"Your postal code is invalid." = "Your postcode is invalid.";
 
 "ZIP" = "ZIP";

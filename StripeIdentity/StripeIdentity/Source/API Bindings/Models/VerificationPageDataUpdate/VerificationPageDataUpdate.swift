@@ -7,12 +7,13 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 extension StripeAPI {
     struct VerificationPageDataUpdate: Encodable, Equatable {
 
         let clearData: VerificationPageClearData?
         let collectedData: VerificationPageCollectedData?
+        var mediaPipeAvailable: Bool?
     }
 }

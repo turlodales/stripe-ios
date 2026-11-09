@@ -6,8 +6,8 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripePayments
-@_spi(STP) import StripePaymentsUI
+@_spi(InternalOnlyAPI) import StripePayments
+@_spi(InternalOnlyAPI) import StripePaymentsUI
 import UIKit
 
 protocol BottomSheet3DS2ViewControllerDelegate: AnyObject {
@@ -22,21 +22,18 @@ class BottomSheet3DS2ViewController: UIViewController {
     weak var delegate: BottomSheet3DS2ViewControllerDelegate?
 
     lazy var navigationBar: SheetNavigationBar = {
-        let navBar = SheetNavigationBar(isTestMode: isTestMode,
-                                        appearance: appearance)
-        navBar.setStyle(.back)
+        let navBar = SheetNavigationBar(appearance: appearance)
+        navBar.setStyle(.back(showAdditionalButton: false))
         navBar.delegate = self
         return navBar
     }()
 
     let challengeViewController: UIViewController
     let appearance: PaymentSheet.Appearance
-    let isTestMode: Bool
 
-    required init(challengeViewController: UIViewController, appearance: PaymentSheet.Appearance, isTestMode: Bool) {
+    required init(challengeViewController: UIViewController, appearance: PaymentSheet.Appearance) {
         self.challengeViewController = challengeViewController
         self.appearance = appearance
-        self.isTestMode = isTestMode
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -86,10 +83,6 @@ extension BottomSheet3DS2ViewController: BottomSheetContentViewController {
 
     var requiresFullScreen: Bool {
         return true
-    }
-
-    func didFinishAnimatingHeight() {
-        // no-op
     }
 }
 

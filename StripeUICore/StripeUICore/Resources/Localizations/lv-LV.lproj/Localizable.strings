@@ -1,4 +1,8 @@
+"%1$@ •••• %2$@" = "%1$@ •••• %2$@";
+
 "%@ (optional)" = "%@ (nav obligāti)";
+
+"(not accepted)" = "(netiek pieņemts)";
 
 "Account number" = "Konta numurs";
 
@@ -14,9 +18,9 @@
 
 "BSB number" = "BSB numurs";
 
-"Billing address is same as shipping" = "Norēķinu adrese un piegādes adrese sakrīt";
+"Bank account •••• %@" = "Bankas konts •••• %@";
 
-"Cancel" = "Atcelt";
+"Billing address is same as shipping" = "Norēķinu adrese un piegādes adrese sakrīt";
 
 "Card brand" = "Kartes zīmols";
 
@@ -34,7 +38,7 @@
 
 "County" = "Apriņķis";
 
-"Date is empty." = "Datums ir tukšs.";
+"Date of Birth" = "Dzimšanas datums";
 
 "Department" = "Departaments";
 
@@ -64,8 +68,6 @@
 
 "Incomplete phone number" = "Nepilnīgs tālruņa numurs";
 
-"Invalid UPI ID" = "Nederīgs UPI ID";
-
 "Island" = "Sala";
 
 "Last" = "Uzvārds";
@@ -82,21 +84,19 @@
 
 "Parish" = "Pagasts";
 
-"Phone" = "Tālrunis";
-
 "Phone number" = "Tālruņa numurs";
 
 "Postal code" = "Pasta indekss";
 
 "Prefecture" = "Prefektūra";
 
+"Processing..." = "Apstrādā...";
+
 "Province" = "Province";
 
 "Remove" = "Noņemt";
 
-"Remove bank account" = "Noņemt bankas kontu";
-
-"Remove bank account ending in %@" = "Noņemt bankas kontu, kas beidzas ar %@";
+"Remove bank account?" = "Noņemt bankas kontu?";
 
 "Remove card" = "Noņemt karti";
 
@@ -104,9 +104,15 @@
 
 "Select card brand (optional)" = "Atlasīt kartes zīmolu (pēc izvēles)";
 
+"Selection is empty." = "Atlase ir tukša.";
+
+"Something went wrong" = "Radās kļūda";
+
 "Sort code" = "Bankas filiāles kods";
 
 "State" = "Novads/štats";
+
+"Submit" = "Iesniegt";
 
 "Suburb" = "Priekšpilsēta";
 
@@ -122,8 +128,6 @@
 
 "Town or city" = "Ciems vai pilsēta";
 
-"UPI ID" = "UPI ID";
-
 "Unable to parse phone number" = "Neizdevās parsēt tālruņa numuru";
 
 "Use rotor to access links" = "Izmantot rotoru, lai piekļūtu saitēm";
@@ -132,12 +136,16 @@
 
 "Your BLIK code is invalid." = "Jūsu BLIK kods nav derīgs.";
 
-"Your ZIP is incomplete." = "Pasta indekss nav pilnīgs.";
+"Your ZIP code is incomplete." = "Jūsu pasta indekss nav pilnīgs.";
+
+"Your ZIP code is invalid." = "Pasta indekss nav derīgs.";
 
 "Your email is invalid." = "E-pasta adrese nav derīga.";
 
 "Your payment information will not be saved." = "Jūsu maksājuma informācija nav saglabāta.";
 
 "Your postal code is incomplete." = "Pasta indekss nav pilnīgs.";
+
+"Your postal code is invalid." = "Pasta indekss nav derīgs.";
 
 "ZIP" = "Pasta ind.";

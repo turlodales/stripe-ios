@@ -6,8 +6,8 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeCore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 protocol ResetFlowViewControllerDelegate: AnyObject {
@@ -41,14 +41,14 @@ final class ResetFlowViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .customBackgroundColor
+        view.backgroundColor = FinancialConnectionsAppearance.Colors.background
         navigationItem.hidesBackButton = true
 
         dataSource
             .analyticsClient
             .logPaneLoaded(pane: .resetFlow)
 
-        let loadingView = SpinnerView()
+        let loadingView = SpinnerView(appearance: dataSource.manifest.appearance)
         view.addAndPinSubviewToSafeArea(loadingView)
 
         dataSource.markLinkingMoreAccounts()

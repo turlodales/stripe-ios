@@ -12,8 +12,6 @@
 
 "Bancontact" = "Bancontact";
 
-"Bank" = "Bank";
-
 "Boleto" = "Boleto";
 
 "Card" = "Kort";
@@ -44,15 +42,11 @@
 
 "SEPA Debit" = "SEPA Debit";
 
-"Sofort" = "Sofort";
-
 "Swish" = "Swish";
 
 "Timed out authenticating your payment method -- try again" = "Tidsavbrudd ved godkjennelse av betalingsmåten din - prøv igjen";
 
-"UPI" = "UPI";
-
-"US Bank Account" = "Bankkonto i USA";
+"US bank account" = "Bankkonto i USA";
 
 "Unknown" = "Ukjent";
 
@@ -60,6 +54,4 @@
 
 "WeChat Pay" = "WeChat Pay";
 
-"giropay" = "giropay";
-
-"iDEAL" = "iDEAL";
+"iDEAL | Wero" = "iDEAL | Wero";

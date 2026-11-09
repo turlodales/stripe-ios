@@ -6,7 +6,7 @@
 //  Copyright © 2022 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// Displays either an instructional camera scanning view or an error message
@@ -51,19 +51,19 @@ final class SelfieCaptureView: UIView {
 
     // MARK: Configure
 
-    func configure(with viewModel: ViewModel, analyticsClient: IdentityAnalyticsClient?) {
+    func configure(with viewModel: ViewModel, sheetController: VerificationSheetControllerProtocol?) {
         switch viewModel {
         case .scan(let scanningViewModel):
             scanningView.configure(
                 with: scanningViewModel,
-                analyticsClient: analyticsClient
+                sheetController: sheetController
             )
             scanningView.isHidden = false
             errorView.isHidden = true
         case .saving(let scanningViewModel):
             scanningView.configure(
                 with: scanningViewModel,
-                analyticsClient: analyticsClient
+                sheetController: sheetController
             )
             scanningView.isHidden = false
             errorView.isHidden = true

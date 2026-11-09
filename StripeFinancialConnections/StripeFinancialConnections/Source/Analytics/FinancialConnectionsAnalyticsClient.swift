@@ -6,24 +6,24 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 import UIKit
 
 protocol FinancialConnectionsAnalyticsClientDelegate: AnyObject {
     func analyticsClient(
         _ analyticsClient: FinancialConnectionsAnalyticsClient,
-        didReceiveEvent event: FinancialConnectionsEvent
+        didReceiveEvent event: FinancialConnectionsEventPayload
     )
 }
 
 final class FinancialConnectionsAnalyticsClient {
 
-    private let analyticsClient: AnalyticsClientV2
+    private let analyticsClient: AnalyticsClientV2Protocol
     private var additionalParameters: [String: Any] = [:]
     weak var delegate: FinancialConnectionsAnalyticsClientDelegate?
 
     init(
-        analyticsClient: AnalyticsClientV2 = AnalyticsClientV2(
+        analyticsClient: AnalyticsClientV2Protocol = AnalyticsClientV2(
             clientId: "mobile-clients-linked-accounts",
             origin: "stripe-linked-accounts-ios"
         )
@@ -82,6 +82,32 @@ final class FinancialConnectionsAnalyticsClient {
 
 extension FinancialConnectionsAnalyticsClient {
 
+    func logExternalEvent(
+        _ event: FinancialConnectionsEvent,
+        pane: FinancialConnectionsSessionManifest.NextPane
+    ) {
+        let payload: [String: Any] = [
+            "name": event.name.rawValue,
+            "financialConnectionsSessionId": event.financialConnectionsSessionId,
+            "metadata": event.metadata.dictionary,
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload),
+            let serializedPayload = String(data: data, encoding: .utf8)
+        else {
+            return
+        }
+        log(
+            eventName: "external_on_event.emitted",
+            parameters: [
+                "event_payload": serializedPayload,
+                "context_source": "native_sdk",
+                "context_pane": pane.rawValue,
+            ],
+            pane: pane
+        )
+    }
+
     func logPaneLoaded(pane: FinancialConnectionsSessionManifest.NextPane) {
         log(eventName: "pane.loaded", pane: pane)
     }
@@ -119,7 +145,7 @@ extension FinancialConnectionsAnalyticsClient {
         pane: FinancialConnectionsSessionManifest.NextPane
     ) {
         FeedbackGeneratorAdapter.errorOccurred()
-        FinancialConnectionsEvent
+        FinancialConnectionsEventPayload
             .events(fromError: error)
             .forEach { event in
                 delegate?.analyticsClient(self, didReceiveEvent: event)
@@ -158,22 +184,22 @@ extension FinancialConnectionsAnalyticsClient {
     }
 
     func setAdditionalParameters(
-        linkAccountSessionClientSecret: String,
         publishableKey: String?,
         stripeAccount: String?
     ) {
-        additionalParameters["las_client_secret"] = linkAccountSessionClientSecret
         additionalParameters["key"] = publishableKey
         additionalParameters["stripe_account"] = stripeAccount
     }
 
     func setAdditionalParameters(fromManifest manifest: FinancialConnectionsSessionManifest) {
+        additionalParameters["las_id"] = manifest.id
         additionalParameters["livemode"] = manifest.livemode
         additionalParameters["product"] = manifest.product
         additionalParameters["is_stripe_direct"] = manifest.isStripeDirect
         additionalParameters["single_account"] = manifest.singleAccount
         additionalParameters["allow_manual_entry"] = manifest.allowManualEntry
         additionalParameters["account_holder_id"] = manifest.accountholderToken
+        additionalParameters["app_verification_enabled"] = manifest.appVerificationEnabled
     }
 
     static func paneFromViewController(
@@ -182,10 +208,12 @@ extension FinancialConnectionsAnalyticsClient {
         switch viewController {
         case is ConsentViewController:
             return .consent
+        case is IDConsentContentViewController:
+            return .idConsentContent
         case is InstitutionPickerViewController:
             return .institutionPicker
-        case is PartnerAuthViewController:
-            return .partnerAuth
+        case let partnerAuthViewController as PartnerAuthViewController:
+            return partnerAuthViewController.pane
         case is AccountPickerViewController:
             return .accountPicker
         case is AttachLinkedPaymentAccountViewController:
@@ -204,14 +232,16 @@ extension FinancialConnectionsAnalyticsClient {
             return .networkingLinkLoginWarmup
         case is NetworkingLinkVerificationViewController:
             return .networkingLinkVerification
-        case is NetworkingLinkStepUpVerificationViewController:
-            return .networkingLinkStepUpVerification
         case is NetworkingSaveToLinkVerificationViewController:
             return .networkingSaveToLinkVerification
         case is LinkAccountPickerViewController:
             return .linkAccountPicker
+        case is LinkLoginViewController:
+            return .linkLogin
         case is ErrorViewController:
             return .unexpectedError
+        case is GenericErrorViewController:
+            return .genericError
         default:
             return .unparsable
         }

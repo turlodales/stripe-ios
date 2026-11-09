@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@_spi(STP) import StripeCore
+@_spi(InternalOnlyAPI) import StripeCore
 
 struct FinancialConnectionsInstitution: Decodable, Hashable, Equatable {
 
@@ -21,4 +21,23 @@ struct FinancialConnectionsInstitution: Decodable, Hashable, Equatable {
 
 struct FinancialConnectionsInstitutionList: Decodable {
     let data: [FinancialConnectionsInstitution]
+}
+
+struct ShareNetworkedAccountsResponse: Decodable {
+    let data: [FinancialConnectionsInstitution]
+    let nextPane: FinancialConnectionsSessionManifest.NextPane?
+    let displayText: DisplayText?
+
+    struct DisplayText: Decodable {
+        let text: Text?
+
+        struct Text: Decodable {
+            let succcessPane: SuccessPane?
+
+            struct SuccessPane: Decodable {
+                let caption: String
+                let subCaption: String
+            }
+        }
+    }
 }

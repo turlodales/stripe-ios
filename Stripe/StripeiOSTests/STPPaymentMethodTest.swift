@@ -5,11 +5,11 @@
 //  Created by Yuki Tokuhiro on 3/6/19.
 //  Copyright © 2019 Stripe, Inc. All rights reserved.
 //
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class STPPaymentMethodTest: XCTestCase {
     // MARK: - STPPaymentMethodType Tests
@@ -33,6 +33,9 @@ class STPPaymentMethodTest: XCTestCase {
         XCTAssertEqual(STPPaymentMethod.type(from: "FPX"), STPPaymentMethodType.FPX)
         XCTAssertEqual(STPPaymentMethod.type(from: "sepa_debit"), STPPaymentMethodType.SEPADebit)
         XCTAssertEqual(STPPaymentMethod.type(from: "SEPA_DEBIT"), STPPaymentMethodType.SEPADebit)
+        XCTAssertEqual(STPPaymentMethod.type(from: "multibanco"), STPPaymentMethodType.multibanco)
+        XCTAssertEqual(STPPaymentMethod.type(from: "vipps"), STPPaymentMethodType.vipps)
+        XCTAssertEqual(STPPaymentMethod.type(from: "VIPPS"), STPPaymentMethodType.vipps)
         XCTAssertEqual(
             STPPaymentMethod.type(from: "card_present"),
             STPPaymentMethodType.cardPresent
@@ -53,6 +56,8 @@ class STPPaymentMethodTest: XCTestCase {
             "sepa_debit",
             "bacs_debit",
             "au_becs_debit",
+            "multibanco",
+            "vipps",
         ]
         let expectedTypes: [STPPaymentMethodType] = [
             .card,
@@ -62,6 +67,8 @@ class STPPaymentMethodTest: XCTestCase {
             .SEPADebit,
             .bacsDebit,
             .AUBECSDebit,
+            .multibanco,
+            .vipps,
         ]
         XCTAssertEqual(STPPaymentMethod.paymentMethodTypes(from: rawTypes), expectedTypes)
     }
@@ -78,7 +85,8 @@ class STPPaymentMethodTest: XCTestCase {
             .OXXO,
             .alipay,
             .payPal,
-            .giropay,
+            .multibanco,
+            .vipps,
             .unknown,
         ]
         for type in values {
@@ -99,8 +107,6 @@ class STPPaymentMethodTest: XCTestCase {
                 XCTAssertEqual(string, "bacs_debit")
             case .AUBECSDebit:
                 XCTAssertEqual(string, "au_becs_debit")
-            case .giropay:
-                XCTAssertEqual(string, "giropay")
             case .przelewy24:
                 XCTAssertEqual(string, "p24")
             case .bancontact:
@@ -109,16 +115,18 @@ class STPPaymentMethodTest: XCTestCase {
                 XCTAssertEqual(string, "eps")
             case .OXXO:
                 XCTAssertEqual(string, "oxxo")
-            case .sofort:
-                XCTAssertEqual(string, "sofort")
             case .alipay:
                 XCTAssertEqual(string, "alipay")
             case .payPal:
                 XCTAssertEqual(string, "paypal")
-            case .unknown:
-                XCTAssertNil(string)
             case .grabPay:
                 XCTAssertEqual(string, "grabpay")
+            case .multibanco:
+                XCTAssertEqual(string, "multibanco")
+            case .vipps:
+                XCTAssertEqual(string, "vipps")
+            case .unknown:
+                XCTAssertNil(string)
             default:
                 break
             }

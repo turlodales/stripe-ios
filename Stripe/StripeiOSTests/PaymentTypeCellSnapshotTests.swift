@@ -9,11 +9,11 @@
 import iOSSnapshotTestCase
 import StripeCoreTestUtils
 
-@testable@_spi(STP) import Stripe
-@testable@_spi(STP) import StripeCore
-@testable@_spi(STP) import StripePayments
-@testable@_spi(STP) import StripePaymentSheet
-@testable@_spi(STP) import StripePaymentsUI
+@testable@_spi(InternalOnlyAPI) import Stripe
+@testable@_spi(InternalOnlyAPI) import StripeCore
+@testable@_spi(InternalOnlyAPI) import StripePayments
+@testable@_spi(InternalOnlyAPI) import StripePaymentSheet
+@testable@_spi(InternalOnlyAPI) import StripePaymentsUI
 
 class PaymentTypeCellSnapshotTests: STPSnapshotTestCase {
 
@@ -23,8 +23,8 @@ class PaymentTypeCellSnapshotTests: STPSnapshotTestCase {
         cell.frame = CGRect(
             origin: .zero,
             size: CGSize(
-                width: PaymentMethodTypeCollectionView.cellHeight,
-                height: PaymentMethodTypeCollectionView.cellHeight
+                width: PaymentMethodTypeCollectionView.defaultCornerCellHeight,
+                height: PaymentMethodTypeCollectionView.defaultCornerCellHeight
             )
         )
         STPSnapshotVerifyView(cell)
@@ -36,8 +36,8 @@ class PaymentTypeCellSnapshotTests: STPSnapshotTestCase {
         cell.frame = CGRect(
             origin: .zero,
             size: CGSize(
-                width: PaymentMethodTypeCollectionView.cellHeight,
-                height: PaymentMethodTypeCollectionView.cellHeight
+                width: PaymentMethodTypeCollectionView.defaultCornerCellHeight,
+                height: PaymentMethodTypeCollectionView.defaultCornerCellHeight
             )
         )
         cell.isSelected = true
@@ -51,8 +51,8 @@ class PaymentTypeCellSnapshotTests: STPSnapshotTestCase {
         cell.frame = CGRect(
             origin: .zero,
             size: CGSize(
-                width: PaymentMethodTypeCollectionView.cellHeight,
-                height: PaymentMethodTypeCollectionView.cellHeight
+                width: PaymentMethodTypeCollectionView.defaultCornerCellHeight,
+                height: PaymentMethodTypeCollectionView.defaultCornerCellHeight
             )
         )
         STPSnapshotVerifyView(cell)
@@ -60,13 +60,14 @@ class PaymentTypeCellSnapshotTests: STPSnapshotTestCase {
 
     func testCardSelected_forceDarkMode() {
         let cell = PaymentMethodTypeCollectionView.PaymentTypeCell()
+        cell.appearance.colors.componentBackground = .black
         cell.overrideUserInterfaceStyle = .dark
         cell.paymentMethodType = .stripe(.card)
         cell.frame = CGRect(
             origin: .zero,
             size: CGSize(
-                width: PaymentMethodTypeCollectionView.cellHeight,
-                height: PaymentMethodTypeCollectionView.cellHeight
+                width: PaymentMethodTypeCollectionView.defaultCornerCellHeight,
+                height: PaymentMethodTypeCollectionView.defaultCornerCellHeight
             )
         )
         cell.isSelected = true

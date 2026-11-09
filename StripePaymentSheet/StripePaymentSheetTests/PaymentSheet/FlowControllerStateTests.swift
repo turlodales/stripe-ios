@@ -5,9 +5,9 @@
 
 import Foundation
 
-@_spi(STP) @testable import StripeCore
-@_spi(STP) @testable import StripePayments
-@_spi(STP) @testable import StripePaymentSheet
+@_spi(InternalOnlyAPI) @testable import StripeCore
+@_spi(InternalOnlyAPI) @testable import StripePayments
+@_spi(InternalOnlyAPI) @testable import StripePaymentSheet
 
 import OHHTTPStubs
 import OHHTTPStubsSwift
@@ -20,13 +20,22 @@ class FlowControllerStateTests: XCTestCase {
         let exp = expectation(description: "No delegate methods should be called during init but before viewDidLoad")
         exp.isInverted = true
         let config = PaymentSheet.Configuration()
-        let intentConfig = PaymentSheet.IntentConfiguration(mode: .payment(amount: 100, currency: "USD")) { _, _, _ in
+        let intentConfig = PaymentSheet.IntentConfiguration(mode: .payment(amount: 100, currency: "USD")) { _, _ in
             // Nothing
+            return ""
         }
         config.apiClient.publishableKey = "pk_123"
-        let intent = Intent.deferredIntent(elementsSession: STPElementsSession.emptyElementsSession, intentConfig: intentConfig)
+        let intent = Intent.deferredIntent(intentConfig: intentConfig)
         let apmvcDelegate = StubAPMVCDelegate(expectation: exp)
-        _ = AddPaymentMethodViewController(intent: intent, configuration: config, delegate: apmvcDelegate)
+        _ = AddPaymentMethodViewController(
+            intent: intent,
+            elementsSession: .emptyElementsSession,
+            configuration: config,
+            paymentMethodTypes: [.stripe(.card)],
+            formCache: .init(),
+            analyticsHelper: ._testValue(),
+            delegate: apmvcDelegate
+        )
         waitForExpectations(timeout: 0.1)
     }
 }
@@ -37,13 +46,12 @@ class StubAPMVCDelegate: AddPaymentMethodViewControllerDelegate {
         self.expectation = expectation
     }
 
-    func didUpdate(_ viewController: StripePaymentSheet.AddPaymentMethodViewController) {
-        expectation.fulfill()
+    func getWalletHeaders() -> [String] {
+        return []
     }
 
-    func shouldOfferLinkSignup(_ viewController: StripePaymentSheet.AddPaymentMethodViewController) -> Bool {
+    func didUpdate(_ viewController: StripePaymentSheet.AddPaymentMethodViewController) {
         expectation.fulfill()
-        return true
     }
 
     func updateErrorLabel(for: Error?) {

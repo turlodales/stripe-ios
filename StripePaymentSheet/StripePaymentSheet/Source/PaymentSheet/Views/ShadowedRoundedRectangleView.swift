@@ -6,82 +6,85 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
-@_spi(STP) import StripeUICore
+@_spi(InternalOnlyAPI) import StripeUICore
 import UIKit
 
 /// The shadowed rounded rectangle that our cells use to display content
-/// For internal SDK use only
-@objc(STP_Internal_ShadowedRoundedRectangle)
 class ShadowedRoundedRectangle: UIView {
-    let roundedRectangle: UIView
+
+    private let roundedRectangle: UIView
+    private let ios26DefaultCornerStyle: CornerStyle
     var appearance: PaymentSheet.Appearance {
         didSet {
-            layer.applyShadow(shadow: appearance.asElementsTheme.shadow)
-            layer.cornerRadius = appearance.cornerRadius
-            roundedRectangle.layer.cornerRadius = appearance.cornerRadius
-            roundedRectangle.backgroundColor = appearance.colors.componentBackground
-        }
-    }
-
-    lazy var shouldDisplayShadow: Bool = true {
-        didSet {
-            if shouldDisplayShadow {
-                layer.applyShadow(shadow: appearance.asElementsTheme.shadow)
-            } else {
-                layer.shadowOpacity = 0
-            }
+            update()
         }
     }
 
     var isEnabled: Bool = true {
         didSet {
-            updateBackgroundColor()
+            update()
         }
     }
 
-    private func updateBackgroundColor() {
+    var isSelected: Bool = false {
+        didSet {
+            update()
+        }
+    }
+
+    /// All mutations to this class should route to this single method to update the UI
+    private func update() {
+        // Background color
         if isEnabled {
             roundedRectangle.backgroundColor = appearance.colors.componentBackground
         } else {
             roundedRectangle.backgroundColor = appearance.colors.componentBackground.disabledColor
         }
-    }
 
-    required init(appearance: PaymentSheet.Appearance) {
-        self.appearance = appearance
-        roundedRectangle = UIView()
-        roundedRectangle.layer.cornerRadius = appearance.cornerRadius
-        roundedRectangle.layer.masksToBounds = true
+        // Corner radius
+        roundedRectangle.applyCornerRadiusOrConfiguration(for: appearance, ios26DefaultCornerStyle: ios26DefaultCornerStyle)
+        applyCornerRadiusOrConfiguration(for: appearance)
 
-        super.init(frame: .zero)
-
-        layer.cornerRadius = appearance.cornerRadius
+        // Shadow
         layer.applyShadow(shadow: appearance.asElementsTheme.shadow)
 
-        addSubview(roundedRectangle)
-        updateBackgroundColor()
+        // Border
+        if isSelected {
+            let selectedBorderWidth = appearance.selectedBorderWidth ?? appearance.borderWidth
+            if selectedBorderWidth > 0 {
+                layer.borderWidth = selectedBorderWidth * 1.5
+            } else {
+                // Without a border, the customer can't tell this is selected and it looks bad
+                layer.borderWidth = 1.5
+            }
+            layer.borderColor = appearance.colors.selectedComponentBorder?.cgColor ?? appearance.colors.primary.cgColor
+        } else {
+            layer.borderWidth = appearance.borderWidth
+            layer.borderColor = appearance.colors.componentBorder.cgColor
+        }
+    }
+
+    required init(appearance: PaymentSheet.Appearance, ios26DefaultCornerStyle: CornerStyle = .uniform) {
+        self.appearance = appearance
+        self.ios26DefaultCornerStyle = ios26DefaultCornerStyle
+        roundedRectangle = UIView()
+        roundedRectangle.layer.masksToBounds = true
+        super.init(frame: .zero)
+        addAndPinSubview(roundedRectangle)
+        update()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Update shadow paths based on current frame
-        roundedRectangle.frame = bounds
 
-        // Turn off shadows in dark mode
-        if traitCollection.userInterfaceStyle == .dark || !shouldDisplayShadow {
-            layer.shadowOpacity = 0
-        } else {
-            layer.applyShadow(shadow: appearance.asElementsTheme.shadow)
-        }
-
-        // Update shadow (cg)color
-        layer.applyShadow(shadow: appearance.asElementsTheme.shadow)
+        // Native sheets can change the row's width after presentation without changing its appearance.
+        layer.shadowPath = UIBezierPath(rect: bounds).cgPath
     }
 
-    #if !canImport(CompositorServices)
+    #if !os(visionOS)
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        setNeedsLayout()
+        update()
     }
     #endif
 
